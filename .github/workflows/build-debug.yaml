@@ -18,6 +18,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Pin the test-build signature: every CI runner would otherwise
+      # generate a fresh debug keystore and test APKs could never be
+      # installed over each other. tools/test-signing.keystore is a
+      # throwaway key for TEST builds only (password "android"); the
+      # release build uses a different key kept in Secrets.
+      - name: Install pinned test keystore
+        run: |
+          mkdir -p ~/.android
+          cp tools/test-signing.keystore ~/.android/debug.keystore
+          ls -la ~/.android/
+
       - name: Restore cached KataGo engine
         id: engine-cache
         uses: actions/cache@v4
@@ -94,6 +105,11 @@ jobs:
 
       - name: Report APK size
         run: ls -la app/build/outputs/apk/debug/
+
+      - name: Print APK signing certificate
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | head -5
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
