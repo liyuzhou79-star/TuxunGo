@@ -32,7 +32,7 @@ class KataEngineVertexTest {
         val size = BoardSize(13, 9)
         assertEquals("pass", KataEngine.toVertex(Move.pass(Stone.BLACK), size))
         assertNull(KataEngine.fromVertex("pass", Stone.BLACK, size))
-        assertEquals("M9", KataEngine.toVertex(Move(Stone.BLACK, 12, 0), size))
+        assertEquals("N9", KataEngine.toVertex(Move(Stone.BLACK, 12, 0), size))
         assertEquals("A1", KataEngine.toVertex(Move(Stone.BLACK, 0, 8), size))
     }
 }
