@@ -57,20 +57,15 @@ jobs:
           cp build-android/katago "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libkatago.so"
           file "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libkatago.so" || true
 
-      - name: Fetch bundled default model from KataGo release
+      - name: Fetch bundled default model (kata1 b10c128, strongest 10-block net)
         run: |
           cd "$RUNNER_TEMP"
-          curl -sL -o katago-release.zip "https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-v1.15.3-eigen-linux-x64.zip"
-          ls -la katago-release.zip
-          unzip -o -q katago-release.zip -d katago-release
-          echo "Release contents:"
-          find katago-release -type f | head -30
-          MODEL=$(find katago-release -name "*.bin.gz" | head -1)
-          echo "Model found: $MODEL"
-          test -n "$MODEL"
-          ls -la "$MODEL"
+          curl -sL -o default.txt.gz "https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b10c128-s1141046784-d204142634.txt.gz"
+          ls -la default.txt.gz
+          file default.txt.gz
+          gzip -t default.txt.gz
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets/models"
-          cp "$MODEL" "$GITHUB_WORKSPACE/app/src/main/assets/models/default.bin.gz"
+          cp default.txt.gz "$GITHUB_WORKSPACE/app/src/main/assets/models/default.txt.gz"
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
