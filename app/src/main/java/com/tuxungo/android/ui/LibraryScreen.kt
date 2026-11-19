@@ -156,12 +156,18 @@ fun LibraryScreen(
         games = LibraryStore.listGames(context)
     }
 
+    var searchText by remember { mutableStateOf("") }
     val shown = games.filter { g ->
-        when (selected) {
+        val inFolder = when (selected) {
             "ALL" -> true
             null -> g.folderId == null
             else -> g.folderId == selected
         }
+        val q = searchText.trim()
+        val inSearch = q.isEmpty() ||
+            g.title.contains(q, ignoreCase = true) ||
+            g.modeLabel.contains(q, ignoreCase = true)
+        inFolder && inSearch
     }
     val dateFmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
@@ -179,6 +185,14 @@ fun LibraryScreen(
         Text(
             "收藏的对局都在这里，点开就能复盘。AI 对局、双人对局、摆棋局都能存。",
             fontSize = 13.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = { searchText = it },
+            label = { Text("搜索棋谱（标题或类型）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(10.dp))
 

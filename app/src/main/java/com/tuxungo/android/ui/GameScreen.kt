@@ -830,6 +830,7 @@ fun GameScreen(
 
     var showSaveToLibrary by remember { mutableStateOf(false) }
     var savedToLibrary by remember { mutableStateOf(false) }
+    var showScoreDetail by remember { mutableStateOf(false) }
 
     fun resultSummary(): String {
         if (game.timeoutBy != null) {
@@ -1186,8 +1187,9 @@ fun GameScreen(
                 val blackTotal = est.blackTerritory + aliveB
                 val whiteTotal = est.whiteTerritory + aliveW + game.komi
                 Text(
-                    text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}",
-                    fontSize = 12.sp, color = Color.Gray
+                    text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}（点开详情）",
+                    fontSize = 12.sp, color = Color.Gray,
+                    modifier = Modifier.clickable { showScoreDetail = true }
                 )
             } else {
                 Text(
@@ -1195,6 +1197,53 @@ fun GameScreen(
                     fontSize = 12.sp, color = Color.LightGray
                 )
             }
+        }
+        if (showScoreDetail && liveRes != null) {
+            val stonesArr2 = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            val est2 = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr2, 0.5)
+            var aliveB2 = 0
+            var aliveW2 = 0
+            var deadB2 = 0
+            var deadW2 = 0
+            for (i in stonesArr2.indices) {
+                val s = stonesArr2[i] ?: continue
+                val v = if (i < liveRes.ownershipBlack.size) {
+                    liveRes.ownershipBlack[i]
+                } else {
+                    0.0
+                }
+                val dead = (s == Stone.BLACK && v < -0.5) ||
+                    (s == Stone.WHITE && v > 0.5)
+                if (dead) {
+                    if (s == Stone.BLACK) deadB2++ else deadW2++
+                } else if (s == Stone.BLACK) {
+                    aliveB2++
+                } else {
+                    aliveW2++
+                }
+            }
+            val lead = liveRes.rootScoreLeadBlack
+            AlertDialog(
+                onDismissRequest = { showScoreDetail = false },
+                title = { Text("形势详情（AI 估算）") },
+                text = {
+                    Text(
+                        "黑胜率 ${formatPercent(liveRes.rootWinrateBlack)} · " +
+                            "目差 ${if (lead >= 0) "黑多" else "白多"} ${formatNum(kotlin.math.abs(lead))} 目\n" +
+                            "黑：活子 $aliveB2 + 空 ${est2.blackTerritory} = ${est2.blackTerritory + aliveB2} 目\n" +
+                            "白：活子 $aliveW2 + 空 ${est2.whiteTerritory} + 贴目 ${formatNum(game.komi)} = " +
+                            "${formatNum(est2.whiteTerritory + aliveW2 + game.komi)} 目\n" +
+                            "估算死子：黑 $deadB2 子 · 白 $deadW2 子\n" +
+                            "（对局进行中的估算，终局数目以实际点目为准）",
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showScoreDetail = false }) { Text("关闭") }
+                }
+            )
         }
         // Fixed-height status strip: the AI-thinking text and the
         // tap-to-confirm hint live here so the board never jumps up or

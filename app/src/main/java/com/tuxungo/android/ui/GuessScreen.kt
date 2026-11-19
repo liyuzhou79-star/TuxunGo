@@ -69,6 +69,8 @@ fun GuessScreen(onBack: () -> Unit) {
     }
     var savedBestScore by remember { mutableIntStateOf(guessPrefs.getInt("bestScore", 0)) }
     var savedBestStreak by remember { mutableIntStateOf(guessPrefs.getInt("bestStreak", 0)) }
+    // Analysis strength for the quiz (visits per question).
+    var visits by remember { mutableIntStateOf(guessPrefs.getInt("visits", 300)) }
 
     val runner = remember { EngineRunner() }
     var engine by remember { mutableStateOf<AnalysisEngine?>(null) }
@@ -121,7 +123,7 @@ fun GuessScreen(onBack: () -> Unit) {
                 initialPlayer = Stone.BLACK,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = 300
+                maxVisits = visits
             )
         }) { outcome ->
             outcome.onSuccess { res ->
@@ -255,6 +257,23 @@ fun GuessScreen(onBack: () -> Unit) {
                 )
             }
             OutlinedButton(onClick = { restart(boardSize) }) { Text("重新开始") }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("难度", fontSize = 13.sp, color = Color.Gray)
+            for ((v, label) in listOf(100 to "快速", 300 to "标准", 800 to "深度")) {
+                FilterChip(
+                    selected = visits == v,
+                    onClick = {
+                        visits = v
+                        guessPrefs.edit().putInt("visits", v).apply()
+                    },
+                    label = { Text(label) }
+                )
+            }
         }
         Spacer(modifier = Modifier.height(6.dp))
         Text(

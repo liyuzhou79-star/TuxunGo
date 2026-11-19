@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="96" alt="TuxunGo icon">
+
 # TuxunGo
 
 **A free, open-source, fully offline Android Go app powered by KataGo**
@@ -34,11 +36,16 @@ vs AI games, or play a friend on the same phone.
 - **Background pre-computation**: while you play, every position's stats are quietly recorded — the post-game review opens (nearly) instantly
 - **Annotated SGF export**: copy a review as SGF with per-move win-rate comments
 
+### Training
+
+- **Tsumego training**: capturing races, double atari, shared-liberty fights, a big-dragon squeeze and a ladder — play the right move and the opponent answers automatically, with hints and explanations; every solution is verified move by move against the rules
+- **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty
+
 ### Game library
 
-- Folders for your saved games: AI games, human games and custom-setup games alike
+- Folders for your saved games: AI games, human games and custom-setup games alike, searchable by title
 - Finished games are auto-saved to an "Auto-saved" folder, so a game is never lost for forgetting to collect it
-- Tap any record to review it; analysis results are cached
+- Tap any record to review it; analysis results are cached; in review you can branch off and try alternative lines, analyse the branch, or save it as a new record
 
 ### Model library
 

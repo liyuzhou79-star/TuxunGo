@@ -98,7 +98,17 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
         doneText = "两块棋共用最后一口气，谁先填上谁赢。填共用气，白棋五子全提；要是先填自己那边的气，白棋反手就把黑棋提掉。"
     ),
     TsumegoProblem(
-        title = "第四题 · 征子",
+        title = "第四题 · 大龙紧气",
+        goal = "黑先，提掉这条白棋大龙",
+        width = 5, height = 5,
+        black = listOf(3 to 0, 3 to 1, 3 to 2, 0 to 1, 0 to 2, 1 to 3, 2 to 3),
+        white = listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1, 2 to 2, 1 to 2),
+        steps = listOf(TsumegoStep(setOf(1 to 1), null)),
+        hint = "大龙看着气很多，其实只剩一口气——它藏在棋形的正中间，不在边上。",
+        doneText = "大龙的最后一口气藏在中间的眼位上：那不是一只眼，而是全龙最后一口气，填上之后六子全提。"
+    ),
+    TsumegoProblem(
+        title = "第五题 · 征子",
         goal = "黑先，用征子吃掉白子",
         width = 7, height = 7,
         black = listOf(2 to 1, 1 to 2, 3 to 3),

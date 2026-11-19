@@ -444,10 +444,11 @@ fun ReviewScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Row {
-                Button(
-                    onClick = { ply = (ply - 1).coerceAtLeast(0) },
-                    enabled = ply > 0
-                ) { Text("上一手") }
+                RepeatStepButton(
+                    text = "上一手",
+                    enabled = ply > 0,
+                    onStep = { ply = (ply - 1).coerceAtLeast(0) }
+                )
                 Text(
                     "第 $ply / $totalMoves 手",
                     fontSize = 14.sp,
@@ -455,10 +456,11 @@ fun ReviewScreen(
                         .weight(1f)
                         .padding(top = 10.dp, start = 10.dp)
                 )
-                Button(
-                    onClick = { ply = (ply + 1).coerceAtMost(totalMoves) },
-                    enabled = ply < totalMoves
-                ) { Text("下一手") }
+                RepeatStepButton(
+                    text = "下一手",
+                    enabled = ply < totalMoves,
+                    onStep = { ply = (ply + 1).coerceAtMost(totalMoves) }
+                )
             }
             Slider(
                 value = ply.toFloat(),
@@ -895,6 +897,41 @@ private fun ChartLegend() {
 }
 
 private fun fmtPct(v: Double): String = String.format("%.1f%%", v * 100)
+
+/**
+ * A step button that keeps stepping while held: one step on tap,
+ * then auto-repeat after a short delay.
+ */
+@Composable
+private fun RepeatStepButton(
+    text: String,
+    enabled: Boolean,
+    onStep: () -> Unit
+) {
+    var holding by remember { mutableStateOf(false) }
+    LaunchedEffect(holding, enabled) {
+        if (holding && enabled) {
+            kotlinx.coroutines.delay(380)
+            while (true) {
+                onStep()
+                kotlinx.coroutines.delay(90)
+            }
+        }
+    }
+    Button(
+        onClick = onStep,
+        enabled = enabled,
+        modifier = Modifier.pointerInput(enabled) {
+            detectTapGestures(
+                onPress = {
+                    holding = true
+                    tryAwaitRelease()
+                    holding = false
+                }
+            )
+        }
+    ) { Text(text) }
+}
 
 private fun fmtNum(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.1f", v)
