@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS }
 
 @Composable
 fun TuxunGoApp() {
@@ -115,6 +115,7 @@ fun TuxunGoApp() {
             },
             onOpenModels = { screen = Screen.MODELS },
             onOpenLibrary = { screen = Screen.LIBRARY },
+            onOpenGuess = { screen = Screen.GUESS },
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenEditor = { w, h ->
                 editSize = w to h
@@ -159,6 +160,9 @@ fun TuxunGoApp() {
             }
         }
         Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.SETUP })
+        Screen.GUESS -> com.tuxungo.android.ui.GuessScreen(
+            onBack = { screen = Screen.SETUP }
+        )
         Screen.EDIT -> EditScreen(
             width = editSize.first,
             height = editSize.second,

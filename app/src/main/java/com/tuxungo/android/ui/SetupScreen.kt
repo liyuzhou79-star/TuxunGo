@@ -34,7 +34,8 @@ fun SetupScreen(
     onOpenModels: () -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenEditor: (Int, Int) -> Unit
+    onOpenEditor: (Int, Int) -> Unit,
+    onOpenGuess: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
@@ -277,6 +278,19 @@ fun SetupScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "猜一选训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "AI 自对弈逐手推进，你来猜每一步的一选，练棋感和大局观。", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenGuess,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("开始猜一选") }
+        }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "棋谱库", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "收藏的对局都在这里，点开就能复盘整场。", fontSize = 13.sp, color = Color.Gray)
@@ -288,7 +302,7 @@ fun SetupScreen(
         }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.0.3", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.0.4", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
