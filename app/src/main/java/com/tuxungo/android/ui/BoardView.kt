@@ -24,8 +24,8 @@ import kotlin.math.roundToInt
 /** A numbered candidate-move marker (rank 1 is the AI's first choice). */
 data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
-private val BoardLight = Color(0xFFE3BC7C)
-private val BoardDeep = Color(0xFFC99B52)
+private val BoardLight = Color(0xFFEECD9A)
+private val BoardDeep = Color(0xFFDDB26E)
 private val BoardEdge = Color(0xFF9A6B2F)
 private val GridInk = Color(0xFF4A2E14)
 private val CoordInk = Color(0xFF7A5C33)
@@ -178,21 +178,29 @@ fun BoardView(
             drawContext.canvas.nativeCanvas.drawText(num, faceLeft + faceSize.width + label * 0.42f, cy, coordPaint)
         }
 
-        // Territory shading from analysis ownership (Black's perspective).
+        // Territory marks: small solid squares in the owner's color on
+        // empty points (black square = Black's territory, white square
+        // = White's), like mainstream Go apps draw them.
         if (ownership != null) {
             for (y in 0 until h) {
                 for (x in 0 until w) {
                     if (game.stoneAt(x, y) != null) continue
                     val v = ownership.getOrNull(y * w + x) ?: continue
                     if (kotlin.math.abs(v) <= 0.15) continue
-                    val alpha = (0.10f + 0.33f * minOf(1.0, kotlin.math.abs(v)).toFloat())
-                    val half = minOf(cellX, cellY) * 0.33f
-                    drawRoundRect(
-                        color = if (v > 0) Color.Black.copy(alpha = alpha) else Color.White.copy(alpha = alpha),
-                        topLeft = Offset(px(x) - half, py(y) - half),
-                        size = Size(half * 2, half * 2),
-                        cornerRadius = CornerRadius(half * 0.3f, half * 0.3f)
-                    )
+                    val alpha = (0.45f + 0.5f * minOf(1.0, kotlin.math.abs(v)).toFloat())
+                    val half = minOf(cellX, cellY) * 0.19f
+                    val topLeft = Offset(px(x) - half, py(y) - half)
+                    val sqSize = Size(half * 2, half * 2)
+                    if (v > 0) {
+                        drawRect(color = Color.Black.copy(alpha = alpha), topLeft = topLeft, size = sqSize)
+                    } else {
+                        drawRect(color = Color.White.copy(alpha = alpha), topLeft = topLeft, size = sqSize)
+                        drawRect(
+                            color = Color(0xFF8A7A5C).copy(alpha = alpha),
+                            topLeft = topLeft, size = sqSize,
+                            style = Stroke(width = maxOf(1f, r * 0.04f))
+                        )
+                    }
                 }
             }
         }
@@ -206,30 +214,23 @@ fun BoardView(
             )
             val brush = if (stone == Stone.BLACK) {
                 Brush.radialGradient(
-                    colors = listOf(Color(0xFF777777), Color(0xFF2B2B2B), Color(0xFF060606)),
-                    center = Offset(cx - r * 0.36f, cy - r * 0.42f),
-                    radius = r * 1.3f
+                    colors = listOf(Color(0xFF4D4D4D), Color(0xFF161616), Color(0xFF000000)),
+                    center = Offset(cx - r * 0.30f, cy - r * 0.36f),
+                    radius = r * 1.25f
                 )
             } else {
                 Brush.radialGradient(
-                    colors = listOf(Color(0xFFFFFFFF), Color(0xFFF2EEE3), Color(0xFFCFC7B4)),
-                    center = Offset(cx - r * 0.32f, cy - r * 0.40f),
-                    radius = r * 1.3f
+                    colors = listOf(Color(0xFFFFFFFF), Color(0xFFF5F5F5), Color(0xFFD9D9D9)),
+                    center = Offset(cx - r * 0.28f, cy - r * 0.34f),
+                    radius = r * 1.25f
                 )
             }
             drawCircle(brush = brush, radius = r, center = Offset(cx, cy), alpha = alpha)
             if (stone == Stone.WHITE) {
                 drawCircle(
-                    Color(0xFFA79E8B).copy(alpha = 0.55f * alpha),
+                    Color(0xFF9A9A9A).copy(alpha = 0.6f * alpha),
                     radius = r, center = Offset(cx, cy),
                     style = Stroke(width = maxOf(1f, r * 0.045f))
-                )
-            } else {
-                // Specular highlight on black stones.
-                drawCircle(
-                    Color.White.copy(alpha = 0.30f * alpha),
-                    radius = r * 0.30f,
-                    center = Offset(cx - r * 0.36f, cy - r * 0.44f)
                 )
             }
         }
@@ -241,8 +242,9 @@ fun BoardView(
         }
 
         // Dead stones: a stone whose point the engine judges to belong
-        // to the opponent gets a bold dot in the opponent's color (a
-        // white stone lost inside Black's territory gets a black dot).
+        // to the opponent gets a small square in the opponent's color
+        // (a white stone lost inside Black's territory gets a black
+        // square), matching mainstream Go apps.
         if (ownership != null) {
             for (y in 0 until h) {
                 for (x in 0 until w) {
@@ -250,28 +252,33 @@ fun BoardView(
                     val v = ownership.getOrNull(y * w + x) ?: continue
                     val dead = (stone == Stone.WHITE && v > 0.5) || (stone == Stone.BLACK && v < -0.5)
                     if (!dead) continue
-                    val center = Offset(px(x), py(y))
-                    val dot = if (stone == Stone.WHITE) Color.Black else Color.White
-                    val edge = if (stone == Stone.WHITE) Color.White else Color.Black
-                    drawCircle(dot, radius = r * 0.30f, center = center)
-                    drawCircle(
-                        edge.copy(alpha = 0.55f),
-                        radius = r * 0.30f,
-                        center = center,
-                        style = Stroke(width = maxOf(1.2f, r * 0.05f))
-                    )
+                    val half = r * 0.34f
+                    val topLeft = Offset(px(x) - half, py(y) - half)
+                    val sqSize = Size(half * 2, half * 2)
+                    if (stone == Stone.WHITE) {
+                        drawRect(color = Color.Black, topLeft = topLeft, size = sqSize)
+                    } else {
+                        drawRect(color = Color.White, topLeft = topLeft, size = sqSize)
+                    }
                 }
             }
         }
 
-        // Last-move marker: a vermillion ring.
+        // Last-move marker: a small triangle in the stone's lower-right,
+        // drawn in the contrasting color.
         val last = game.lastMove()
         if (last != null && game.stoneAt(last.x, last.y) == last.stone) {
-            drawCircle(
-                Color(0xFFD84315),
-                radius = r * 0.52f,
-                center = Offset(px(last.x), py(last.y)),
-                style = Stroke(width = maxOf(2f, r * 0.11f))
+            val cx = px(last.x)
+            val cy = py(last.y)
+            val tri = androidx.compose.ui.graphics.Path().apply {
+                moveTo(cx + r * 0.18f, cy + r * 0.52f)
+                lineTo(cx + r * 0.62f, cy + r * 0.52f)
+                lineTo(cx + r * 0.62f, cy + r * 0.08f)
+                close()
+            }
+            drawPath(
+                tri,
+                color = if (last.stone == Stone.BLACK) Color.White else Color.Black
             )
         }
 
