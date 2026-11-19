@@ -240,6 +240,30 @@ fun BoardView(
             }
         }
 
+        // Dead stones: a stone whose point the engine judges to belong
+        // to the opponent gets a bold dot in the opponent's color (a
+        // white stone lost inside Black's territory gets a black dot).
+        if (ownership != null) {
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val stone = game.stoneAt(x, y) ?: continue
+                    val v = ownership.getOrNull(y * w + x) ?: continue
+                    val dead = (stone == Stone.WHITE && v > 0.5) || (stone == Stone.BLACK && v < -0.5)
+                    if (!dead) continue
+                    val center = Offset(px(x), py(y))
+                    val dot = if (stone == Stone.WHITE) Color.Black else Color.White
+                    val edge = if (stone == Stone.WHITE) Color.White else Color.Black
+                    drawCircle(dot, radius = r * 0.30f, center = center)
+                    drawCircle(
+                        edge.copy(alpha = 0.55f),
+                        radius = r * 0.30f,
+                        center = center,
+                        style = Stroke(width = maxOf(1.2f, r * 0.05f))
+                    )
+                }
+            }
+        }
+
         // Last-move marker: a vermillion ring.
         val last = game.lastMove()
         if (last != null && game.stoneAt(last.x, last.y) == last.stone) {
@@ -285,19 +309,25 @@ fun BoardView(
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${i + 1}", center.x, baseline, paint)
         }
-        // Candidate markers: rank 1 is a solid blue disc with a white
-        // number; other ranks are pale discs with a blue ring and number.
+        // Candidate markers: bold filled discs with white numbers and a
+        // pale halo so they stay readable on wood, stones and shading.
+        // Rank 1 is blue; the other ranks are charcoal.
         for (mark in candidates) {
             val center = Offset(px(mark.x), py(mark.y))
-            if (mark.rank == 1) {
-                drawCircle(MarkerBlue, radius = r * 0.66f, center = center)
-            } else {
-                drawCircle(Color.White.copy(alpha = 0.9f), radius = r * 0.58f, center = center)
-                drawCircle(MarkerBlue, radius = r * 0.58f, center = center, style = Stroke(width = 2.5f))
-            }
+            val discR = if (mark.rank == 1) r * 0.70f else r * 0.62f
+            drawCircle(
+                Color.White.copy(alpha = 0.92f),
+                radius = discR + maxOf(1.6f, r * 0.06f),
+                center = center
+            )
+            drawCircle(
+                if (mark.rank == 1) MarkerBlue else Color(0xFF2E3338),
+                radius = discR,
+                center = center
+            )
             val paint = android.graphics.Paint().apply {
-                color = if (mark.rank == 1) android.graphics.Color.WHITE else android.graphics.Color.rgb(36, 86, 200)
-                textSize = r * 0.78f
+                color = android.graphics.Color.WHITE
+                textSize = r * 0.88f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true

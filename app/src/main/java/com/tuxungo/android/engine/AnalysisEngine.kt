@@ -55,9 +55,9 @@ data class AnalysisResult(
  * Protocol facts verified locally against KataGo v1.15.3 with the bundled
  * model (see project checkpoint): root and move win rates / score leads
  * are reported from the side-to-move perspective; the ownership array is
- * row-major from the top-left with POSITIVE meaning White owns the point
- * (negated here into Black's perspective); rectangular boards and
- * handicap initial stones are supported.
+ * row-major from the top-left with POSITIVE meaning Black owns the point
+ * (verified with asymmetric corner enclosures and on-stone values);
+ * rectangular boards and handicap initial stones are supported.
  *
  * All calls are blocking; use off the main thread. One query at a time.
  */
@@ -235,8 +235,10 @@ class AnalysisEngine private constructor(
         if (ownArr != null) {
             val n = minOf(ownArr.length(), size.area)
             for (i in 0 until n) {
-                // KataGo reports positive = White; flip to Black's perspective.
-                ownership[i] = -ownArr.optDouble(i, 0.0)
+                // KataGo v1.15.3 reports ownership in Black's perspective
+                // already (positive = Black owns the point) — verified
+                // locally; do NOT negate.
+                ownership[i] = ownArr.optDouble(i, 0.0)
             }
         }
         return AnalysisResult(sideToMove, rootWrB, rootLeadB, candidates, ownership)

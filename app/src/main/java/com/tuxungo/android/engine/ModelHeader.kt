@@ -62,11 +62,10 @@ object TerritoryEstimate {
     /**
      * [ownership] has one value per board point in row-major order from
      * the top-left (index = y * width + x), in BLACK's perspective
-     * (positive = Black owns it). Note KataGo's analysis engine returns
-     * the opposite sign (positive = White); AnalysisEngine negates the
-     * values before they reach this helper. [stones] is the board
-     * content in the same order (null = empty). Only empty points count
-     * as territory.
+     * (positive = Black owns it) — which is exactly the sign KataGo
+     * v1.15.3's analysis engine returns (verified locally with corner
+     * enclosures). [stones] is the board content in the same order
+     * (null = empty). Only empty points count as territory.
      */
     fun estimate(ownership: DoubleArray, stones: Array<Stone?>): Result {
         var b = 0
