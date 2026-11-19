@@ -269,6 +269,31 @@ fun SettingsScreen(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
+        var showResetConfirm by remember { mutableStateOf(false) }
+        androidx.compose.material3.OutlinedButton(
+            onClick = { showResetConfirm = true },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("恢复默认设置") }
+        if (showResetConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showResetConfirm = false },
+                title = { Text("恢复默认设置？") },
+                text = { Text("主题色、棋盘样式、音效、落子方式等会全部回到默认。棋谱库和模型库不受影响。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showResetConfirm = false
+                            update(com.tuxungo.android.AppSettings())
+                            onAccentChange("sakura")
+                        }
+                    ) { Text("恢复默认") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetConfirm = false }) { Text("取消") }
+                }
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "设置修改后，对正在进行的对局将在下一局生效。",
             fontSize = 12.sp, color = Color.Gray

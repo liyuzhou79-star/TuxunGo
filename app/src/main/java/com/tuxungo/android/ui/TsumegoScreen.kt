@@ -177,6 +177,9 @@ fun TsumegoScreen(onBack: () -> Unit) {
         mutableLongStateOf(System.currentTimeMillis())
     }
     var solveInfo by remember { mutableStateOf("") }
+    var missTotal by remember {
+        mutableIntStateOf(prefs.getInt("miss_0", 0))
+    }
 
     fun reset(idx: Int) {
         index = idx
@@ -191,6 +194,7 @@ fun TsumegoScreen(onBack: () -> Unit) {
         solved = false
         startedAt = System.currentTimeMillis()
         solveInfo = ""
+        missTotal = prefs.getInt("miss_$idx", 0)
         statusText = if (p.userWhite) {
             "轮到白棋下：点棋盘选点，再点一次确认。"
         } else {
@@ -273,6 +277,12 @@ fun TsumegoScreen(onBack: () -> Unit) {
         if (solveInfo.isNotEmpty()) {
             Text(text = solveInfo, fontSize = 12.sp, color = Color.Gray)
         }
+        if (!solved && missTotal > 0) {
+            Text(
+                text = "这道题累计错过 $missTotal 次",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
         Spacer(modifier = Modifier.height(6.dp))
 
         BoardView(
@@ -317,6 +327,8 @@ fun TsumegoScreen(onBack: () -> Unit) {
                         }
                     } else {
                         mistakes++
+                        missTotal++
+                        prefs.edit().putInt("miss_$index", missTotal).apply()
                         statusText = "这步不对，再想想。需要的话点「提示」看关键点。"
                     }
                 } else {

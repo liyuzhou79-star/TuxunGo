@@ -146,6 +146,8 @@ fun GameScreen(
     var engineStatus by remember { mutableStateOf(if (isPve || isEve) "引擎启动中…" else "") }
     var aiThinking by remember { mutableStateOf(false) }
     var eveRunning by remember { mutableStateOf(isEve) }
+    // Manual pause for timed games: freezes the clock and the board.
+    var userPaused by remember { mutableStateOf(false) }
     fun sideCfg(stone: Stone): SideAiConfig =
         if (stone == Stone.BLACK) sideBlack else sideWhite
     fun engineFor(stone: Stone): KataEngine? =
@@ -753,6 +755,7 @@ fun GameScreen(
             last = now
             if (game.finished || scoringMode) continue
             if (game.moves.isEmpty()) continue
+            if (userPaused) continue
             if (bothAi && !eveRunning) continue
             when (game.current) {
                 Stone.BLACK -> {
@@ -1101,8 +1104,16 @@ fun GameScreen(
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = status, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (userPaused) "已暂停" else status,
+                fontSize = 16.sp, fontWeight = FontWeight.SemiBold
+            )
             Row {
+                if (clockEnabled && !finished) {
+                    TextButton(onClick = { userPaused = !userPaused }) {
+                        Text(if (userPaused) "继续" else "暂停")
+                    }
+                }
                 TextButton(onClick = { fullscreen = true }) { Text("全屏") }
                 TextButton(onClick = { exitGame() }) { Text("返回") }
             }
@@ -1317,7 +1328,7 @@ fun GameScreen(
         }
         BoardView(
             game = game,
-            enabled = scoringMode || (!finished && humanTurn && !aiThinking),
+            enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
             territoryThreshold = 0.5,
