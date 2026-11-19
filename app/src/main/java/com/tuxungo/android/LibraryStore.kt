@@ -109,6 +109,16 @@ object LibraryStore {
         File(gamesDir(context), "$id.json").delete()
     }
 
+    /** Save a copy of a record under a fresh id, titled with a 副本 suffix. */
+    fun duplicateGame(context: Context, game: LibraryGame): LibraryGame {
+        val copy = game.copy(
+            id = "",
+            title = game.title + "（副本）",
+            createdAt = System.currentTimeMillis()
+        )
+        return saveGame(context, copy)
+    }
+
     fun moveToFolder(context: Context, id: String, folderId: String?) {
         val g = listGames(context).firstOrNull { it.id == id } ?: return
         writeGame(context, g.copy(folderId = folderId))

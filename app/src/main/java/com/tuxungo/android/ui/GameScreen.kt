@@ -546,7 +546,7 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = 80
+                maxVisits = settings.autoVisits
             )
         }) { result ->
             autoBusy = false

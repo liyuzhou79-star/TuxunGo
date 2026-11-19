@@ -61,7 +61,9 @@ data class TsumegoProblem(
     val white: List<Pair<Int, Int>>,
     val steps: List<TsumegoStep>,
     val hint: String,
-    val doneText: String
+    val doneText: String,
+    /** True when the user plays White (a life-making / defense problem). */
+    val userWhite: Boolean = false
 )
 
 val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
@@ -123,6 +125,21 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
         ),
         hint = "轮流从两侧叫吃，把白棋一步步赶向棋盘边缘，它的气永远只剩一口。",
         doneText = "征子一路赶到棋盘边上，白子无处可逃，整串被提。"
+    ),
+    TsumegoProblem(
+        title = "第六题 · 做活",
+        goal = "白先，把这块白棋做活（这次你执白）",
+        width = 5, height = 5,
+        black = listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3, 4 to 3),
+        white = listOf(
+            0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0,
+            0 to 1, 4 to 1,
+            0 to 2, 1 to 2, 2 to 2, 3 to 2, 4 to 2
+        ),
+        steps = listOf(TsumegoStep(setOf(2 to 1), null)),
+        hint = "直三的眼位，关键在正中间：占住中间一点，就把一个大眼分成两个小眼。下在边上，黑棋扑进来提掉扑入子再回提，整块就没了。",
+        doneText = "中间一点把直三眼位分成两个真眼，黑棋哪个眼都进不去，这块白棋活了。",
+        userWhite = true
     )
 )
 
@@ -174,7 +191,11 @@ fun TsumegoScreen(onBack: () -> Unit) {
         solved = false
         startedAt = System.currentTimeMillis()
         solveInfo = ""
-        statusText = "轮到黑棋下：点棋盘选点，再点一次确认。"
+        statusText = if (p.userWhite) {
+            "轮到白棋下：点棋盘选点，再点一次确认。"
+        } else {
+            "轮到黑棋下：点棋盘选点，再点一次确认。"
+        }
     }
 
     // The app answers with the scripted reply after a correct move.
@@ -342,6 +363,6 @@ private fun buildProblemGame(p: TsumegoProblem): GoGame {
     val g = GoGame(BoardSize(p.width, p.height), 0.5)
     val stones = p.black.map { Move(Stone.BLACK, it.first, it.second) } +
         p.white.map { Move(Stone.WHITE, it.first, it.second) }
-    g.loadPosition(stones, Stone.BLACK)
+    g.loadPosition(stones, if (p.userWhite) Stone.WHITE else Stone.BLACK)
     return g
 }

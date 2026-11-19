@@ -14,7 +14,9 @@ data class AppSettings(
     /** AI-vs-AI spectating pace: fast / normal / slow. */
     val eveSpeed: String = "normal",
     /** Theme accent: sakura / matcha / indigo. */
-    val accent: String = "sakura"
+    val accent: String = "sakura",
+    /** Visits for the silent per-move background analysis during games. */
+    val autoVisits: Int = 80
 )
 
 object SettingsStore {
@@ -32,6 +34,12 @@ object SettingsStore {
         "real" to "真实录音（真提子声·随机）",
         "double" to "提子双击",
         "heavy" to "提子沉稳"
+    )
+
+    val AUTO_VISITS = listOf(
+        40 to "快速",
+        80 to "标准",
+        160 to "深度"
     )
 
     val ACCENTS = listOf(
@@ -64,7 +72,8 @@ object SettingsStore {
             showCoordinates = p.getBoolean("showCoordinates", true),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
             eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
-            accent = p.getString("accent", "sakura") ?: "sakura"
+            accent = p.getString("accent", "sakura") ?: "sakura",
+            autoVisits = p.getInt("autoVisits", 80)
         )
     }
 
@@ -79,6 +88,7 @@ object SettingsStore {
             .putBoolean("vibrationEnabled", s.vibrationEnabled)
             .putString("eveSpeed", s.eveSpeed)
             .putString("accent", s.accent)
+            .putInt("autoVisits", s.autoVisits)
             .apply()
     }
 

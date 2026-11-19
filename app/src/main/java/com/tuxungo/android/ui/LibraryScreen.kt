@@ -252,6 +252,12 @@ fun LibraryScreen(
                             }
                         ) { Text("改名") }
                         TextButton(onClick = { moveTarget = g }) { Text("移动") }
+                        TextButton(
+                            onClick = {
+                                LibraryStore.duplicateGame(context, g)
+                                refresh()
+                            }
+                        ) { Text("复制") }
                         TextButton(onClick = { exportSgf(g) }) { Text("导出") }
                         TextButton(onClick = { deleteTarget = g }) { Text("删除") }
                     }

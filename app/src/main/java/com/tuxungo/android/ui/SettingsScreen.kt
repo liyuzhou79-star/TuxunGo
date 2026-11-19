@@ -132,6 +132,24 @@ fun SettingsScreen(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(text = "对局自动分析", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "对局时后台默默算每一手的胜率（终局复盘秒开靠它）。深度更准但更耗电。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((v, label) in SettingsStore.AUTO_VISITS) {
+                FilterChip(
+                    selected = settings.autoVisits == v,
+                    onClick = { update(settings.copy(autoVisits = v)) },
+                    label = { Text(label) }
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(text = "主题色", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
