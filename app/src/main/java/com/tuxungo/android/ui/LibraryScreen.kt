@@ -107,6 +107,48 @@ fun LibraryScreen(
     var deleteTarget by remember { mutableStateOf<LibraryGame?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryGame?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var exportedNote by remember { mutableStateOf("") }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+
+    fun exportSgf(g: LibraryGame) {
+        val setup = when {
+            g.customStones.isNotEmpty() -> g.customStones
+            g.handicap > 0 -> {
+                val tmp = com.tuxungo.android.go.GoGame(g.size, g.komi)
+                tmp.setupHandicap(g.handicap)
+                val out = mutableListOf<com.tuxungo.android.go.Move>()
+                for (y in 0 until g.size.height) {
+                    for (x in 0 until g.size.width) {
+                        tmp.stoneAt(x, y)?.let {
+                            out.add(com.tuxungo.android.go.Move(it, x, y))
+                        }
+                    }
+                }
+                out
+            }
+            else -> emptyList()
+        }
+        val replay = com.tuxungo.android.go.GoGame(g.size, g.komi)
+        when {
+            g.customStones.isNotEmpty() -> replay.loadPosition(g.customStones, g.startPlayer)
+            g.handicap > 0 -> replay.setupHandicap(g.handicap)
+        }
+        for (m in g.moves) {
+            if (m.isPass) replay.pass() else replay.play(m.x, m.y)
+        }
+        val startPlayer = when {
+            g.customStones.isNotEmpty() -> g.startPlayer
+            g.handicap > 0 -> com.tuxungo.android.go.Stone.WHITE
+            else -> com.tuxungo.android.go.Stone.BLACK
+        }
+        val sgf = com.tuxungo.android.go.Sgf.export(
+            replay,
+            setupStones = setup,
+            startPlayer = startPlayer
+        )
+        clipboard.setText(androidx.compose.ui.text.AnnotatedString(sgf))
+        exportedNote = "已复制「${g.title}」的 SGF 到剪贴板"
+    }
     var deleteFolderTarget by remember { mutableStateOf<String?>(null) }
 
     fun refresh() {
@@ -169,6 +211,10 @@ fun LibraryScreen(
         }
         Spacer(modifier = Modifier.height(6.dp))
 
+        if (exportedNote.isNotEmpty()) {
+            Text(exportedNote, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+            Spacer(modifier = Modifier.height(4.dp))
+        }
         if (shown.isEmpty()) {
             Text(
                 "这里还没有棋谱。对局结束后，或者在复盘页，点「收藏棋谱」就能存进来。",
@@ -192,6 +238,7 @@ fun LibraryScreen(
                             }
                         ) { Text("改名") }
                         TextButton(onClick = { moveTarget = g }) { Text("移动") }
+                        TextButton(onClick = { exportSgf(g) }) { Text("导出") }
                         TextButton(onClick = { deleteTarget = g }) { Text("删除") }
                     }
                 }

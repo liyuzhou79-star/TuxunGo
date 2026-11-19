@@ -63,6 +63,12 @@ fun GuessScreen(onBack: () -> Unit) {
     var answered by remember { mutableIntStateOf(0) }
     var streak by remember { mutableIntStateOf(0) }
     var bestStreak by remember { mutableIntStateOf(0) }
+    // All-time bests, kept across sessions.
+    val guessPrefs = remember {
+        context.getSharedPreferences("guess_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var savedBestScore by remember { mutableIntStateOf(guessPrefs.getInt("bestScore", 0)) }
+    var savedBestStreak by remember { mutableIntStateOf(guessPrefs.getInt("bestStreak", 0)) }
 
     val runner = remember { EngineRunner() }
     var engine by remember { mutableStateOf<AnalysisEngine?>(null) }
@@ -176,6 +182,14 @@ fun GuessScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+                if (score > savedBestScore) {
+                    savedBestScore = score
+                    guessPrefs.edit().putInt("bestScore", score).apply()
+                }
+                if (bestStreak > savedBestStreak) {
+                    savedBestStreak = bestStreak
+                    guessPrefs.edit().putInt("bestStreak", bestStreak).apply()
+                }
             }.onFailure { e ->
                 phase = GuessPhase.GUESSING
                 feedback = "分析失败：${e.message ?: "未知错误"}"
@@ -247,6 +261,12 @@ fun GuessScreen(onBack: () -> Unit) {
             text = "得分 $score · 一选命中 $topHits/$answered · 连对 $streak（最高 $bestStreak）",
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold
         )
+        if (savedBestScore > 0 || savedBestStreak > 0) {
+            Text(
+                text = "历史最佳：得分 $savedBestScore · 连对 $savedBestStreak",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = when (phase) {

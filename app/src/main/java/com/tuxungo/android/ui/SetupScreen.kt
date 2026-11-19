@@ -43,15 +43,52 @@ fun SetupScreen(
         val activeId = com.tuxungo.android.engine.ModelStore.activeId(context)
         models.firstOrNull { it.id == activeId }?.displayName ?: "内置默认模型"
     }
-    var mode by remember { mutableStateOf(GameMode.PVP) }
-    var width by remember { mutableIntStateOf(19) }
-    var height by remember { mutableIntStateOf(19) }
-    var handicapText by remember { mutableStateOf("0") }
-    var komiText by remember { mutableStateOf("7.5") }
-    var humanStone by remember { mutableStateOf(com.tuxungo.android.go.Stone.BLACK) }
-    var aiVisits by remember { mutableIntStateOf(200) }
-    var clockMinutes by remember { mutableIntStateOf(0) }
+    // The setup form remembers the last used configuration.
+    val setupPrefs = remember {
+        context.getSharedPreferences("setup_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var mode by remember {
+        mutableStateOf(
+            runCatching {
+                GameMode.valueOf(setupPrefs.getString("mode", "PVP") ?: "PVP")
+            }.getOrDefault(GameMode.PVP)
+        )
+    }
+    var width by remember { mutableIntStateOf(setupPrefs.getInt("width", 19)) }
+    var height by remember { mutableIntStateOf(setupPrefs.getInt("height", 19)) }
+    var handicapText by remember {
+        mutableStateOf(setupPrefs.getString("handicapText", "0") ?: "0")
+    }
+    var komiText by remember {
+        mutableStateOf(setupPrefs.getString("komiText", "7.5") ?: "7.5")
+    }
+    var humanStone by remember {
+        mutableStateOf(
+            runCatching {
+                com.tuxungo.android.go.Stone.valueOf(
+                    setupPrefs.getString("humanStone", "BLACK") ?: "BLACK"
+                )
+            }.getOrDefault(com.tuxungo.android.go.Stone.BLACK)
+        )
+    }
+    var aiVisits by remember { mutableIntStateOf(setupPrefs.getInt("aiVisits", 200)) }
+    var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(
+        mode, width, height, handicapText, komiText, humanStone, aiVisits, clockMinutes
+    ) {
+        setupPrefs.edit()
+            .putString("mode", mode.name)
+            .putInt("width", width)
+            .putInt("height", height)
+            .putString("handicapText", handicapText)
+            .putString("komiText", komiText)
+            .putString("humanStone", humanStone.name)
+            .putInt("aiVisits", aiVisits)
+            .putInt("clockMinutes", clockMinutes)
+            .apply()
+    }
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
     val handicapInput = handicapText.toIntOrNull()?.coerceIn(0, 9) ?: 0
@@ -302,7 +339,7 @@ fun SetupScreen(
         }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.0.8", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.1.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

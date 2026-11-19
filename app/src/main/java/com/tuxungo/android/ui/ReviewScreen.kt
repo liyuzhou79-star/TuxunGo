@@ -93,6 +93,19 @@ fun ReviewScreen(
     var errorText by remember { mutableStateOf("") }
     var perspective by remember { mutableStateOf(Stone.BLACK) }
     var ply by remember { mutableIntStateOf(totalMoves) }
+    // Branch ("what-if") exploration: a scratch game forked at the
+    // current ply. The main line is never touched.
+    var branchGame by remember { mutableStateOf<GoGame?>(null) }
+    var branchBasePly by remember { mutableIntStateOf(0) }
+    var branchPending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var branchInfo by remember { mutableStateOf("") }
+    var branchBusy by remember { mutableStateOf(false) }
+    var branchResult by remember {
+        mutableStateOf<com.tuxungo.android.engine.AnalysisResult?>(null)
+    }
+    // GoGame is not observable; bump this after every branch mutation
+    // so the board redraws.
+    var branchVersion by remember { mutableIntStateOf(0) }
     var showBest by remember { mutableStateOf(true) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var savedNote by remember { mutableStateOf(false) }
@@ -203,6 +216,80 @@ fun ReviewScreen(
 
     val replayGame = remember(ply, current.id) { buildGame(ply) }
 
+    fun enterBranch() {
+        branchGame = buildGame(ply)
+        branchBasePly = ply
+        branchPending = null
+        branchResult = null
+        branchInfo = "试下模式：点棋盘落子（点两下确认），可以悔棋、停一手；" +
+            "点「分析这条分支」看这个局面的胜率和 AI 一选。主线棋谱不受影响。"
+    }
+
+    fun exitBranch() {
+        branchGame = null
+        branchPending = null
+        branchResult = null
+        branchInfo = ""
+    }
+
+    fun branchAnalyze() {
+        val bg = branchGame ?: return
+        if (branchBusy) return
+        branchBusy = true
+        branchInfo = "正在分析这条分支…"
+        val movesSnapshot = bg.moves.toList()
+        val sideSnapshot = bg.current
+        runner.execute {
+            var eng: AnalysisEngine? = null
+            try {
+                eng = AnalysisEngine.start(
+                    context.applicationInfo.nativeLibraryDir,
+                    EngineAssets.engineWorkDir(context),
+                    ModelStore.resolveActiveFile(context)
+                )
+                val initPlayer = when {
+                    current.customStones.isNotEmpty() -> current.startPlayer
+                    current.handicap > 0 -> Stone.WHITE
+                    else -> Stone.BLACK
+                }
+                val res = eng.analyze(
+                    size = current.size,
+                    komi = current.komi,
+                    initialStones = setupStonesOf(current),
+                    initialPlayer = initPlayer,
+                    moves = movesSnapshot,
+                    sideToMove = sideSnapshot,
+                    maxVisits = 300
+                )
+                branchResult = res
+                val top = res.candidates.firstOrNull()
+                val topText = when {
+                    top == null -> "无候选"
+                    top.move == null -> "停一手"
+                    else -> top.vertex
+                }
+                branchInfo = "分支局面：黑胜率 " +
+                    String.format("%.1f%%", res.rootWinrateBlack * 100) +
+                    " · 目差 " + String.format("%+.1f", res.rootScoreLeadBlack) +
+                    " · AI 一选：$topText"
+            } catch (e: Exception) {
+                branchInfo = "分支分析失败：${e.message ?: "未知错误"}"
+            } finally {
+                try {
+                    eng?.quit()
+                } catch (_: Exception) {
+                }
+                branchBusy = false
+            }
+        }
+    }
+
+    val branchMarks: List<CandidateMark> = branchResult?.candidates
+        ?.mapIndexedNotNull { idx, c ->
+            val mv = c.move ?: return@mapIndexedNotNull null
+            CandidateMark(mv.x, mv.y, idx + 1)
+        } ?: emptyList()
+
     val bestMark: List<CandidateMark> = remember(turns, ply, showBest) {
         val t = turns
         if (!showBest || t == null || ply >= totalMoves) {
@@ -239,42 +326,122 @@ fun ReviewScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        BoardView(
-            game = replayGame,
-            enabled = false,
-            skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates,
-            territoryThreshold = 0.5,
-            candidates = bestMark,
-            ownership = null,
-            pvGhost = emptyList(),
-            preview = null,
-            markedDead = emptySet()
-        ) { _, _ -> }
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row {
-            Button(
-                onClick = { ply = (ply - 1).coerceAtLeast(0) },
-                enabled = ply > 0
-            ) { Text("上一手") }
-            Text(
-                "第 $ply / $totalMoves 手",
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 10.dp, start = 10.dp)
+        val branch = branchGame
+        @Suppress("UNUSED_EXPRESSION")
+        branchVersion
+        if (branch != null) {
+            BoardView(
+                game = branch,
+                enabled = !branchBusy,
+                skin = BoardSkin.fromId(settings.boardSkin),
+                showCoordinates = settings.showCoordinates,
+                territoryThreshold = 0.5,
+                candidates = branchMarks,
+                ownership = null,
+                pvGhost = emptyList(),
+                preview = branchPending,
+                markedDead = emptySet(),
+                flipped = perspective == Stone.WHITE,
+                onPointTap = { x, y ->
+                    if (branch.isLegal(x, y)) {
+                        if (branchPending == Pair(x, y)) {
+                            branch.play(x, y)
+                            branchPending = null
+                            branchResult = null
+                            branchVersion++
+                        } else {
+                            branchPending = Pair(x, y)
+                        }
+                    }
+                }
             )
-            Button(
-                onClick = { ply = (ply + 1).coerceAtMost(totalMoves) },
-                enabled = ply < totalMoves
-            ) { Text("下一手") }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "试下中（从第 $branchBasePly 手分叉，已试 ${branch.moves.size - branchBasePly} 手）",
+                fontSize = 13.sp, color = Color.Gray
+            )
+            if (branchInfo.isNotEmpty()) {
+                Text(branchInfo, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { branchAnalyze() },
+                    enabled = !branchBusy,
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (branchBusy) "分析中…" else "分析这条分支") }
+                OutlinedButton(
+                    onClick = {
+                        if (branch.moves.size > branchBasePly) {
+                            branch.undo()
+                            branchPending = null
+                            branchResult = null
+                            branchVersion++
+                        }
+                    },
+                    enabled = branch.moves.size > branchBasePly,
+                    modifier = Modifier.weight(1f)
+                ) { Text("悔棋") }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        branch.pass()
+                        branchPending = null
+                        branchResult = null
+                        branchVersion++
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("停一手") }
+                OutlinedButton(
+                    onClick = { exitBranch() },
+                    modifier = Modifier.weight(1f)
+                ) { Text("退出试下") }
+            }
+        } else {
+            BoardView(
+                game = replayGame,
+                enabled = false,
+                skin = BoardSkin.fromId(settings.boardSkin),
+                showCoordinates = settings.showCoordinates,
+                territoryThreshold = 0.5,
+                candidates = bestMark,
+                ownership = null,
+                pvGhost = emptyList(),
+                preview = null,
+                markedDead = emptySet(),
+                flipped = perspective == Stone.WHITE
+            ) { _, _ -> }
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row {
+                Button(
+                    onClick = { ply = (ply - 1).coerceAtLeast(0) },
+                    enabled = ply > 0
+                ) { Text("上一手") }
+                Text(
+                    "第 $ply / $totalMoves 手",
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 10.dp, start = 10.dp)
+                )
+                Button(
+                    onClick = { ply = (ply + 1).coerceAtMost(totalMoves) },
+                    enabled = ply < totalMoves
+                ) { Text("下一手") }
+            }
+            Slider(
+                value = ply.toFloat(),
+                onValueChange = { ply = it.roundToInt() },
+                valueRange = 0f..totalMoves.coerceAtLeast(1).toFloat()
+            )
+            OutlinedButton(
+                onClick = { enterBranch() },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("从这手试下（分支探索）") }
         }
-        Slider(
-            value = ply.toFloat(),
-            onValueChange = { ply = it.roundToInt() },
-            valueRange = 0f..totalMoves.coerceAtLeast(1).toFloat()
-        )
 
         val stat = turns?.getOrNull(ply)
         if (stat != null) {

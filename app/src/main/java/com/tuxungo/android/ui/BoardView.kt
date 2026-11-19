@@ -74,6 +74,8 @@ fun BoardView(
     preview: Pair<Int, Int>? = null,
     /** Stones marked dead in scoring mode: drawn faded with a cross. */
     markedDead: Set<Int> = emptySet(),
+    /** Render the board rotated 180 degrees (White's point of view). */
+    flipped: Boolean = false,
     onPointTap: (Int, Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -109,7 +111,7 @@ fun BoardView(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .pointerInput(game, enabled, showCoordinates) {
+            .pointerInput(game, enabled, showCoordinates, flipped) {
                 detectTapGestures { offset ->
                     if (!enabled) return@detectTapGestures
                     val label = size.width * if (showCoordinates) 0.052f else 0.018f
@@ -119,13 +121,16 @@ fun BoardView(
                     val originY = label + cellY / 2f
                     val fx = (offset.x - originX) / cellX
                     val fy = (offset.y - originY) / cellY
-                    val ix = fx.roundToInt()
-                    val iy = fy.roundToInt()
+                    val gx = fx.roundToInt()
+                    val gy = fy.roundToInt()
                     // Snap to the nearest intersection within half a cell:
                     // forgiving for fingers, no dead zones between points.
-                    if (ix in 0 until w && iy in 0 until h &&
-                        kotlin.math.abs(fx - ix) <= 0.5f && kotlin.math.abs(fy - iy) <= 0.5f
+                    if (gx in 0 until w && gy in 0 until h &&
+                        kotlin.math.abs(fx - gx) <= 0.5f && kotlin.math.abs(fy - gy) <= 0.5f
                     ) {
+                        // Undo the 180-degree rotation when flipped.
+                        val ix = if (flipped) w - 1 - gx else gx
+                        val iy = if (flipped) h - 1 - gy else gy
                         onPointTap(ix, iy)
                     }
                 }
@@ -138,8 +143,11 @@ fun BoardView(
         val originX = label + cellX / 2f
         val originY = label + cellY / 2f
         val r = minOf(cellX, cellY) * 0.475f
-        fun px(x: Int) = originX + x * cellX
-        fun py(y: Int) = originY + y * cellY
+        // When flipped, logical points are drawn rotated 180 degrees;
+        // every marker, label and stone goes through px/py, so the
+        // whole board (including coordinates) follows automatically.
+        fun px(x: Int) = originX + (if (flipped) w - 1 - x else x) * cellX
+        fun py(y: Int) = originY + (if (flipped) h - 1 - y else y) * cellY
 
         val faceLeft = originX - cellX * 0.64f
         val faceTop = originY - cellY * 0.64f

@@ -176,6 +176,7 @@ fun GameScreen(
     var scoringBusy by remember { mutableStateOf(false) }
     var scoringNote by remember { mutableStateOf("") }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var boardFlipped by remember { mutableStateOf(false) }
     // Tap-to-confirm preview point.
     var pendingPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
@@ -694,7 +695,12 @@ fun GameScreen(
             return@LaunchedEffect
         }
         if (bothAi && !eveRunning) return@LaunchedEffect
-        delay(if (bothAi) 650 else 300)
+        val eveDelayMs = when (settings.eveSpeed) {
+            "fast" -> 300L
+            "slow" -> 1200L
+            else -> 650L
+        }
+        delay(if (bothAi) eveDelayMs else 300)
         if (!game.finished && aiControls(game.current) && !aiThinking) aiMoveNow()
     }
 
@@ -973,7 +979,8 @@ fun GameScreen(
                     fsSel?.pvMoves?.take(7) ?: emptyList()
                 } else emptyList(),
                 preview = if (scoringMode) null else pendingPoint,
-                markedDead = if (scoringMode) deadSet else emptySet()
+                markedDead = if (scoringMode) deadSet else emptySet(),
+                flipped = boardFlipped
             ) { x, y ->
                 if (scoringMode) {
                     val group = game.groupAt(x, y)
@@ -1234,7 +1241,8 @@ fun GameScreen(
             ownership = displayOwnership,
             pvGhost = if (!judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
             preview = if (scoringMode) null else pendingPoint,
-            markedDead = if (scoringMode) deadSet else emptySet()
+            markedDead = if (scoringMode) deadSet else emptySet(),
+            flipped = boardFlipped
         ) { x, y ->
             if (scoringMode) {
                 val group = game.groupAt(x, y)
@@ -1548,6 +1556,14 @@ fun GameScreen(
                             val file = File(dir, "tuxungo-${System.currentTimeMillis()}.sgf")
                             file.writeText(sgf)
                             Toast.makeText(context, "棋谱已保存：${file.name}", Toast.LENGTH_LONG).show()
+                        }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(if (boardFlipped) "恢复棋盘方向" else "翻转棋盘（白方视角）") },
+                        onClick = {
+                            showMoreMenu = false
+                            boardFlipped = !boardFlipped
+                            pendingPoint = null
                         }
                     )
                 }

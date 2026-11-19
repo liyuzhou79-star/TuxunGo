@@ -116,6 +116,19 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onCheckedChange = { update(settings.copy(showCoordinates = it)) }
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "AI 对 AI 观战节奏", fontSize = 15.sp)
+        Text(text = "两个 AI 对弈时每手之间的停顿", fontSize = 12.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((id, label) in SettingsStore.EVE_SPEEDS) {
+                FilterChip(
+                    selected = settings.eveSpeed == id,
+                    onClick = { update(settings.copy(eveSpeed = id)) },
+                    label = { Text(label) }
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(text = "棋盘样式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)

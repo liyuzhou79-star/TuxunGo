@@ -10,7 +10,9 @@ data class AppSettings(
     val boardSkin: String = "wood_light",
     val confirmMove: Boolean = true,
     val showCoordinates: Boolean = true,
-    val vibrationEnabled: Boolean = true
+    val vibrationEnabled: Boolean = true,
+    /** AI-vs-AI spectating pace: fast / normal / slow. */
+    val eveSpeed: String = "normal"
 )
 
 object SettingsStore {
@@ -30,6 +32,12 @@ object SettingsStore {
         "heavy" to "提子沉稳"
     )
 
+    val EVE_SPEEDS = listOf(
+        "fast" to "快",
+        "normal" to "中",
+        "slow" to "慢"
+    )
+
     val BOARD_SKINS = listOf(
         "wood_light" to "榧木纹（浅）",
         "wood_dark" to "胡桃木（深）",
@@ -46,7 +54,8 @@ object SettingsStore {
             boardSkin = p.getString("boardSkin", "wood_light") ?: "wood_light",
             confirmMove = p.getBoolean("confirmMove", true),
             showCoordinates = p.getBoolean("showCoordinates", true),
-            vibrationEnabled = p.getBoolean("vibrationEnabled", true)
+            vibrationEnabled = p.getBoolean("vibrationEnabled", true),
+            eveSpeed = p.getString("eveSpeed", "normal") ?: "normal"
         )
     }
 
@@ -59,6 +68,7 @@ object SettingsStore {
             .putBoolean("confirmMove", s.confirmMove)
             .putBoolean("showCoordinates", s.showCoordinates)
             .putBoolean("vibrationEnabled", s.vibrationEnabled)
+            .putString("eveSpeed", s.eveSpeed)
             .apply()
     }
 
