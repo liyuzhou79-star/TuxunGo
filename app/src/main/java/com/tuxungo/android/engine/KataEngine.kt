@@ -178,10 +178,19 @@ class KataEngine private constructor(
             check(binary.exists()) { "KataGo binary missing: ${binary.absolutePath}" }
             check(modelFile.exists()) { "KataGo model missing: ${modelFile.absolutePath}" }
             val configFile = File(workDir, "gtp.cfg")
+            // This key set is verified against KataGo v1.15.3 by running it
+            // locally: KataGo aborts at startup when logFile and logDir are
+            // both present, and when any of logAllGTPCommunication,
+            // logSearchInfo, koRule, scoringRule or multiStoneSuicideLegal
+            // is missing. Do not trim keys casually.
             configFile.writeText(
                 """
                 logFile = gtp.log
-                logDir = .
+                logAllGTPCommunication = false
+                logSearchInfo = false
+                koRule = POSITIONAL
+                scoringRule = AREA
+                multiStoneSuicideLegal = false
                 maxVisits = $maxVisits
                 numSearchThreads = 2
                 nnMaxBatchSize = 8

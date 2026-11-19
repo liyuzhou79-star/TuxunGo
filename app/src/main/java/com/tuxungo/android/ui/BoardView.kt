@@ -37,16 +37,19 @@ fun BoardView(
                     if (!enabled) return@detectTapGestures
                     val cellX = size.width / (w + 1f)
                     val cellY = size.height / (h + 1f)
-                    val gx = (offset.x / cellX - 1).roundToInt()
-                    val gy = (offset.y / cellY - 1).roundToInt()
-                    if (gx in 0 until w && gy in 0 until h) {
-                        val px = cellX * (gx + 1)
-                        val py = cellY * (gy + 1)
-                        val dx = offset.x - px
-                        val dy = offset.y - py
-                        if (dx * dx + dy * dy <= (cellX * 0.55f) * (cellX * 0.55f)) {
-                            onPointTap(gx, gy)
-                        }
+                    // Snap to the nearest intersection (clamped to the
+                    // board) instead of dropping taps that land in the
+                    // margin or slightly off a line; accept anything
+                    // within half a cell of that intersection.
+                    val gx = (offset.x / cellX - 1).roundToInt().coerceIn(0, w - 1)
+                    val gy = (offset.y / cellY - 1).roundToInt().coerceIn(0, h - 1)
+                    val px = cellX * (gx + 1)
+                    val py = cellY * (gy + 1)
+                    val dx = offset.x - px
+                    val dy = offset.y - py
+                    val radius = minOf(cellX, cellY) * 0.5f
+                    if (dx * dx + dy * dy <= radius * radius) {
+                        onPointTap(gx, gy)
                     }
                 }
             }

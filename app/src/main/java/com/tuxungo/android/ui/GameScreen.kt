@@ -48,6 +48,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     }
     var version by remember { mutableIntStateOf(0) }
     var showResignConfirm by remember { mutableStateOf(false) }
+    var showScoreConfirm by remember { mutableStateOf(false) }
     var resultDismissed by remember { mutableStateOf(false) }
 
     val isPve = config.mode == GameMode.PVE
@@ -93,15 +94,23 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                     }
                 }
             }.onFailure { e ->
+                // Engine died mid-game: fall back to manual play instead
+                // of leaving the human locked out on the AI's turn.
+                engineFailed = true
                 engineStatus = "引擎出错：${e.message ?: "未知错误"}"
             }
         }
     }
 
     fun startEngine(onReady: (Boolean) -> Unit) {
-        if (engine != null) {
+        val existing = engine
+        if (existing != null && existing.isAlive) {
             onReady(true)
             return
+        }
+        if (existing != null) {
+            // Dead engine: drop it so a fresh one can start.
+            engine = null
         }
         if (engineStarting) {
             onReady(false)
@@ -287,28 +296,32 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                 enabled = !finished && humanTurn && !aiThinking && !suggesting,
                 modifier = Modifier.weight(1f)
             ) { Text(if (suggesting) "AI 选点中…" else "AI 选点") }
-            if (suggestion != null || suggestionIsPass) {
-                Button(
-                    onClick = {
-                        val s = suggestion
-                        val applied = when {
-                            suggestionIsPass -> game.pass()
-                            s != null -> game.play(s.x, s.y)
-                            else -> false
-                        }
-                        if (applied) {
-                            version++
-                            resultDismissed = false
-                            clearSuggestion()
-                            if (isPve) syncAndGenmove()
-                        }
-                    },
-                    enabled = !finished && humanTurn && !aiThinking,
-                    modifier = Modifier.weight(1f)
-                ) { Text("就下这步") }
-            }
+            OutlinedButton(
+                onClick = { showScoreConfirm = true },
+                enabled = !finished && !aiThinking,
+                modifier = Modifier.weight(1f)
+            ) { Text("终局数目") }
         }
         if (suggestion != null || suggestionIsPass) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    val s = suggestion
+                    val applied = when {
+                        suggestionIsPass -> game.pass()
+                        s != null -> game.play(s.x, s.y)
+                        else -> false
+                    }
+                    if (applied) {
+                        version++
+                        resultDismissed = false
+                        clearSuggestion()
+                        if (isPve) syncAndGenmove()
+                    }
+                },
+                enabled = !finished && humanTurn && !aiThinking,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("就下这步") }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = if (suggestionIsPass) {
@@ -330,6 +343,26 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("导出 SGF 棋谱") }
+    }
+
+    if (showScoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showScoreConfirm = false },
+            title = { Text("终局数目？") },
+            text = { Text("按中国规则数目，盘上棋子都按活子计算。如有死子争议，请先协商一致再数目。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    game.finishScoring()
+                    showScoreConfirm = false
+                    version++
+                    resultDismissed = false
+                    clearSuggestion()
+                }) { Text("数目") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScoreConfirm = false }) { Text("继续下") }
+            }
+        )
     }
 
     if (showResignConfirm) {

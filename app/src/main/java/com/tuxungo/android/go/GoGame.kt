@@ -201,6 +201,12 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         finished = true
     }
 
+    /** Ends the game for scoring (both sides agree the game is over). */
+    fun finishScoring() {
+        if (finished) return
+        finished = true
+    }
+
     fun undo(): Boolean {
         if (undoStack.isEmpty()) return false
         val entry = undoStack.removeAt(undoStack.lastIndex)
