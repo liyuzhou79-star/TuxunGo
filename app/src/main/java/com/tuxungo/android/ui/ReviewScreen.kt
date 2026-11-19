@@ -118,7 +118,6 @@ fun ReviewScreen(
         runner.execute {
             var eng: AnalysisEngine? = null
             try {
-                EngineAssets.ensure(context)
                 val model = ModelStore.resolveActiveFile(context)
                 eng = AnalysisEngine.start(
                     context.applicationInfo.nativeLibraryDir,
