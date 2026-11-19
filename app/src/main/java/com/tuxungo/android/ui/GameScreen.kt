@@ -417,6 +417,29 @@ fun GameScreen(
         }
     }
 
+    // Per-turn win-rate stats recorded quietly while the game runs, so
+    // the post-game review opens (nearly) instantly instead of analyzing
+    // the whole game from scratch. Nothing in the UI reads this during
+    // play; it only rides along into the review / library record.
+    val liveStats = remember {
+        androidx.compose.runtime.mutableStateMapOf<Int, com.tuxungo.android.engine.TurnStat>()
+            .apply { putAll(initialStats) }
+    }
+
+    fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
+        val first = res.candidates.firstOrNull()
+        val stat = com.tuxungo.android.engine.TurnStat(
+            turn = moveCount,
+            winrateBlack = res.rootWinrateBlack,
+            scoreLeadBlack = res.rootScoreLeadBlack,
+            bestMove = first?.move,
+            bestIsPass = first != null && first.move == null
+        )
+        if (overwrite || !liveStats.containsKey(moveCount)) {
+            liveStats[moveCount] = stat
+        }
+    }
+
     fun runAnalysis(deep: Boolean, visitsOverride: Int? = null, onDone: (() -> Unit)? = null) {
         if (analyzing || aiThinking) {
             onDone?.invoke()
@@ -481,29 +504,6 @@ fun GameScreen(
     var autoResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var autoKey by remember { mutableIntStateOf(-1) }
     var autoBusy by remember { mutableStateOf(false) }
-
-    // Per-turn win-rate stats recorded quietly while the game runs, so
-    // the post-game review opens (nearly) instantly instead of analyzing
-    // the whole game from scratch. Nothing in the UI reads this during
-    // play; it only rides along into the review / library record.
-    val liveStats = remember {
-        androidx.compose.runtime.mutableStateMapOf<Int, com.tuxungo.android.engine.TurnStat>()
-            .apply { putAll(initialStats) }
-    }
-
-    fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
-        val first = res.candidates.firstOrNull()
-        val stat = com.tuxungo.android.engine.TurnStat(
-            turn = moveCount,
-            winrateBlack = res.rootWinrateBlack,
-            scoreLeadBlack = res.rootScoreLeadBlack,
-            bestMove = first?.move,
-            bestIsPass = first != null && first.move == null
-        )
-        if (overwrite || !liveStats.containsKey(moveCount)) {
-            liveStats[moveCount] = stat
-        }
-    }
 
     fun runAutoAnalysis() {
         if (autoBusy || analyzing || aiThinking || game.finished || scoringMode) return
@@ -691,26 +691,6 @@ fun GameScreen(
         GameStore.save(context, config, game.moves, game.finished, liveStats.toMap())
     }
 
-    // Auto-save a game into the library's auto folder the moment it
-    // finishes, so it is never lost just because nobody tapped collect.
-    // Only on the in-session transition: a game restored already
-    // finished was saved when it ended (or predates this feature).
-    val finishedAtStart = remember { game.finished }
-    var autoSaved by remember { mutableStateOf(false) }
-    LaunchedEffect(game.finished) {
-        if (game.finished && !finishedAtStart && !autoSaved) {
-            autoSaved = true
-            try {
-                val folder = com.tuxungo.android.LibraryStore.ensureFolder(context, "自动保存")
-                com.tuxungo.android.LibraryStore.saveGame(
-                    context,
-                    buildLibraryGame().copy(folderId = folder.id)
-                )
-            } catch (_: Exception) {
-            }
-        }
-    }
-
     DisposableEffect(Unit) {
         onDispose {
             val engB = engineBlack
@@ -772,6 +752,26 @@ fun GameScreen(
 
     // Read version so Compose recomposes after each move.
     @Suppress("UNUSED_EXPRESSION") version
+
+    // Auto-save a game into the library's auto folder the moment it
+    // finishes, so it is never lost just because nobody tapped collect.
+    // Only on the in-session transition: a game restored already
+    // finished was saved when it ended (or predates this feature).
+    val finishedAtStart = remember { game.finished }
+    var autoSaved by remember { mutableStateOf(false) }
+    LaunchedEffect(game.finished) {
+        if (game.finished && !finishedAtStart && !autoSaved) {
+            autoSaved = true
+            try {
+                val folder = com.tuxungo.android.LibraryStore.ensureFolder(context, "自动保存")
+                com.tuxungo.android.LibraryStore.saveGame(
+                    context,
+                    buildLibraryGame().copy(folderId = folder.id)
+                )
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     val finished = game.finished
     // If the engine failed to start, never soft-lock the game: the human
