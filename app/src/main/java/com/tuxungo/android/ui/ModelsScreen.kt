@@ -1,5 +1,6 @@
 package com.tuxungo.android.ui
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,17 +48,31 @@ fun ModelsScreen(onBack: () -> Unit) {
     var statusText by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<ModelInfo?>(null) }
     var deleteTarget by remember { mutableStateOf<ModelInfo?>(null) }
+    var pendingImport by remember { mutableStateOf<Uri?>(null) }
+    var importName by remember { mutableStateOf("") }
     val importExecutor = remember { Executors.newSingleThreadExecutor() }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "model"
+        val raw = uri.lastPathSegment?.substringAfterLast('/') ?: "model"
+        importName = raw.substringBeforeLast('.').ifBlank { raw }
+        pendingImport = uri
+    }
+
+    fun startImport(uri: Uri, chosenName: String) {
+        if (ModelStore.userCount(context) >= 99) {
+            statusText = "模型库已满（最多 99 个），请先删除不用的模型。"
+            return
+        }
+        val raw = uri.lastPathSegment?.substringAfterLast('/') ?: "model"
         importing = true
-        statusText = "正在校验并实测加载「$name」…"
+        statusText = "正在校验并实测加载…"
         importExecutor.execute {
-            val result = ModelStore.importModel(context, uri, name)
+            val result = ModelStore.importModel(
+                context, uri, raw, chosenName.ifBlank { null }
+            )
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 importing = false
                 when (result) {
@@ -86,7 +101,7 @@ fun ModelsScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "可上传 KataGo 官方模型文件（.txt.gz 或 .bin.gz）。上传后会先校验文件完整性、" +
-                "解析模型结构，再用引擎实测加载，能通过才加入模型库。",
+                "解析模型结构，再用引擎实测加载，能通过才加入模型库。最多可添加 99 个模型。",
             fontSize = 13.sp, color = Color.Gray
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -141,6 +156,39 @@ fun ModelsScreen(onBack: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
+
+    pendingImport?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("给模型起个名字") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = importName,
+                        onValueChange = { importName = it },
+                        singleLine = true,
+                        label = { Text("模型名称") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "这个名字会显示在模型库和对局的 AI 托管设置里。",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val chosen = importName.trim()
+                    pendingImport = null
+                    startImport(uri, chosen)
+                }) { Text("导入") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImport = null }) { Text("取消") }
+            }
+        )
     }
 
     renameTarget?.let { target ->

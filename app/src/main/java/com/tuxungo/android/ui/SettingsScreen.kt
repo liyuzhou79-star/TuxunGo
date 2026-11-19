@@ -56,9 +56,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         SettingsStore.save(context, next)
     }
 
-    fun previewPlace(id: String) {
-        val res = SettingsStore.placeSoundRes(id)
-        val sid = previewPool.load(context, res, 1)
+    fun previewFromList(resList: List<Int>) {
+        val sid = previewPool.load(context, resList.random(), 1)
         // SoundPool loads asynchronously; retry briefly until ready.
         Thread {
             var tries = 0
@@ -70,18 +69,9 @@ fun SettingsScreen(onBack: () -> Unit) {
         }.start()
     }
 
-    fun previewCapture(id: String) {
-        val res = SettingsStore.captureSoundRes(id)
-        val sid = previewPool.load(context, res, 1)
-        Thread {
-            var tries = 0
-            while (tries < 20) {
-                if (previewPool.play(sid, 0.9f, 0.9f, 1, 0, 1f) != 0) break
-                Thread.sleep(50)
-                tries++
-            }
-        }.start()
-    }
+    fun previewPlace(id: String) = previewFromList(SettingsStore.placeSoundResList(id))
+
+    fun previewCapture(id: String) = previewFromList(SettingsStore.captureSoundResList(id))
 
     Column(
         modifier = Modifier
@@ -231,6 +221,11 @@ fun SettingsScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "设置修改后，对正在进行的对局将在下一局生效。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "「真实录音」落子/提子音效来自开源围棋软件 Sabaki（MIT 授权），为真棋盘实录。",
             fontSize = 12.sp, color = Color.Gray
         )
     }

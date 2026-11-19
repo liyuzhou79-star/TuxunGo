@@ -3,6 +3,11 @@ package com.tuxungo.android.ui
 import android.media.AudioAttributes
 import android.media.SoundPool
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +29,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,7 +54,10 @@ import com.tuxungo.android.engine.AnalysisResult
 import com.tuxungo.android.engine.EngineAssets
 import com.tuxungo.android.engine.EngineRunner
 import com.tuxungo.android.engine.KataEngine
+import com.tuxungo.android.engine.ModelInfo
 import com.tuxungo.android.engine.ModelStore
+import com.tuxungo.android.engine.SideAiConfig
+import com.tuxungo.android.engine.SideAiStore
 import com.tuxungo.android.engine.TerritoryEstimate
 import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.GoGame
@@ -79,7 +88,8 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     var version by remember { mutableIntStateOf(0) }
     var showResignConfirm by remember { mutableStateOf(false) }
     var resultDismissed by remember { mutableStateOf(false) }
-    var showTakeoverDialog by remember { mutableStateOf(false) }
+    var showAiPanel by remember { mutableStateOf(false) }
+    var fullscreen by remember { mutableStateOf(false) }
 
     val isPve = config.mode == GameMode.PVE
     val isEve = config.mode == GameMode.EVE
@@ -97,14 +107,45 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         if (stone == Stone.BLACK) takeoverBlack else takeoverWhite
     val bothAi = takeoverBlack && takeoverWhite
 
-    // ---- GTP engine (plays moves) ----
+    // ---- GTP engines: one process per side, so Black and White can
+    // run different models at different strengths in the same game ----
     val runner = remember { EngineRunner() }
-    var engine by remember { mutableStateOf<KataEngine?>(null) }
+    var engineBlack by remember { mutableStateOf<KataEngine?>(null) }
+    var engineWhite by remember { mutableStateOf<KataEngine?>(null) }
+    var failedBlack by remember { mutableStateOf(false) }
+    var failedWhite by remember { mutableStateOf(false) }
+    var startingBlack by remember { mutableStateOf(false) }
+    var startingWhite by remember { mutableStateOf(false) }
+    // The config each running engine was started with: a model change
+    // forces a restart, a visits change applies live via setMaxVisits.
+    var startedCfgBlack by remember { mutableStateOf<SideAiConfig?>(null) }
+    var startedCfgWhite by remember { mutableStateOf<SideAiConfig?>(null) }
+    var sideBlack by remember {
+        mutableStateOf(
+            SideAiStore.load(
+                context, Stone.BLACK,
+                if (isPve && config.humanStone == Stone.WHITE) config.aiVisits else 200
+            )
+        )
+    }
+    var sideWhite by remember {
+        mutableStateOf(
+            SideAiStore.load(
+                context, Stone.WHITE,
+                if (isPve && config.humanStone == Stone.BLACK) config.aiVisits else 200
+            )
+        )
+    }
     var engineStatus by remember { mutableStateOf(if (isPve || isEve) "引擎启动中…" else "") }
     var aiThinking by remember { mutableStateOf(false) }
-    var engineFailed by remember { mutableStateOf(false) }
-    var engineStarting by remember { mutableStateOf(false) }
     var eveRunning by remember { mutableStateOf(isEve) }
+    fun sideCfg(stone: Stone): SideAiConfig =
+        if (stone == Stone.BLACK) sideBlack else sideWhite
+    fun engineFor(stone: Stone): KataEngine? =
+        if (stone == Stone.BLACK) engineBlack else engineWhite
+    fun failedFor(stone: Stone): Boolean =
+        if (stone == Stone.BLACK) failedBlack else failedWhite
+    val anyEngineFailed = (takeoverBlack && failedBlack) || (takeoverWhite && failedWhite)
     // Incremented to cancel an in-flight AI move (undo / pause / release):
     // the late engine reply is then discarded instead of applied.
     var aiToken by remember { mutableIntStateOf(0) }
@@ -145,14 +186,21 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             )
             .build()
     }
-    val placeSoundId = remember { soundPool.load(context, SettingsStore.placeSoundRes(settings.placeSound), 1) }
-    val captureSoundId = remember { soundPool.load(context, SettingsStore.captureSoundRes(settings.captureSound), 1) }
+    val placeSoundIds = remember {
+        SettingsStore.placeSoundResList(settings.placeSound).map { soundPool.load(context, it, 1) }
+    }
+    val captureSoundIds = remember {
+        SettingsStore.captureSoundResList(settings.captureSound).map { soundPool.load(context, it, 1) }
+    }
 
     fun playMoveSound(wasCapture: Boolean) {
         if (!settings.soundEnabled) return
-        // Tiny random pitch jitter: real stones never sound identical.
+        val ids = if (wasCapture) captureSoundIds else placeSoundIds
+        if (ids.isEmpty()) return
+        // The "real" set already varies by recording; synthesized
+        // sounds get a tiny pitch jitter so repeats differ slightly.
         val rate = 0.96f + kotlin.random.Random.nextFloat() * 0.08f
-        soundPool.play(if (wasCapture) captureSoundId else placeSoundId, 0.9f, 0.9f, 1, 0, rate)
+        soundPool.play(ids.random(), 0.9f, 0.9f, 1, 0, rate)
     }
 
     val vibrator = remember {
@@ -205,38 +253,92 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
     }
 
-    fun startEngine() {
-        val existing = engine
-        if (existing != null && existing.isAlive) return
-        if (existing != null) engine = null
-        if (engineStarting) return
-        engineStarting = true
-        engineFailed = false
+    /** Starts (or restarts) the GTP engine for [stone] per its side config. */
+    fun ensureEngine(stone: Stone) {
+        val cfg = sideCfg(stone)
+        val current = engineFor(stone)
+        val startedCfg = if (stone == Stone.BLACK) startedCfgBlack else startedCfgWhite
+        if (current != null && current.isAlive) {
+            when {
+                startedCfg?.modelId != cfg.modelId -> {
+                    // Model changed: retire this process, start fresh below.
+                    if (stone == Stone.BLACK) {
+                        engineBlack = null; startedCfgBlack = null
+                    } else {
+                        engineWhite = null; startedCfgWhite = null
+                    }
+                    runner.submit({ current.quit() }) { }
+                }
+                startedCfg?.visits != cfg.visits -> {
+                    if (stone == Stone.BLACK) startedCfgBlack = cfg else startedCfgWhite = cfg
+                    runner.submit({ current.setMaxVisits(cfg.visits) }) { }
+                    return
+                }
+                else -> return
+            }
+        }
+        val starting = if (stone == Stone.BLACK) startingBlack else startingWhite
+        if (starting) return
+        if (stone == Stone.BLACK) {
+            startingBlack = true; failedBlack = false
+        } else {
+            startingWhite = true; failedWhite = false
+        }
         engineStatus = "引擎启动中…"
         runner.submit({
-            val model = ModelStore.resolveActiveFile(context)
+            val model = ModelStore.resolveFile(context, cfg.modelId)
             KataEngine.start(
                 nativeLibDir = context.applicationInfo.nativeLibraryDir,
                 workDir = EngineAssets.engineWorkDir(context),
                 modelFile = model,
-                maxVisits = config.aiVisits
+                maxVisits = cfg.visits
             )
         }) { result ->
-            engineStarting = false
+            if (stone == Stone.BLACK) startingBlack = false else startingWhite = false
             result.onSuccess { started ->
-                engine = started
+                if (stone == Stone.BLACK) {
+                    engineBlack = started; startedCfgBlack = cfg
+                } else {
+                    engineWhite = started; startedCfgWhite = cfg
+                }
                 engineStatus = ""
             }.onFailure { e ->
-                engineFailed = true
+                if (stone == Stone.BLACK) failedBlack = true else failedWhite = true
                 eveRunning = false
                 engineStatus = "引擎启动失败：${e.message ?: "未知错误"}"
             }
         }
     }
 
+    /** (Re)starts the engines of every AI-controlled side. */
+    fun startEngine() {
+        if (takeoverBlack) ensureEngine(Stone.BLACK)
+        if (takeoverWhite) ensureEngine(Stone.WHITE)
+    }
+
+    /** Hands one side to the AI (or back to the human) from the AI panel. */
+    fun setTakeover(stone: Stone, on: Boolean) {
+        if (stone == Stone.BLACK) takeoverBlack = on else takeoverWhite = on
+        if (on) {
+            ensureEngine(stone)
+        } else {
+            cancelAi()
+            eveRunning = false
+        }
+        if (takeoverBlack && takeoverWhite) eveRunning = true
+    }
+
+    /** Applies and persists a side's model/strength choice. */
+    fun setSideCfg(stone: Stone, cfg: SideAiConfig) {
+        if (stone == Stone.BLACK) sideBlack = cfg else sideWhite = cfg
+        SideAiStore.save(context, stone, cfg)
+        if (aiControls(stone)) ensureEngine(stone)
+    }
+
     /** Syncs the position to the GTP engine and applies its move for the side to move. */
     fun aiMoveNow() {
-        val eng = engine ?: return
+        val moveStone = game.current
+        val eng = engineFor(moveStone) ?: return
         if (game.finished || aiThinking) return
         val myToken = aiToken
         aiThinking = true
@@ -280,7 +382,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             }.onFailure { e ->
                 // Engine died mid-game: fall back to manual play instead
                 // of leaving the human locked out on the AI's turn.
-                engineFailed = true
+                if (moveStone == Stone.BLACK) failedBlack = true else failedWhite = true
                 eveRunning = false
                 engineStatus = "引擎出错：${e.message ?: "未知错误"}"
             }
@@ -369,6 +471,55 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             }
             onDone?.invoke()
         }
+    }
+
+    // ---- Automatic light analysis: keeps the header score line live ----
+    var autoResult by remember { mutableStateOf<AnalysisResult?>(null) }
+    var autoKey by remember { mutableIntStateOf(-1) }
+    var autoBusy by remember { mutableStateOf(false) }
+
+    fun runAutoAnalysis() {
+        if (autoBusy || analyzing || aiThinking || game.finished || scoringMode) return
+        if (game.size.width !in 2..19 || game.size.height !in 2..19) return
+        autoBusy = true
+        val movesSnapshot = game.moves.toList()
+        val sideSnapshot = game.current
+        val moveCount = movesSnapshot.size
+        analysisRunner.submit({
+            var eng = analysisEngine
+            if (eng == null || !eng.isAlive) {
+                val model = ModelStore.resolveActiveFile(context)
+                eng = AnalysisEngine.start(
+                    nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                    workDir = EngineAssets.engineWorkDir(context),
+                    modelFile = model
+                )
+                analysisEngine = eng
+            }
+            eng.analyze(
+                size = game.size,
+                komi = game.komi,
+                initialStones = baseStones,
+                initialPlayer = basePlayer,
+                moves = movesSnapshot,
+                sideToMove = sideSnapshot,
+                maxVisits = 120
+            )
+        }) { result ->
+            autoBusy = false
+            result.onSuccess { res ->
+                if (game.moves.size == moveCount) {
+                    autoResult = res
+                    autoKey = moveCount
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(version) {
+        if (bothAi && eveRunning) return@LaunchedEffect
+        delay(900)
+        runAutoAnalysis()
     }
 
     fun runJudgment() {
@@ -479,9 +630,17 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     }
 
     // Drives AI turns for PVE, AI-vs-AI and mid-game takeovers alike.
-    LaunchedEffect(version, engine, eveRunning, takeoverBlack, takeoverWhite, engineFailed) {
-        if (engine == null || engineFailed || game.finished) return@LaunchedEffect
+    LaunchedEffect(
+        version, engineBlack, engineWhite, eveRunning,
+        takeoverBlack, takeoverWhite, failedBlack, failedWhite
+    ) {
+        if (game.finished) return@LaunchedEffect
         if (!aiControls(game.current) || aiThinking) return@LaunchedEffect
+        if (failedFor(game.current)) return@LaunchedEffect
+        if (engineFor(game.current) == null) {
+            ensureEngine(game.current)
+            return@LaunchedEffect
+        }
         if (bothAi && !eveRunning) return@LaunchedEffect
         delay(if (bothAi) 650 else 300)
         if (!game.finished && aiControls(game.current) && !aiThinking) aiMoveNow()
@@ -495,12 +654,14 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
 
     DisposableEffect(Unit) {
         onDispose {
-            val eng = engine
+            val engB = engineBlack
+            val engW = engineWhite
             val aEng = analysisEngine
             runner.shutdown()
             analysisRunner.shutdown()
             soundPool.release()
-            if (eng != null) Thread { eng.quit() }.start()
+            if (engB != null) Thread { engB.quit() }.start()
+            if (engW != null) Thread { engW.quit() }.start()
             if (aEng != null) Thread { aEng.quit() }.start()
         }
     }
@@ -516,7 +677,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     val finished = game.finished
     // If the engine failed to start, never soft-lock the game: the human
     // can keep playing both sides manually.
-    val humanTurn = !aiControls(game.current) || engineFailed
+    val humanTurn = !aiControls(game.current) || failedFor(game.current)
     val anyHumanSide = !takeoverBlack || !takeoverWhite
     val analysisAllowed = !analyzing && !aiThinking && !bothAi || (bothAi && !eveRunning && !analyzing && !aiThinking)
     val judgmentActive = judgment != null && judgmentKey == game.moves.size
@@ -559,6 +720,107 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         clearAnalysis()
     }
 
+    if (fullscreen) {
+        // Fullscreen spectating / playing: board as large as possible,
+        // no coordinates, only analysis + judgment + exit stay.
+        Column(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
+            }
+            val fsA = analysis
+            val fsSel = fsA?.candidates?.getOrNull(selectedCandidate)
+            val fsOwnership = when {
+                scoringMode -> null
+                judgmentActive -> judgment?.ownershipBlack
+                showTerritory -> fsA?.ownershipBlack
+                else -> null
+            }
+            BoardView(
+                game = game,
+                enabled = scoringMode || (!finished && humanTurn && !aiThinking),
+                skin = BoardSkin.fromId(settings.boardSkin),
+                showCoordinates = false,
+                territoryThreshold = 0.5,
+                candidates = if (!judgmentActive && !scoringMode) {
+                    fsA?.candidates?.mapNotNull { cand ->
+                        cand.move?.let { CandidateMark(it.x, it.y, fsA.candidates.indexOf(cand) + 1) }
+                    } ?: emptyList()
+                } else emptyList(),
+                ownership = fsOwnership,
+                pvGhost = if (!judgmentActive && !scoringMode) {
+                    fsSel?.pvMoves?.take(7) ?: emptyList()
+                } else emptyList(),
+                preview = if (scoringMode) null else pendingPoint,
+                markedDead = if (scoringMode) deadSet else emptySet()
+            ) { x, y ->
+                if (scoringMode) {
+                    val group = game.groupAt(x, y)
+                    if (group.isNotEmpty()) {
+                        deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
+                    }
+                } else if (!settings.confirmMove) {
+                    if (game.stoneAt(x, y) == null && game.isLegal(x, y)) applyHumanMove(x, y)
+                } else {
+                    val tapped = x to y
+                    when {
+                        pendingPoint == tapped -> applyHumanMove(x, y)
+                        game.stoneAt(x, y) == null && game.isLegal(x, y) -> pendingPoint = tapped
+                        else -> pendingPoint = null
+                    }
+                }
+            }
+            val fsRes = when {
+                analysis != null && analysisKey == game.moves.size -> analysis
+                judgmentActive -> judgment
+                autoKey == game.moves.size -> autoResult
+                else -> null
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
+                if (fsRes != null) {
+                    Text(
+                        text = "黑胜率 ${formatPercent(fsRes.rootWinrateBlack)} · " +
+                            "${if (fsRes.rootScoreLeadBlack >= 0) "黑" else "白"}领先约 " +
+                            "${formatNum(kotlin.math.abs(fsRes.rootScoreLeadBlack))} 目",
+                        fontSize = 13.sp, color = Color.Gray,
+                        modifier = Modifier.padding(top = 3.dp)
+                    )
+                } else if (engineStatus.isNotEmpty()) {
+                    Text(
+                        text = engineStatus, fontSize = 13.sp,
+                        color = Color(0xFF2F7CF6), modifier = Modifier.padding(top = 3.dp)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { runAnalysis(false) },
+                    enabled = analysisAllowed && !finished,
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (analyzing) "分析中…" else "AI 分析") }
+                Button(
+                    onClick = { runJudgment() },
+                    enabled = analysisAllowed && !finished,
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (judging) "判断中…" else "形式判断") }
+                OutlinedButton(
+                    onClick = { fullscreen = false },
+                    modifier = Modifier.weight(1f)
+                ) { Text("退出全屏") }
+            }
+            if (analyzing || judging) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { cancelAnalysis() }) { Text("取消分析") }
+                }
+            }
+        }
+    } else {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -567,7 +829,10 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = status, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = { exitGame() }) { Text("返回") }
+            Row {
+                TextButton(onClick = { fullscreen = true }) { Text("全屏") }
+                TextButton(onClick = { exitGame() }) { Text("返回") }
+            }
         }
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Box(
@@ -593,6 +858,37 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                 Text(text = " · 自定义布局", fontSize = 13.sp, color = Color.Gray)
             }
         }
+        // Live score line: territory (incl. dead stones) + alive stones
+        // + winrate, from the freshest analysis for this exact position
+        // (manual analysis, judgment, or the automatic light analysis).
+        val liveRes = when {
+            analysis != null && analysisKey == game.moves.size -> analysis
+            judgmentActive -> judgment
+            autoKey == game.moves.size -> autoResult
+            else -> null
+        }
+        if (liveRes != null) {
+            val stonesArr = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            val est = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr, 0.5)
+            var aliveB = 0
+            var aliveW = 0
+            for (i in stonesArr.indices) {
+                val s = stonesArr[i] ?: continue
+                val v = if (i < liveRes.ownershipBlack.size) liveRes.ownershipBlack[i] else 0.0
+                val dead = (s == Stone.BLACK && v < -0.5) || (s == Stone.WHITE && v > 0.5)
+                if (!dead) {
+                    if (s == Stone.BLACK) aliveB++ else aliveW++
+                }
+            }
+            val blackTotal = est.blackTerritory + aliveB
+            val whiteTotal = est.whiteTerritory + aliveW + game.komi
+            Text(
+                text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
         // Fixed-height status strip: the AI-thinking text and the
         // tap-to-confirm hint live here so the board never jumps up or
         // down when they appear and disappear.
@@ -610,7 +906,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                 )
             }
         }
-        if (engineFailed) {
+        if (anyEngineFailed) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { startEngine() }) { Text("重试引擎") }
                 Text(
@@ -635,7 +931,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             enabled = scoringMode || (!finished && humanTurn && !aiThinking),
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
-            territoryThreshold = if (judgmentActive) 0.5 else 0.65,
+            territoryThreshold = 0.5,
             candidates = if (!judgmentActive && !scoringMode) {
                 currentAnalysis?.candidates?.mapNotNull { cand ->
                     cand.move?.let { CandidateMark(it.x, it.y, currentAnalysis.candidates.indexOf(cand) + 1) }
@@ -701,8 +997,12 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
 
         // ---- Judgment panel ----
-        if (judgmentActive) {
-            val j = judgment!!
+        AnimatedVisibility(
+            visible = judgmentActive,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            val j = judgment ?: return@AnimatedVisibility
             val stones = Array(game.size.area) { i ->
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
@@ -735,7 +1035,11 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
 
         // ---- Analysis panel ----
-        if (!judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null)) {
+        AnimatedVisibility(
+            visible = !judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null),
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
             if (analyzing || (currentAnalysis == null && analysisStatus.isNotEmpty())) {
                 Text(text = analysisStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -766,9 +1070,9 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                 val stones = Array(game.size.area) { i ->
                     game.stoneAt(i % game.size.width, i / game.size.width)
                 }
-                val terr = TerritoryEstimate.estimate(currentAnalysis.ownershipBlack, stones, 0.65)
+                val terr = TerritoryEstimate.estimate(currentAnalysis.ownershipBlack, stones, 0.5)
                 Text(
-                    text = "地盘估算（较确定的空点）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
+                    text = "地盘估算（含死子）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
                     fontSize = 13.sp, color = Color.Gray
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -881,7 +1185,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         if ((takeoverBlack || takeoverWhite) && !isPve && !isEve) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "AI 接手中：${when { bothAi -> "双打"; takeoverBlack -> "执黑"; else -> "执白" }}（在「更多」里可交还）",
+                text = "AI 托管中：${when { bothAi -> "双打"; takeoverBlack -> "执黑"; else -> "执白" }}（点「AI 托管」可调模型与强度）",
                 fontSize = 13.sp, color = Color.Gray
             )
         }
@@ -897,10 +1201,15 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                             eveRunning = true
                         }
                     },
-                    enabled = !finished && engine != null,
+                    enabled = !finished && (engineBlack != null || engineWhite != null),
                     modifier = Modifier.weight(1f)
                 ) { Text(if (eveRunning) "暂停" else "继续") }
             }
+            OutlinedButton(
+                onClick = { showAiPanel = true },
+                enabled = !finished,
+                modifier = Modifier.weight(1f)
+            ) { Text("AI 托管") }
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
                 OutlinedButton(
                     onClick = { showMoreMenu = true },
@@ -925,61 +1234,42 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                             Toast.makeText(context, "棋谱已保存：${file.name}", Toast.LENGTH_LONG).show()
                         }
                     )
-                    if (!isPve && !isEve && !finished && !(takeoverBlack || takeoverWhite)) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("AI 接手") },
-                            onClick = {
-                                showMoreMenu = false
-                                showTakeoverDialog = true
-                            }
-                        )
-                    }
-                    if (!isPve && !isEve && (takeoverBlack || takeoverWhite)) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("交还双人") },
-                            onClick = {
-                                showMoreMenu = false
-                                cancelAi()
-                                takeoverBlack = false
-                                takeoverWhite = false
-                                eveRunning = false
-                            }
-                        )
-                    }
                 }
             }
         }
         }
     }
+    }
 
-    if (showTakeoverDialog) {
+    if (showAiPanel) {
+        val models = remember { ModelStore.list(context) }
         AlertDialog(
-            onDismissRequest = { showTakeoverDialog = false },
-            title = { Text("AI 接手") },
-            text = { Text("让 AI 继续这盘棋，选一边或两边都交给 AI：") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showTakeoverDialog = false
-                    takeoverBlack = true
-                    takeoverWhite = true
-                    eveRunning = true
-                    startEngine()
-                }) { Text("AI 双打") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showTakeoverDialog = false
-                        takeoverBlack = true
-                        startEngine()
-                    }) { Text("AI 执黑") }
-                    TextButton(onClick = {
-                        showTakeoverDialog = false
-                        takeoverWhite = true
-                        startEngine()
-                    }) { Text("AI 执白") }
-                    TextButton(onClick = { showTakeoverDialog = false }) { Text("取消") }
+            onDismissRequest = { showAiPanel = false },
+            title = { Text("AI 托管设置") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    AiSideSection(
+                        stone = Stone.BLACK, cfg = sideBlack, takenOver = takeoverBlack,
+                        models = models,
+                        onToggle = { setTakeover(Stone.BLACK, it) },
+                        onCfgChange = { setSideCfg(Stone.BLACK, it) }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AiSideSection(
+                        stone = Stone.WHITE, cfg = sideWhite, takenOver = takeoverWhite,
+                        models = models,
+                        onToggle = { setTakeover(Stone.WHITE, it) },
+                        onCfgChange = { setSideCfg(Stone.WHITE, it) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "黑白双方可以用不同模型对打。换模型会重启该方引擎（几秒），改强度立即生效。设置会自动保存。",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAiPanel = false }) { Text("关闭") }
             }
         )
     }
@@ -1040,3 +1330,68 @@ private fun formatPercent(v: Double): String = String.format("%.1f%%", v * 100)
 
 private fun formatNum(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.1f", v)
+
+/** One side's controls in the AI panel: takeover switch, model picker, strength chips. */
+@Composable
+private fun AiSideSection(
+    stone: Stone,
+    cfg: SideAiConfig,
+    takenOver: Boolean,
+    models: List<ModelInfo>,
+    onToggle: (Boolean) -> Unit,
+    onCfgChange: (SideAiConfig) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentName = models.firstOrNull { it.id == cfg.modelId }?.displayName ?: "内置默认模型"
+    androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    text = if (stone == Stone.BLACK) "黑方" else "白方",
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(text = "AI 托管", fontSize = 13.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.padding(start = 6.dp))
+                Switch(checked = takenOver, onCheckedChange = onToggle)
+            }
+            if (takenOver) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("模型：$currentName") }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        for (m in models) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(m.displayName) },
+                                onClick = {
+                                    onCfgChange(cfg.copy(modelId = m.id))
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for ((v, label) in listOf(50 to "简单", 200 to "中等", 800 to "困难", 2000 to "超强")) {
+                        FilterChip(
+                            selected = cfg.visits == v,
+                            onClick = { onCfgChange(cfg.copy(visits = v)) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Text(
+                    text = "思考量：${cfg.visits}（越大越强、越慢）",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+        }
+    }
+}

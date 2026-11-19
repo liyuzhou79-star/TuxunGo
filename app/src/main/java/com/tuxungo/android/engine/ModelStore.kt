@@ -103,9 +103,11 @@ object ModelStore {
             .edit().putString(KEY_ACTIVE, id).apply()
     }
 
-    /** The model file new games and analyses should use. */
-    fun resolveActiveFile(context: Context): File {
-        val id = activeId(context)
+    /** How many user-imported models are in the library. */
+    fun userCount(context: Context): Int = readIndex(context).length()
+
+    /** The model file for any library id (falls back to the bundled model). */
+    fun resolveFile(context: Context, id: String): File {
         if (id != BUNDLED_ID) {
             val index = readIndex(context)
             for (i in 0 until index.length()) {
@@ -118,6 +120,9 @@ object ModelStore {
         }
         return EngineAssets.ensureDefaultModel(context)
     }
+
+    /** The model file new games and analyses should use. */
+    fun resolveActiveFile(context: Context): File = resolveFile(context, activeId(context))
 
     fun rename(context: Context, id: String, newName: String) {
         val index = readIndex(context)
@@ -156,7 +161,12 @@ object ModelStore {
      * Validates and imports the model at [uri]. Blocking; call off the
      * main thread. Failure reasons are written for end users.
      */
-    fun importModel(context: Context, uri: Uri, sourceName: String): ImportResult {
+    fun importModel(
+        context: Context,
+        uri: Uri,
+        sourceName: String,
+        customName: String? = null
+    ): ImportResult {
         val tmp = File(context.cacheDir, "model-import.bin")
         tmp.delete()
         try {
@@ -254,7 +264,8 @@ object ModelStore {
             tmp.delete()
         }
         val id = "u${System.currentTimeMillis()}"
-        val displayName = header?.name
+        val displayName = customName?.trim()?.takeIf { it.isNotBlank() }
+            ?: header?.name
             ?: cleanName.substringBeforeLast('.').ifBlank { cleanName }
         val archText = header?.describe()
             ?: if (isText) "文本模型" else "二进制模型（引擎已验证可加载）"

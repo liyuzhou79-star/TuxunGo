@@ -73,7 +73,23 @@ fun TuxunGoApp() {
     var config by remember { mutableStateOf(restored?.config) }
     var restoreMoves by remember { mutableStateOf<List<Move>>(restored?.moves ?: emptyList()) }
     var editSize by remember { mutableStateOf(19 to 19) }
-    when (screen) {
+    androidx.compose.animation.AnimatedContent(
+        targetState = screen,
+        transitionSpec = {
+            (androidx.compose.animation.fadeIn(
+                animationSpec = androidx.compose.animation.core.tween(220)
+            ) + androidx.compose.animation.slideInHorizontally(
+                animationSpec = androidx.compose.animation.core.tween(220)
+            ) { it / 8 }) togetherWith
+                (androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(180)
+                ) + androidx.compose.animation.slideOutHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(180)
+                ) { -it / 8 })
+        },
+        label = "screen"
+    ) { targetScreen ->
+    when (targetScreen) {
         Screen.SETUP -> SetupScreen(
             onStart = {
                 config = it
@@ -113,6 +129,7 @@ fun TuxunGoApp() {
                 }
             }
         }
+    }
     }
 }
 
