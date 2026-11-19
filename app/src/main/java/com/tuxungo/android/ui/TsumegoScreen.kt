@@ -1,5 +1,6 @@
 package com.tuxungo.android.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -199,7 +200,7 @@ fun TsumegoScreen(onBack: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .androidx.compose.foundation.horizontalScroll(rememberScrollState()),
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
         ) {
             TSUMEGO_PROBLEMS.forEachIndexed { i, _ ->
