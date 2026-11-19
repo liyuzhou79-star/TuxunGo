@@ -12,8 +12,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import com.tuxungo.android.go.GoGame
+import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 import kotlin.math.roundToInt
+
+/** A numbered candidate-move marker (rank 1 is the AI's first choice). */
+data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
 private val BoardWood = Color(0xFFE8C07A)
 private val GridLine = Color(0xFF8A6D3B)
@@ -24,7 +28,9 @@ private val LastMoveRed = Color(0xFFD43D2A)
 fun BoardView(
     game: GoGame,
     enabled: Boolean,
-    suggestion: Pair<Int, Int>? = null,
+    candidates: List<CandidateMark> = emptyList(),
+    ownership: DoubleArray? = null,
+    pvGhost: List<Move> = emptyList(),
     onPointTap: (Int, Int) -> Unit
 ) {
     val w = game.size.width
@@ -75,6 +81,26 @@ fun BoardView(
                 center = Offset(cellX * (sx + 1), cellY * (sy + 1))
             )
         }
+        // Territory shading from analysis ownership (Black's perspective),
+        // drawn under the stones.
+        if (ownership != null) {
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    if (game.stoneAt(x, y) != null) continue
+                    val v = ownership.getOrNull(y * w + x) ?: continue
+                    if (kotlin.math.abs(v) <= 0.15) continue
+                    val alpha = (0.10f + 0.33f * minOf(1.0, kotlin.math.abs(v)).toFloat())
+                    val cx = cellX * (x + 1)
+                    val cy = cellY * (y + 1)
+                    val half = cellX * 0.33f
+                    drawRect(
+                        color = if (v > 0) Color.Black.copy(alpha = alpha) else Color.White.copy(alpha = alpha),
+                        topLeft = Offset(cx - half, cy - half),
+                        size = androidx.compose.ui.geometry.Size(half * 2, half * 2)
+                    )
+                }
+            }
+        }
         // Stones
         val last = game.lastMove()
         for (y in 0 until h) {
@@ -109,21 +135,46 @@ fun BoardView(
                 }
             }
         }
-        // AI first-choice suggestion: solid blue disc with a white "1".
-        if (suggestion != null) {
-            val (sx, sy) = suggestion
-            val center = Offset(cellX * (sx + 1), cellY * (sy + 1))
-            drawCircle(MarkerBlue, radius = cellX * 0.34f, center = center)
+        // Principal-variation ghost stones (semi-transparent, numbered).
+        pvGhost.forEachIndexed { i, mv ->
+            if (mv.isPass) return@forEachIndexed
+            val center = Offset(cellX * (mv.x + 1), cellY * (mv.y + 1))
+            drawCircle(
+                if (mv.stone == Stone.BLACK) Color.Black.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.55f),
+                radius = cellX * 0.40f,
+                center = center
+            )
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = cellX * 0.42f
+                color = if (mv.stone == Stone.BLACK) android.graphics.Color.WHITE else android.graphics.Color.BLACK
+                textSize = cellX * 0.34f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true
             }
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
-            drawContext.canvas.nativeCanvas.drawText("1", center.x, baseline, paint)
+            drawContext.canvas.nativeCanvas.drawText("${i + 1}", center.x, baseline, paint)
+        }
+        // Candidate markers: rank 1 is a solid blue disc with a white
+        // number; other ranks are pale discs with a blue ring and number.
+        for (mark in candidates) {
+            val center = Offset(cellX * (mark.x + 1), cellY * (mark.y + 1))
+            if (mark.rank == 1) {
+                drawCircle(MarkerBlue, radius = cellX * 0.34f, center = center)
+            } else {
+                drawCircle(Color.White.copy(alpha = 0.88f), radius = cellX * 0.30f, center = center)
+                drawCircle(MarkerBlue, radius = cellX * 0.30f, center = center, style = Stroke(width = 2.5f))
+            }
+            val paint = android.graphics.Paint().apply {
+                color = if (mark.rank == 1) android.graphics.Color.WHITE else android.graphics.Color.rgb(47, 124, 246)
+                textSize = cellX * 0.40f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isFakeBoldText = true
+                isAntiAlias = true
+            }
+            val metrics = paint.fontMetrics
+            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
         }
     }
 }

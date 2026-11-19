@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.tuxungo.android.ui.GameConfig
 import com.tuxungo.android.ui.GameScreen
+import com.tuxungo.android.ui.ModelsScreen
 import com.tuxungo.android.ui.SetupScreen
 
 class MainActivity : ComponentActivity() {
@@ -31,15 +32,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class Screen { SETUP, MODELS, GAME }
+
 @Composable
 fun TuxunGoApp() {
+    var screen by remember { mutableStateOf(Screen.SETUP) }
     var config by remember { mutableStateOf<GameConfig?>(null) }
-    val current = config
-    if (current == null) {
-        SetupScreen(onStart = { config = it })
-    } else {
-        key(current) {
-            GameScreen(config = current, onExit = { config = null })
+    when (screen) {
+        Screen.SETUP -> SetupScreen(
+            onStart = {
+                config = it
+                screen = Screen.GAME
+            },
+            onOpenModels = { screen = Screen.MODELS }
+        )
+        Screen.MODELS -> ModelsScreen(onBack = { screen = Screen.SETUP })
+        Screen.GAME -> {
+            val current = config
+            if (current == null) {
+                screen = Screen.SETUP
+            } else {
+                key(current) {
+                    GameScreen(config = current, onExit = { screen = Screen.SETUP })
+                }
+            }
         }
     }
 }

@@ -27,7 +27,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SetupScreen(onStart: (GameConfig) -> Unit) {
+fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activeModelName = remember {
+        val models = com.tuxungo.android.engine.ModelStore.list(context)
+        val activeId = com.tuxungo.android.engine.ModelStore.activeId(context)
+        models.firstOrNull { it.id == activeId }?.displayName ?: "内置默认模型"
+    }
     var mode by remember { mutableStateOf(GameMode.PVP) }
     var width by remember { mutableIntStateOf(19) }
     var height by remember { mutableIntStateOf(19) }
@@ -59,7 +65,7 @@ fun SetupScreen(onStart: (GameConfig) -> Unit) {
         if (mode == GameMode.EVE) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "AI 对 AI 将在分析功能阶段开放。",
+                text = "两个 AI 使用当前模型轮流落子，可随时暂停，暂停时可分析局面。",
                 fontSize = 13.sp, color = Color.Gray
             )
         }
@@ -139,11 +145,19 @@ fun SetupScreen(onStart: (GameConfig) -> Unit) {
                     )
                 )
             },
-            enabled = mode != GameMode.EVE,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "开始对局", fontSize = 16.sp)
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "AI 模型", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "当前模型：$activeModelName", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenModels,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
         Spacer(modifier = Modifier.height(12.dp))
         Text(text = "版本 0.1.0（开发中）", fontSize = 12.sp, color = Color.Gray)
     }
