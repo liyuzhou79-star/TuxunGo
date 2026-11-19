@@ -78,7 +78,6 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     }
     var version by remember { mutableIntStateOf(0) }
     var showResignConfirm by remember { mutableStateOf(false) }
-    var showScoreConfirm by remember { mutableStateOf(false) }
     var resultDismissed by remember { mutableStateOf(false) }
     var showTakeoverDialog by remember { mutableStateOf(false) }
 
@@ -122,6 +121,15 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     var judgment by remember { mutableStateOf<AnalysisResult?>(null) }
     var judgmentKey by remember { mutableIntStateOf(-1) }
     var judging by remember { mutableStateOf(false) }
+    // Incremented to cancel an in-flight analysis: its late result is
+    // discarded and the UI is freed immediately.
+    var analysisToken by remember { mutableIntStateOf(0) }
+    // ---- Final scoring with engine-suggested dead stones ----
+    var scoringMode by remember { mutableStateOf(false) }
+    var deadSet by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var scoringBusy by remember { mutableStateOf(false) }
+    var scoringNote by remember { mutableStateOf("") }
+    var showMoreMenu by remember { mutableStateOf(false) }
     // Tap-to-confirm preview point.
     var pendingPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
@@ -291,11 +299,27 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         else -> Stone.BLACK
     }
 
+    fun cancelAnalysis() {
+        analysisToken++
+        analyzing = false
+        judging = false
+        scoringBusy = false
+        analysisStatus = "已取消分析"
+        // Retire the engine so a stuck query cannot block the next one;
+        // the quit runs after the in-flight task on the same runner.
+        val eng = analysisEngine
+        analysisEngine = null
+        if (eng != null) {
+            analysisRunner.submit({ eng.quit() }) { }
+        }
+    }
+
     fun runAnalysis(deep: Boolean, visitsOverride: Int? = null, onDone: (() -> Unit)? = null) {
         if (analyzing || aiThinking) {
             onDone?.invoke()
             return
         }
+        val token = ++analysisToken
         // Fresh result for this exact position: reuse instantly.
         if (!deep && visitsOverride == null && analysis != null && analysisKey == game.moves.size) {
             onDone?.invoke()
@@ -327,6 +351,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                 maxVisits = visitsOverride ?: if (deep) 1200 else 300
             )
         }) { result ->
+            if (token != analysisToken) return@submit // cancelled meanwhile
             analyzing = false
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
@@ -364,6 +389,68 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
     }
 
+    /**
+     * Enters final-scoring mode: the analysis engine judges dead stones
+     * (600 visits), the user can tap whole groups to flip dead/alive,
+     * then confirms the score. Falls back to manual marking when the
+     * engine cannot judge this board.
+     */
+    fun enterScoring() {
+        if (scoringBusy || finished) return
+        cancelAi()
+        scoringBusy = true
+        scoringNote = "引擎判定死子中…"
+        val token = ++analysisToken
+        val movesSnapshot = game.moves.toList()
+        val sideSnapshot = game.current
+        val moveCount = movesSnapshot.size
+        analysisRunner.submit({
+            var eng = analysisEngine
+            if (eng == null || !eng.isAlive) {
+                val model = ModelStore.resolveActiveFile(context)
+                eng = AnalysisEngine.start(
+                    nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                    workDir = EngineAssets.engineWorkDir(context),
+                    modelFile = model
+                )
+                analysisEngine = eng
+            }
+            eng.analyze(
+                size = game.size,
+                komi = game.komi,
+                initialStones = baseStones,
+                initialPlayer = basePlayer,
+                moves = movesSnapshot,
+                sideToMove = sideSnapshot,
+                maxVisits = 600
+            )
+        }) { result ->
+            if (token != analysisToken) return@submit
+            scoringBusy = false
+            val suggested = mutableSetOf<Int>()
+            result.onSuccess { res ->
+                if (game.moves.size == moveCount) {
+                    for (y in 0 until game.size.height) {
+                        for (x in 0 until game.size.width) {
+                            val st = game.stoneAt(x, y) ?: continue
+                            val v = res.ownershipBlack.getOrNull(game.index(x, y)) ?: continue
+                            if ((st == Stone.BLACK && v < -0.5) || (st == Stone.WHITE && v > 0.5)) {
+                                suggested.add(game.index(x, y))
+                            }
+                        }
+                    }
+                }
+            }
+            deadSet = suggested
+            scoringMode = true
+            scoringNote = if (result.isSuccess) {
+                "引擎已标出死子（红叉）。点某个棋块可以整块改判，确认无误后点「确认数目」。"
+            } else {
+                "引擎判定不可用：请自己点棋块标记死子，再确认数目。"
+            }
+        }
+    }
+
     LaunchedEffect(config) {
         if (isPve || isEve) startEngine()
         // Pre-warm the analysis engine in AI modes so the first
@@ -379,6 +466,15 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                     )
                 }
             }) { }
+        }
+    }
+
+    // AI-vs-AI safety cap: auto-finish after 600 plies so a game
+    // cannot run forever.
+    LaunchedEffect(version) {
+        if (bothAi && !game.finished && game.moves.size >= 600) {
+            game.finishScoring()
+            eveRunning = false
         }
     }
 
@@ -529,26 +625,33 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         val currentAnalysis = analysis
         val selected = currentAnalysis?.candidates?.getOrNull(selectedCandidate)
         val displayOwnership = when {
+            scoringMode -> null
             judgmentActive -> judgment?.ownershipBlack
             showTerritory -> currentAnalysis?.ownershipBlack
             else -> null
         }
         BoardView(
             game = game,
-            enabled = !finished && humanTurn && !aiThinking,
+            enabled = scoringMode || (!finished && humanTurn && !aiThinking),
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
             territoryThreshold = if (judgmentActive) 0.5 else 0.65,
-            candidates = if (!judgmentActive) {
+            candidates = if (!judgmentActive && !scoringMode) {
                 currentAnalysis?.candidates?.mapNotNull { cand ->
                     cand.move?.let { CandidateMark(it.x, it.y, currentAnalysis.candidates.indexOf(cand) + 1) }
                 } ?: emptyList()
             } else emptyList(),
             ownership = displayOwnership,
-            pvGhost = if (!judgmentActive) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
-            preview = pendingPoint
+            pvGhost = if (!judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
+            preview = if (scoringMode) null else pendingPoint,
+            markedDead = if (scoringMode) deadSet else emptySet()
         ) { x, y ->
-            if (!settings.confirmMove) {
+            if (scoringMode) {
+                val group = game.groupAt(x, y)
+                if (group.isNotEmpty()) {
+                    deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
+                }
+            } else if (!settings.confirmMove) {
                 if (game.stoneAt(x, y) == null && game.isLegal(x, y)) applyHumanMove(x, y)
             } else {
                 val tapped = x to y
@@ -560,6 +663,42 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
+
+        // ---- Scoring panel (dead-stone marking) ----
+        if (scoringMode) {
+            val s = game.scoreWithDead(deadSet)
+            Text(text = "终局数目", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Rose)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = scoringNote, fontSize = 13.sp, color = Color.Gray)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "黑：棋子 ${s.blackStones} + 空 ${s.blackTerritory} = ${formatNum(s.blackTotal)} · " +
+                    "白：棋子 ${s.whiteStones} + 空 ${s.whiteTerritory} + 贴目 ${formatNum(s.komi)} = ${formatNum(s.whiteTotal)}",
+                fontSize = 13.sp
+            )
+            Text(
+                text = if (s.lead > 0) "黑胜 ${formatNum(s.lead)} 目" else "白胜 ${formatNum(-s.lead)} 目",
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        game.finishScoringWith(deadSet)
+                        scoringMode = false
+                        version++
+                        resultDismissed = false
+                        clearAnalysis()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("确认数目") }
+                OutlinedButton(
+                    onClick = { scoringMode = false; scoringNote = "" },
+                    modifier = Modifier.weight(1f)
+                ) { Text("取消，继续下") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // ---- Judgment panel ----
         if (judgmentActive) {
@@ -691,6 +830,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             }
         }
 
+        if (!scoringMode) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = {
@@ -728,63 +868,88 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                 modifier = Modifier.weight(1f)
             ) { Text(if (judging) "判断中…" else "形式判断") }
             OutlinedButton(
-                onClick = { showScoreConfirm = true },
-                enabled = !finished && !aiThinking && (!bothAi || !eveRunning),
+                onClick = { enterScoring() },
+                enabled = !finished && !scoringBusy && !aiThinking && (!bothAi || !eveRunning),
                 modifier = Modifier.weight(1f)
-            ) { Text("终局数目") }
+            ) { Text(if (scoringBusy) "判定中…" else "终局数目") }
         }
-        if (bothAi) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    if (eveRunning) {
-                        cancelAi()
-                        eveRunning = false
-                    } else {
-                        eveRunning = true
-                    }
-                },
-                enabled = !finished && engine != null,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (eveRunning) "暂停" else "继续") }
-        }
-        if (!isPve && !isEve) {
-            Spacer(modifier = Modifier.height(8.dp))
-            if (takeoverBlack || takeoverWhite) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "AI 接手中：${when { bothAi -> "双打"; takeoverBlack -> "执黑"; else -> "执白" }}",
-                        fontSize = 13.sp, color = Color.Gray
-                    )
-                    TextButton(onClick = {
-                        cancelAi()
-                        takeoverBlack = false
-                        takeoverWhite = false
-                        eveRunning = false
-                    }) { Text("交还双人") }
-                }
-            } else if (!finished) {
-                OutlinedButton(
-                    onClick = { showTakeoverDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("AI 接手") }
+        if (analyzing || judging) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { cancelAnalysis() }) { Text("取消分析") }
             }
         }
+        if ((takeoverBlack || takeoverWhite) && !isPve && !isEve) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "AI 接手中：${when { bothAi -> "双打"; takeoverBlack -> "执黑"; else -> "执白" }}（在「更多」里可交还）",
+                fontSize = 13.sp, color = Color.Gray
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
-        Button(
-            onClick = {
-                val sgf = Sgf.export(game)
-                val dir = File(context.filesDir, "sgf").apply { mkdirs() }
-                val file = File(dir, "tuxungo-${System.currentTimeMillis()}.sgf")
-                file.writeText(sgf)
-                Toast.makeText(context, "棋谱已保存：${file.name}", Toast.LENGTH_LONG).show()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("导出 SGF 棋谱") }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (bothAi) {
+                Button(
+                    onClick = {
+                        if (eveRunning) {
+                            cancelAi()
+                            eveRunning = false
+                        } else {
+                            eveRunning = true
+                        }
+                    },
+                    enabled = !finished && engine != null,
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (eveRunning) "暂停" else "继续") }
+            }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { showMoreMenu = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("更多") }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = showMoreMenu,
+                    onDismissRequest = { showMoreMenu = false }
+                ) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("导出 SGF 棋谱") },
+                        onClick = {
+                            showMoreMenu = false
+                            val sgf = Sgf.export(
+                                game,
+                                setupStones = config.customStones,
+                                startPlayer = config.startPlayer
+                            )
+                            val dir = File(context.filesDir, "sgf").apply { mkdirs() }
+                            val file = File(dir, "tuxungo-${System.currentTimeMillis()}.sgf")
+                            file.writeText(sgf)
+                            Toast.makeText(context, "棋谱已保存：${file.name}", Toast.LENGTH_LONG).show()
+                        }
+                    )
+                    if (!isPve && !isEve && !finished && !(takeoverBlack || takeoverWhite)) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("AI 接手") },
+                            onClick = {
+                                showMoreMenu = false
+                                showTakeoverDialog = true
+                            }
+                        )
+                    }
+                    if (!isPve && !isEve && (takeoverBlack || takeoverWhite)) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("交还双人") },
+                            onClick = {
+                                showMoreMenu = false
+                                cancelAi()
+                                takeoverBlack = false
+                                takeoverWhite = false
+                                eveRunning = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        }
     }
 
     if (showTakeoverDialog) {
@@ -819,25 +984,6 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         )
     }
 
-    if (showScoreConfirm) {
-        AlertDialog(
-            onDismissRequest = { showScoreConfirm = false },
-            title = { Text("终局数目？") },
-            text = { Text("按中国规则数目，盘上棋子都按活子计算。如有死子争议，请先协商一致再数目。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    game.finishScoring()
-                    showScoreConfirm = false
-                    version++
-                    resultDismissed = false
-                    clearAnalysis()
-                }) { Text("数目") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScoreConfirm = false }) { Text("继续下") }
-            }
-        )
-    }
 
     if (showResignConfirm) {
         val resignStone = when {
@@ -869,7 +1015,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         val resultText = if (game.resignedBy != null) {
             "${if (game.resignedBy == Stone.BLACK) "白" else "黑"}方胜（对方认输）"
         } else {
-            val s = game.score()
+            val s = game.scoringDead?.let { game.scoreWithDead(it) } ?: game.score()
             val winner = if (s.lead > 0) "黑" else "白"
             val diff = kotlin.math.abs(s.lead)
             "${winner}方胜 ${formatNum(diff)} 目\n" +

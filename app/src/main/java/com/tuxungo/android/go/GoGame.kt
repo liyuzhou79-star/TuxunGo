@@ -237,6 +237,67 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         finished = true
     }
 
+    /** Dead stones agreed for the final score (see [finishScoringWith]). */
+    var scoringDead: Set<Int>? = null
+        private set
+
+    /** Finish the game, scoring with [dead] stones removed as captured. */
+    fun finishScoringWith(dead: Set<Int>) {
+        if (finished) return
+        scoringDead = dead
+        finished = true
+    }
+
+    /** Indices of the connected same-color group containing (x, y). */
+    fun groupAt(x: Int, y: Int): Set<Int> {
+        if (!inBounds(x, y)) return emptySet()
+        val start = index(x, y)
+        if (board[start] == null) return emptySet()
+        return groupAndLiberties(board, start).first
+    }
+
+    /**
+     * Chinese scoring with the [dead] stones treated as removed: their
+     * points become empty and join the surrounding territory regions.
+     */
+    fun scoreWithDead(dead: Set<Int>): ScoreResult {
+        if (dead.isEmpty()) return score()
+        val eff = Array(size.area) { i -> if (i in dead) null else board[i] }
+        var blackStones = 0
+        var whiteStones = 0
+        var blackTerritory = 0
+        var whiteTerritory = 0
+        val visited = BooleanArray(size.area)
+        for (i in eff.indices) {
+            val s = eff[i]
+            if (s == Stone.BLACK) blackStones++
+            else if (s == Stone.WHITE) whiteStones++
+            else if (!visited[i]) {
+                val region = mutableListOf<Int>()
+                val borders = mutableSetOf<Stone>()
+                val stack = ArrayDeque<Int>()
+                stack.add(i)
+                visited[i] = true
+                while (stack.isNotEmpty()) {
+                    val cur = stack.removeLast()
+                    region.add(cur)
+                    for (n in neighbors(cur)) {
+                        val ns = eff[n]
+                        if (ns == null && !visited[n]) {
+                            visited[n] = true
+                            stack.add(n)
+                        } else if (ns != null) borders.add(ns)
+                    }
+                }
+                if (borders.size == 1) {
+                    if (borders.first() == Stone.BLACK) blackTerritory += region.size
+                    else whiteTerritory += region.size
+                }
+            }
+        }
+        return ScoreResult(blackStones, blackTerritory, whiteStones, whiteTerritory, komi)
+    }
+
     fun undo(): Boolean {
         if (undoStack.isEmpty()) return false
         val entry = undoStack.removeAt(undoStack.lastIndex)

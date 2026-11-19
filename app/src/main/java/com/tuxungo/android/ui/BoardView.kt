@@ -72,6 +72,8 @@ fun BoardView(
     ownership: DoubleArray? = null,
     pvGhost: List<Move> = emptyList(),
     preview: Pair<Int, Int>? = null,
+    /** Stones marked dead in scoring mode: drawn faded with a cross. */
+    markedDead: Set<Int> = emptySet(),
     onPointTap: (Int, Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -322,7 +324,16 @@ fun BoardView(
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val stone = game.stoneAt(x, y) ?: continue
-                drawStone(px(x), py(y), stone, 1f)
+                val dead = game.index(x, y) in markedDead
+                drawStone(px(x), py(y), stone, if (dead) 0.45f else 1f)
+                if (dead) {
+                    // Red cross over scoring-mode dead stones.
+                    val cx = px(x)
+                    val cy = py(y)
+                    val d = r * 0.52f
+                    drawLine(Color(0xFFC62828), Offset(cx - d, cy - d), Offset(cx + d, cy + d), strokeWidth = maxOf(2f, r * 0.10f))
+                    drawLine(Color(0xFFC62828), Offset(cx - d, cy + d), Offset(cx + d, cy - d), strokeWidth = maxOf(2f, r * 0.10f))
+                }
             }
         }
 

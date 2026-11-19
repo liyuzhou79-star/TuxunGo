@@ -59,6 +59,11 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
         g.loadPosition(list, startPlayer)
         g
     }
+    // Live validity: any group without liberties cannot start a game.
+    val positionValid = remember(stones, width, height) {
+        val probe = GoGame(BoardSize(width, height), 7.5)
+        probe.loadPosition(stones.map { (p, s) -> Move(s, p.first, p.second) }, startPlayer)
+    }
     @Suppress("UNUSED_EXPRESSION") version
 
     Column(
@@ -92,6 +97,13 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
                     if (existing == Stone.WHITE) stones - key else stones + (key to Stone.WHITE)
             }
             version++
+        }
+        if (stones.isNotEmpty() && !positionValid) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "有棋块没有气（活不了），这样摆开不了局，请先调整。",
+                fontSize = 13.sp, color = Color(0xFFC62828)
+            )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

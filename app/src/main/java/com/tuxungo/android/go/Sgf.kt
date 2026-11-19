@@ -9,7 +9,13 @@ object Sgf {
 
     private fun coord(x: Int): Char = 'a' + x
 
-    fun export(game: GoGame, blackName: String = "", whiteName: String = ""): String {
+    fun export(
+        game: GoGame,
+        blackName: String = "",
+        whiteName: String = "",
+        setupStones: List<Move> = emptyList(),
+        startPlayer: Stone = Stone.BLACK
+    ): String {
         val sb = StringBuilder()
         sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:0.1.0]")
         if (game.size.isSquare) sb.append("SZ[").append(game.size.width).append("]")
@@ -25,6 +31,20 @@ object Sgf {
                 sb.append('[').append(coord(x)).append(coord(y)).append(']')
             }
         }
+        if (setupStones.isNotEmpty()) {
+            // Custom position （摆棋）: AB/AW setup plus who moves first.
+            val blacks = setupStones.filter { it.stone == Stone.BLACK }
+            val whites = setupStones.filter { it.stone == Stone.WHITE }
+            if (blacks.isNotEmpty()) {
+                sb.append("AB")
+                for (m in blacks) sb.append('[').append(coord(m.x)).append(coord(m.y)).append(']')
+            }
+            if (whites.isNotEmpty()) {
+                sb.append("AW")
+                for (m in whites) sb.append('[').append(coord(m.x)).append(coord(m.y)).append(']')
+            }
+            sb.append("PL[").append(if (startPlayer == Stone.BLACK) "B" else "W").append("]")
+        }
         for (move in game.moves) {
             sb.append(if (move.stone == Stone.BLACK) ";B[" else ";W[")
             if (move.isPass) sb.append("tt")
@@ -36,7 +56,7 @@ object Sgf {
                 game.resignedBy != null ->
                     if (game.resignedBy == Stone.BLACK) "W+R" else "B+R"
                 else -> {
-                    val s = game.score()
+                    val s = game.scoringDead?.let { game.scoreWithDead(it) } ?: game.score()
                     val diff = kotlin.math.abs(s.lead)
                     val text = if (diff % 1.0 == 0.0) diff.toInt().toString() else diff.toString()
                     if (s.lead > 0) "B+$text" else "W+$text"
