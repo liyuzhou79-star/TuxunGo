@@ -6,8 +6,12 @@ import java.io.File
 /** Copies the bundled default model out of assets into writable storage once. */
 object EngineAssets {
 
-    private const val ASSET_MODEL = "models/default.txt.gz"
-    private const val MODEL_NAME = "default.txt.gz"
+    // The asset uses a neutral ".model" name on purpose: the APK packager
+    // decompresses ".gz" assets and renames them, which breaks both the
+    // lookup and the gzip format KataGo expects. On disk the copy keeps
+    // the real ".txt.gz" name so KataGo gunzips it when loading.
+    private const val ASSET_MODEL = "models/default.model"
+    private const val MODEL_NAME = "default-v1.txt.gz"
 
     fun ensureDefaultModel(context: Context): File {
         val dir = File(context.filesDir, "models").apply { mkdirs() }

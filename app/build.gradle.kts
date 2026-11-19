@@ -21,6 +21,11 @@ android {
             isMinifyEnabled = false
         }
     }
+    androidResources {
+        // Keep the bundled model stored raw in the APK so openFd works and
+        // the app copies the exact gzip bytes KataGo expects.
+        noCompress += "model"
+    }
     packaging {
         jniLibs {
             // The KataGo executable ships as libkatago.so and must be
