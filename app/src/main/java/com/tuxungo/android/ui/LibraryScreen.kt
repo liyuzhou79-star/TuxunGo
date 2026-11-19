@@ -105,6 +105,8 @@ fun LibraryScreen(
     var newFolderName by remember { mutableStateOf("") }
     var moveTarget by remember { mutableStateOf<LibraryGame?>(null) }
     var deleteTarget by remember { mutableStateOf<LibraryGame?>(null) }
+    var renameTarget by remember { mutableStateOf<LibraryGame?>(null) }
+    var renameText by remember { mutableStateOf("") }
     var deleteFolderTarget by remember { mutableStateOf<String?>(null) }
 
     fun refresh() {
@@ -183,6 +185,12 @@ fun LibraryScreen(
                     )
                     Row {
                         TextButton(onClick = { onOpenGame(g) }) { Text("打开复盘") }
+                        TextButton(
+                            onClick = {
+                                renameTarget = g
+                                renameText = g.title
+                            }
+                        ) { Text("改名") }
                         TextButton(onClick = { moveTarget = g }) { Text("移动") }
                         TextButton(onClick = { deleteTarget = g }) { Text("删除") }
                     }
@@ -218,6 +226,36 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolder = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (renameTarget != null) {
+        val target = renameTarget!!
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("给棋谱改名") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("名称") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (renameText.isNotBlank()) {
+                            LibraryStore.renameGame(context, target.id, renameText.trim())
+                            refresh()
+                        }
+                        renameTarget = null
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("取消") }
             }
         )
     }

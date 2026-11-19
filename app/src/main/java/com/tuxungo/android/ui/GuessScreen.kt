@@ -128,6 +128,17 @@ fun GuessScreen(onBack: () -> Unit) {
                     else -> top.vertex
                 }
                 val wrText = "黑胜率 " + String.format("%.1f%%", res.rootWinrateBlack * 100)
+                val guessCand = res.candidates.firstOrNull { c ->
+                    if (isPass) {
+                        c.move == null
+                    } else {
+                        c.move != null && guess != null &&
+                            c.move.x == guess.first && c.move.y == guess.second
+                    }
+                }
+                val guessWrText = guessCand?.let {
+                    " · 你这步黑胜率 " + String.format("%.1f%%", it.winrateBlack * 100)
+                } ?: ""
                 if (skipped) {
                     streak = 0
                     answered++
@@ -153,11 +164,11 @@ fun GuessScreen(onBack: () -> Unit) {
                         rank in 2..3 -> {
                             score += 1
                             streak = 0
-                            "你猜的是第 $rank 选，+1 分。AI 一选：$topText · $wrText"
+                            "你猜的是第 $rank 选，+1 分。AI 一选：$topText · $wrText$guessWrText"
                         }
                         rank in 4..5 -> {
                             streak = 0
-                            "你猜的是第 $rank 选，差一点。AI 一选：$topText · $wrText"
+                            "你猜的是第 $rank 选，差一点。AI 一选：$topText · $wrText$guessWrText"
                         }
                         else -> {
                             streak = 0

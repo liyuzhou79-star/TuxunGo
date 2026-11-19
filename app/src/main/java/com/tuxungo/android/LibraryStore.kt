@@ -114,6 +114,11 @@ object LibraryStore {
         writeGame(context, g.copy(folderId = folderId))
     }
 
+    fun renameGame(context: Context, id: String, title: String) {
+        val g = listGames(context).firstOrNull { it.id == id } ?: return
+        writeGame(context, g.copy(title = title))
+    }
+
     fun updateStatsCache(context: Context, id: String, statsCache: String) {
         if (id.isBlank()) return
         val g = listGames(context).firstOrNull { it.id == id } ?: return
