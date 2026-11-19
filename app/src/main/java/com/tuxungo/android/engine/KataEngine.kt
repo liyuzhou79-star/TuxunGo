@@ -119,7 +119,7 @@ class KataEngine private constructor(
     }
 
     companion object {
-        private const val GTP_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ" // GTP skips I
+        private const val GTP_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ" // GTP skips only I
 
         /** GTP rows count from the bottom; our y counts from the top. */
         fun toVertex(move: Move, size: BoardSize): String {
