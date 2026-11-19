@@ -51,6 +51,8 @@ fun SetupScreen(
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
     val effectiveHandicap = if (handicapSupported) handicap else 0
+    /** KataGo reliably supports boards with both sides in 7..19. */
+    val aiSupported = (width in 7..19 && height in 7..19)
 
     Column(
         modifier = Modifier
@@ -123,7 +125,6 @@ fun SetupScreen(
             steps = 19,
             modifier = Modifier.fillMaxWidth()
         )
-        val aiSupported = (width in 7..19 && height in 7..19)
         Text(
             text = if (aiSupported) "KataGo 官方支持范围内" else "超出 KataGo 支持范围（7–19 路）：AI 下不了，人对人可以下",
             fontSize = 13.sp, color = if (aiSupported) Color.Gray else Color(0xFFC62828)
