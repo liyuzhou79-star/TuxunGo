@@ -63,13 +63,16 @@ data class TsumegoProblem(
     val hint: String,
     val doneText: String,
     /** True when the user plays White (a life-making / defense problem). */
-    val userWhite: Boolean = false
+    val userWhite: Boolean = false,
+    /** Difficulty label: 入门 / 初级 / 中级. */
+    val level: String = ""
 )
 
 val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第一题 · 紧气",
         goal = "黑先，提掉角上的白棋",
+        level = "入门",
         width = 5, height = 5,
         black = listOf(2 to 0, 0 to 2),
         white = listOf(0 to 0, 1 to 0, 0 to 1),
@@ -80,6 +83,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第二题 · 双吃",
         goal = "黑先，一手同时叫吃两个白子",
+        level = "入门",
         width = 5, height = 5,
         black = listOf(0 to 1, 1 to 0, 3 to 2, 2 to 3, 0 to 2, 1 to 3),
         white = listOf(1 to 1, 2 to 2),
@@ -90,6 +94,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第三题 · 共气对杀",
         goal = "黑先，对杀取胜（填错一口气，死的是自己）",
+        level = "初级",
         width = 6, height = 4,
         black = listOf(
             0 to 0, 1 to 0, 0 to 1, 0 to 2, 1 to 2,
@@ -103,6 +108,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第四题 · 大龙紧气",
         goal = "黑先，提掉这条白棋大龙",
+        level = "初级",
         width = 5, height = 5,
         black = listOf(3 to 0, 3 to 1, 3 to 2, 0 to 1, 0 to 2, 1 to 3, 2 to 3),
         white = listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1, 2 to 2, 1 to 2),
@@ -113,6 +119,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第五题 · 征子",
         goal = "黑先，用征子吃掉白子",
+        level = "中级",
         width = 7, height = 7,
         black = listOf(2 to 1, 1 to 2, 3 to 3),
         white = listOf(2 to 2),
@@ -129,6 +136,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
     TsumegoProblem(
         title = "第六题 · 做活",
         goal = "白先，把这块白棋做活（这次你执白）",
+        level = "初级",
         width = 5, height = 5,
         black = listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3, 4 to 3),
         white = listOf(
@@ -269,6 +277,12 @@ fun TsumegoScreen(onBack: () -> Unit) {
             text = "${problem.title}：${problem.goal}",
             fontSize = 16.sp, fontWeight = FontWeight.SemiBold
         )
+        if (problem.level.isNotEmpty()) {
+            Text(
+                text = "难度 · ${problem.level}",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
         Text(
             text = statusText,
             fontSize = 13.sp,

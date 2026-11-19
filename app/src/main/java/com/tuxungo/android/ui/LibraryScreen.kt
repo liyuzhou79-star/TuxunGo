@@ -157,6 +157,7 @@ fun LibraryScreen(
     }
 
     var searchText by remember { mutableStateOf("") }
+    var sortMode by remember { mutableStateOf("new") }
     val shown = games.filter { g ->
         val inFolder = when (selected) {
             "ALL" -> true
@@ -168,6 +169,13 @@ fun LibraryScreen(
             g.title.contains(q, ignoreCase = true) ||
             g.modeLabel.contains(q, ignoreCase = true)
         inFolder && inSearch
+    }.let { list ->
+        when (sortMode) {
+            "old" -> list.sortedBy { it.createdAt }
+            "long" -> list.sortedByDescending { it.moves.size }
+            "short" -> list.sortedBy { it.moves.size }
+            else -> list.sortedByDescending { it.createdAt }
+        }
     }
     val dateFmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
@@ -216,6 +224,25 @@ fun LibraryScreen(
                 onClick = { selected = null },
                 label = { Text("未分类 ${games.count { it.folderId == null }}") }
             )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("排序", fontSize = 13.sp, color = Color.Gray)
+            for ((id, label) in listOf(
+                "new" to "最新",
+                "old" to "最早",
+                "long" to "手数多",
+                "short" to "手数少"
+            )) {
+                FilterChip(
+                    selected = sortMode == id,
+                    onClick = { sortMode = id },
+                    label = { Text(label) }
+                )
+            }
         }
         val selectedFolder = folders.firstOrNull { it.id == selected }
         if (selectedFolder != null) {

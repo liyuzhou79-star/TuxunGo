@@ -366,7 +366,21 @@ fun SetupScreen(
         Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "死活题训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "从紧气、双吃到对杀、征子，做对一步，对方自动应招，练读秒般的计算力。", fontSize = 13.sp, color = Color.Gray)
+        val tsumegoSolvedCount = remember {
+            val s = context.getSharedPreferences(
+                "tsumego_prefs", android.content.Context.MODE_PRIVATE
+            ).getString("solved", "") ?: ""
+            if (s.isBlank()) {
+                0
+            } else {
+                s.split(",").count { it.isNotBlank() }
+            }
+        }
+        Text(
+            text = "从紧气、双吃到对杀、征子，做对一步，对方自动应招，练读秒般的计算力。" +
+                "已解 $tsumegoSolvedCount / ${TSUMEGO_PROBLEMS.size} 题。",
+            fontSize = 13.sp, color = Color.Gray
+        )
         Spacer(modifier = Modifier.height(8.dp))
         androidx.compose.material3.OutlinedButton(
             onClick = onOpenTsumego,
@@ -411,7 +425,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.7.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.8.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
