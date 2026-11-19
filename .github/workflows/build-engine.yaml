@@ -1,0 +1,69 @@
+name: Build Engine (KataGo spike)
+
+# Step-3 spike: prove KataGo (Eigen, CPU) cross-compiles for Android arm64
+# in CI and measure the binary size before wiring it into the app.
+on:
+  workflow_dispatch:
+
+jobs:
+  katago:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout KataGo v1.15.3
+        uses: actions/checkout@v4
+        with:
+          repository: lightvector/KataGo
+          ref: v1.15.3
+          path: katago-src
+
+      - name: Install Eigen headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libeigen3-dev
+          find /usr -name "Eigen3Config.cmake" 2>/dev/null
+
+      - name: Locate Android NDK
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "ANDROID_NDK_LATEST_HOME=$ANDROID_NDK_LATEST_HOME"
+          ls "$ANDROID_HOME/ndk" || true
+
+      - name: Configure KataGo for Android arm64 (Eigen backend)
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          echo "Using NDK: $NDK"
+          EIGEN_DIR=$(dirname "$(find /usr -name 'Eigen3Config.cmake' | head -1)")
+          echo "Eigen3 cmake dir: $EIGEN_DIR"
+          cd katago-src/cpp
+          cmake -B build-android \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-29 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_BACKEND=EIGEN \
+            -DUSE_OPENSSL=OFF \
+            -DNO_GIT_REVISION=ON \
+            -DEigen3_DIR="$EIGEN_DIR"
+
+      - name: Build KataGo
+        run: |
+          cd katago-src/cpp
+          cmake --build build-android -j"$(nproc)"
+          ls -la build-android/katago
+          file build-android/katago || true
+          du -h build-android/katago
+
+      - name: Upload engine binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: katago-android-arm64
+          path: katago-src/cpp/build-android/katago
+          if-no-files-found: error
+
+      - name: Try downloading a small model (report only)
+        continue-on-error: true
+        run: |
+          curl -sL -o model.bin.gz "https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b10c128-s1141046784-d204595912.bin.gz"
+          ls -la model.bin.gz
+          file model.bin.gz
