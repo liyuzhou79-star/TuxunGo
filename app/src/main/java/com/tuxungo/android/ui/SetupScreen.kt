@@ -49,6 +49,7 @@ fun SetupScreen(
     var komiText by remember { mutableStateOf("7.5") }
     var humanStone by remember { mutableStateOf(com.tuxungo.android.go.Stone.BLACK) }
     var aiVisits by remember { mutableIntStateOf(200) }
+    var clockMinutes by remember { mutableIntStateOf(0) }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
@@ -135,6 +136,23 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
 
+        Text(text = "用时（棋钟）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = clockMinutes == 0, onClick = { clockMinutes = 0 }, label = { Text("不限时") })
+            FilterChip(selected = clockMinutes == 10, onClick = { clockMinutes = 10 }, label = { Text("10 分钟") })
+            FilterChip(selected = clockMinutes == 20, onClick = { clockMinutes = 20 }, label = { Text("20 分钟") })
+            FilterChip(selected = clockMinutes == 30, onClick = { clockMinutes = 30 }, label = { Text("30 分钟") })
+        }
+        if (clockMinutes > 0) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "每方主时间 ${clockMinutes} 分钟，用完进入读秒（3 次 × 30 秒），读秒也用完判负。第一手落子后开始计时。",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text(text = "棋盘大小", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -214,7 +232,8 @@ fun SetupScreen(
                     onStart(
                         GameConfig(
                             mode, width, height, effectiveHandicap,
-                            komi = komiInput, humanStone = humanStone, aiVisits = aiVisits
+                            komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
+                            clockMinutes = clockMinutes
                         )
                     )
                 }
@@ -269,7 +288,7 @@ fun SetupScreen(
         }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.0.2", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.0.3", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

@@ -32,6 +32,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -70,7 +71,9 @@ fun GameScreen(
     initialMoves: List<Move> = emptyList(),
     onExit: () -> Unit,
     onReview: (com.tuxungo.android.LibraryGame) -> Unit = {},
-    initialStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
+    initialStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap(),
+    initialClock: GameStore.ClockSnapshot? = null,
+    initialTimeoutBy: Stone? = null
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
@@ -84,6 +87,7 @@ fun GameScreen(
             for (m in initialMoves) {
                 if (m.isPass) g.pass() else g.play(m.x, m.y)
             }
+            if (initialTimeoutBy != null) g.timeout(initialTimeoutBy)
         }
     }
     var version by remember { mutableIntStateOf(0) }
@@ -694,10 +698,108 @@ fun GameScreen(
         if (!game.finished && aiControls(game.current) && !aiThinking) aiMoveNow()
     }
 
+    // ---- Game clock (optional): main time per side, then byoyomi
+    // 3 x 30 s. Starts on the first move; pauses with a paused AI game;
+    // running out of everything loses on time. ----
+    val clockEnabled = config.clockMinutes > 0
+    var clockBlackMainMs by remember {
+        mutableLongStateOf(initialClock?.blackMainMs ?: config.clockMinutes * 60_000L)
+    }
+    var clockWhiteMainMs by remember {
+        mutableLongStateOf(initialClock?.whiteMainMs ?: config.clockMinutes * 60_000L)
+    }
+    var clockBlackPeriods by remember {
+        mutableIntStateOf(initialClock?.blackPeriods ?: 3)
+    }
+    var clockWhitePeriods by remember {
+        mutableIntStateOf(initialClock?.whitePeriods ?: 3)
+    }
+    var clockBlackPeriodMs by remember {
+        mutableLongStateOf(initialClock?.blackPeriodMs ?: 30_000L)
+    }
+    var clockWhitePeriodMs by remember {
+        mutableLongStateOf(initialClock?.whitePeriodMs ?: 30_000L)
+    }
+
+    fun clockSnapshot(): GameStore.ClockSnapshot? =
+        if (!clockEnabled) {
+            null
+        } else {
+            GameStore.ClockSnapshot(
+                blackMainMs = clockBlackMainMs,
+                whiteMainMs = clockWhiteMainMs,
+                blackPeriods = clockBlackPeriods,
+                whitePeriods = clockWhitePeriods,
+                blackPeriodMs = clockBlackPeriodMs,
+                whitePeriodMs = clockWhitePeriodMs
+            )
+        }
+
+    LaunchedEffect(clockEnabled) {
+        if (!clockEnabled) return@LaunchedEffect
+        var last = System.currentTimeMillis()
+        while (true) {
+            delay(200)
+            val now = System.currentTimeMillis()
+            val dt = now - last
+            last = now
+            if (game.finished || scoringMode) continue
+            if (game.moves.isEmpty()) continue
+            if (bothAi && !eveRunning) continue
+            when (game.current) {
+                Stone.BLACK -> {
+                    if (clockBlackMainMs > 0) {
+                        clockBlackMainMs = (clockBlackMainMs - dt).coerceAtLeast(0)
+                    } else if (clockBlackPeriodMs > dt) {
+                        clockBlackPeriodMs -= dt
+                    } else if (clockBlackPeriods > 1) {
+                        clockBlackPeriods -= 1
+                        clockBlackPeriodMs = 30_000L
+                    } else {
+                        clockBlackPeriods = 0
+                        clockBlackPeriodMs = 0
+                        cancelAi()
+                        game.timeout(Stone.BLACK)
+                        version++
+                    }
+                }
+                Stone.WHITE -> {
+                    if (clockWhiteMainMs > 0) {
+                        clockWhiteMainMs = (clockWhiteMainMs - dt).coerceAtLeast(0)
+                    } else if (clockWhitePeriodMs > dt) {
+                        clockWhitePeriodMs -= dt
+                    } else if (clockWhitePeriods > 1) {
+                        clockWhitePeriods -= 1
+                        clockWhitePeriodMs = 30_000L
+                    } else {
+                        clockWhitePeriods = 0
+                        clockWhitePeriodMs = 0
+                        cancelAi()
+                        game.timeout(Stone.WHITE)
+                        version++
+                    }
+                }
+            }
+        }
+    }
+
     // Persist the game on every move so backgrounding or process death
     // never loses it; MainActivity restores it on the next launch.
     LaunchedEffect(version) {
-        GameStore.save(context, config, game.moves, game.finished, liveStats.toMap())
+        GameStore.save(
+            context, config, game.moves, game.finished, liveStats.toMap(),
+            clockSnapshot(), game.timeoutBy
+        )
+        // A move played in byoyomi refills that side's current period.
+        val lastMove = game.moves.lastOrNull()
+        if (clockEnabled && lastMove != null) {
+            if (lastMove.stone == Stone.BLACK && clockBlackMainMs <= 0L) {
+                clockBlackPeriodMs = 30_000L
+            }
+            if (lastMove.stone == Stone.WHITE && clockWhiteMainMs <= 0L) {
+                clockWhitePeriodMs = 30_000L
+            }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -723,6 +825,9 @@ fun GameScreen(
     var savedToLibrary by remember { mutableStateOf(false) }
 
     fun resultSummary(): String {
+        if (game.timeoutBy != null) {
+            return "${if (game.timeoutBy == Stone.BLACK) "白" else "黑"}方胜（对方超时）"
+        }
         if (game.resignedBy != null) {
             return "${if (game.resignedBy == Stone.BLACK) "白" else "黑"}方胜（对方认输）"
         }
@@ -790,6 +895,8 @@ fun GameScreen(
     val analysisAllowed = !analyzing && !aiThinking && !bothAi || (bothAi && !eveRunning && !analyzing && !aiThinking)
     val judgmentActive = judgment != null && judgmentKey == game.moves.size
     val status = when {
+        finished && game.timeoutBy != null ->
+            "对局结束：${if (game.timeoutBy == Stone.BLACK) "黑" else "白"}方超时"
         finished && game.resignedBy != null ->
             "对局结束：${if (game.resignedBy == Stone.BLACK) "黑" else "白"}方认输"
         finished -> "对局结束"
@@ -980,6 +1087,26 @@ fun GameScreen(
             if (config.customStones.isNotEmpty()) {
                 Text(text = " · 自定义布局", fontSize = 13.sp, color = Color.Gray)
             }
+        }
+        if (clockEnabled) {
+            fun fmtSide(mainMs: Long, periods: Int, periodMs: Long): String =
+                if (mainMs > 0) {
+                    val s = (mainMs + 999) / 1000
+                    String.format("%d:%02d", s / 60, s % 60)
+                } else if (periods > 0) {
+                    "读秒 ${(periodMs + 999) / 1000} 秒 × $periods"
+                } else {
+                    "时间到"
+                }
+            val currentInByoyomi =
+                (game.current == Stone.BLACK && clockBlackMainMs <= 0L) ||
+                    (game.current == Stone.WHITE && clockWhiteMainMs <= 0L)
+            Text(
+                text = "⏱ 黑 ${fmtSide(clockBlackMainMs, clockBlackPeriods, clockBlackPeriodMs)} · 白 ${fmtSide(clockWhiteMainMs, clockWhitePeriods, clockWhitePeriodMs)}",
+                fontSize = 13.sp,
+                fontWeight = if (currentInByoyomi) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (currentInByoyomi) Color(0xFFB3261E) else Color.Gray
+            )
         }
         // Live score line: territory (incl. dead stones) + alive stones
         // + winrate, from the freshest analysis for this exact position
@@ -1466,7 +1593,9 @@ fun GameScreen(
     }
 
     if (finished && !resultDismissed) {
-        val resultText = if (game.resignedBy != null) {
+        val resultText = if (game.timeoutBy != null) {
+            "${if (game.timeoutBy == Stone.BLACK) "白" else "黑"}方胜（对方超时）"
+        } else if (game.resignedBy != null) {
             "${if (game.resignedBy == Stone.BLACK) "白" else "黑"}方胜（对方认输）"
         } else {
             val s = game.scoringDead?.let { game.scoreWithDead(it) } ?: game.score()

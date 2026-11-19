@@ -19,7 +19,21 @@ object GameStore {
         val moves: List<Move>,
         val finished: Boolean,
         /** Per-turn win-rate stats recorded live during the game. */
-        val turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
+        val turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap(),
+        /** Remaining clock state, when the game uses a clock. */
+        val clock: ClockSnapshot? = null,
+        val timeoutBy: Stone? = null
+    )
+
+    /** Remaining time per side (main milliseconds, byoyomi periods and
+     * the milliseconds left in the current byoyomi period). */
+    data class ClockSnapshot(
+        val blackMainMs: Long,
+        val whiteMainMs: Long,
+        val blackPeriods: Int,
+        val whitePeriods: Int,
+        val blackPeriodMs: Long,
+        val whitePeriodMs: Long
     )
 
     fun save(
@@ -27,9 +41,11 @@ object GameStore {
         config: GameConfig,
         moves: List<Move>,
         finished: Boolean,
-        turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
+        turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap(),
+        clock: ClockSnapshot? = null,
+        timeoutBy: Stone? = null
     ) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("exists", true)
             .putString("mode", config.mode.name)
             .putInt("width", config.width)
@@ -46,7 +62,18 @@ object GameStore {
                 "turnStats",
                 com.tuxungo.android.engine.ReviewMath.encodeSparse(turnStats)
             )
-            .apply()
+            .putInt("clockMinutes", config.clockMinutes)
+            .putString("timeoutBy", timeoutBy?.name ?: "")
+        if (clock != null) {
+            editor
+                .putLong("clockBlackMain", clock.blackMainMs)
+                .putLong("clockWhiteMain", clock.whiteMainMs)
+                .putInt("clockBlackPeriods", clock.blackPeriods)
+                .putInt("clockWhitePeriods", clock.whitePeriods)
+                .putLong("clockBlackPeriod", clock.blackPeriodMs)
+                .putLong("clockWhitePeriod", clock.whitePeriodMs)
+        }
+        editor.apply()
     }
 
     fun load(context: Context): SavedGame? {
@@ -58,6 +85,7 @@ object GameStore {
             .getOrDefault(Stone.BLACK)
         val startPlayer = runCatching { Stone.valueOf(p.getString("startPlayer", "BLACK") ?: "BLACK") }
             .getOrDefault(Stone.BLACK)
+        val clockMinutes = p.getInt("clockMinutes", 0)
         val config = GameConfig(
             mode = mode,
             width = p.getInt("width", 19),
@@ -67,15 +95,33 @@ object GameStore {
             humanStone = human,
             aiVisits = p.getInt("aiVisits", 200),
             customStones = decodeMoves(p.getString("customStones", "") ?: ""),
-            startPlayer = startPlayer
+            startPlayer = startPlayer,
+            clockMinutes = clockMinutes
         )
+        val clock = if (clockMinutes > 0 && p.contains("clockBlackMain")) {
+            ClockSnapshot(
+                blackMainMs = p.getLong("clockBlackMain", clockMinutes * 60_000L),
+                whiteMainMs = p.getLong("clockWhiteMain", clockMinutes * 60_000L),
+                blackPeriods = p.getInt("clockBlackPeriods", 3),
+                whitePeriods = p.getInt("clockWhitePeriods", 3),
+                blackPeriodMs = p.getLong("clockBlackPeriod", 30_000L),
+                whitePeriodMs = p.getLong("clockWhitePeriod", 30_000L)
+            )
+        } else {
+            null
+        }
+        val timeoutBy = runCatching {
+            Stone.valueOf(p.getString("timeoutBy", "") ?: "")
+        }.getOrNull()
         return SavedGame(
             config = config,
             moves = decodeMoves(p.getString("moves", "") ?: ""),
             finished = p.getBoolean("finished", false),
             turnStats = com.tuxungo.android.engine.ReviewMath.decodeSparse(
                 p.getString("turnStats", "") ?: ""
-            )
+            ),
+            clock = clock,
+            timeoutBy = timeoutBy
         )
     }
 

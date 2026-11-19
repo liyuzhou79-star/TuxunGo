@@ -19,5 +19,8 @@ data class GameConfig(
      * before the first move. Empty for normal and handicap games. */
     val customStones: List<Move> = emptyList(),
     /** Side to move in a custom start position. */
-    val startPlayer: Stone = Stone.BLACK
+    val startPlayer: Stone = Stone.BLACK,
+    /** Per-side main time in minutes; 0 = no clock. When the main time
+     * runs out, byoyomi starts: 3 periods of 30 seconds each. */
+    val clockMinutes: Int = 0
 )

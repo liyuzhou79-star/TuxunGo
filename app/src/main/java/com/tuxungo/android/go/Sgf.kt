@@ -19,7 +19,7 @@ object Sgf {
         comments: Map<Int, String> = emptyMap()
     ): String {
         val sb = StringBuilder()
-        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:1.0.2]")
+        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:1.0.3]")
         if (game.size.isSquare) sb.append("SZ[").append(game.size.width).append("]")
         else sb.append("SZ[").append(game.size.width).append(':').append(game.size.height).append("]")
         sb.append("KM[").append(game.komi).append("]")
@@ -60,6 +60,8 @@ object Sgf {
         }
         if (game.finished) {
             val result = when {
+                game.timeoutBy != null ->
+                    if (game.timeoutBy == Stone.BLACK) "W+T" else "B+T"
                 game.resignedBy != null ->
                     if (game.resignedBy == Stone.BLACK) "W+R" else "B+R"
                 else -> {

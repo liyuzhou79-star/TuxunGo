@@ -78,6 +78,12 @@ fun TuxunGoApp() {
     var restoreStats by remember {
         mutableStateOf(restored?.turnStats ?: emptyMap())
     }
+    var restoreClock by remember {
+        mutableStateOf(restored?.clock)
+    }
+    var restoreTimeoutBy by remember {
+        mutableStateOf(restored?.timeoutBy)
+    }
     var editSize by remember { mutableStateOf(19 to 19) }
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
     var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
@@ -103,6 +109,8 @@ fun TuxunGoApp() {
                 config = it
                 restoreMoves = emptyList()
                 restoreStats = emptyMap()
+                restoreClock = null
+                restoreTimeoutBy = null
                 screen = Screen.GAME
             },
             onOpenModels = { screen = Screen.MODELS },
@@ -143,6 +151,8 @@ fun TuxunGoApp() {
                         config = it
                         restoreMoves = emptyList()
                 restoreStats = emptyMap()
+                restoreClock = null
+                        restoreTimeoutBy = null
                         screen = Screen.GAME
                     }
                 )
@@ -156,6 +166,8 @@ fun TuxunGoApp() {
                 config = it
                 restoreMoves = emptyList()
                 restoreStats = emptyMap()
+                restoreClock = null
+                restoreTimeoutBy = null
                 screen = Screen.GAME
             },
             onBack = { screen = Screen.SETUP }
@@ -175,7 +187,9 @@ fun TuxunGoApp() {
                             screenBeforeReview = Screen.GAME
                             screen = Screen.REVIEW
                         },
-                        initialStats = restoreStats
+                        initialStats = restoreStats,
+                        initialClock = restoreClock,
+                        initialTimeoutBy = restoreTimeoutBy
                     )
                 }
             }

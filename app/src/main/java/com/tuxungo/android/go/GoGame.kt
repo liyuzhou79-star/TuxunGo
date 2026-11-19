@@ -63,6 +63,9 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
     var resignedBy: Stone? = null
         private set
 
+    var timeoutBy: Stone? = null
+        private set
+
     private val _moves = mutableListOf<Move>()
     val moves: List<Move> get() = _moves
 
@@ -231,6 +234,13 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         finished = true
     }
 
+    /** Ends the game: [stone] ran out of time (main time + byoyomi). */
+    fun timeout(stone: Stone = current) {
+        if (finished) return
+        timeoutBy = stone
+        finished = true
+    }
+
     /** Ends the game for scoring (both sides agree the game is over). */
     fun finishScoring() {
         if (finished) return
@@ -304,6 +314,7 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         _moves.removeAt(_moves.lastIndex)
         finished = false
         resignedBy = null
+        timeoutBy = null
         consecutivePasses = entry.prevPasses
         current = entry.move.stone
         if (!entry.move.isPass) {
