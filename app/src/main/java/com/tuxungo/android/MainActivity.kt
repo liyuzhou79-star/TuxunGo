@@ -15,34 +15,40 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import com.tuxungo.android.go.Move
+import com.tuxungo.android.ui.EditScreen
 import com.tuxungo.android.ui.GameConfig
 import com.tuxungo.android.ui.GameScreen
 import com.tuxungo.android.ui.ModelsScreen
+import com.tuxungo.android.ui.SettingsScreen
 import com.tuxungo.android.ui.SetupScreen
 
-/** Warm paper-and-walnut palette, echoing the wooden board. */
-private val WarmColors = lightColorScheme(
-    primary = Color(0xFF7A4E21),
+/** Sakura-pink palette. */
+private val SakuraColors = lightColorScheme(
+    primary = Color(0xFFD64F7C),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFF0DFC2),
-    onPrimaryContainer = Color(0xFF3E2708),
-    secondary = Color(0xFF2456C8),
+    primaryContainer = Color(0xFFFBDCE7),
+    onPrimaryContainer = Color(0xFF5E1230),
+    secondary = Color(0xFFB03A5F),
     onSecondary = Color.White,
-    background = Color(0xFFF6F1E7),
-    onBackground = Color(0xFF2B2118),
-    surface = Color(0xFFFFFDF8),
-    onSurface = Color(0xFF2B2118),
-    surfaceVariant = Color(0xFFEEE5D3),
-    onSurfaceVariant = Color(0xFF5C4A33),
-    outline = Color(0xFFB49B78)
+    background = Color(0xFFFDF5F7),
+    onBackground = Color(0xFF33222A),
+    surface = Color(0xFFFFFDFE),
+    onSurface = Color(0xFF33222A),
+    surfaceVariant = Color(0xFFF7E3EA),
+    onSurfaceVariant = Color(0xFF6E4A58),
+    outline = Color(0xFFD9A7B8),
+    error = Color(0xFFC62828),
+    onError = Color.White
 )
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = WarmColors) {
+            MaterialTheme(colorScheme = SakuraColors) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -54,28 +60,56 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, GAME }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME }
 
 @Composable
 fun TuxunGoApp() {
-    var screen by remember { mutableStateOf(Screen.SETUP) }
-    var config by remember { mutableStateOf<GameConfig?>(null) }
+    val context = LocalContext.current
+    // Restore an unfinished game after backgrounding / process death.
+    val restored = remember {
+        GameStore.load(context)?.takeIf { !it.finished }
+    }
+    var screen by remember { mutableStateOf(if (restored != null) Screen.GAME else Screen.SETUP) }
+    var config by remember { mutableStateOf(restored?.config) }
+    var restoreMoves by remember { mutableStateOf<List<Move>>(restored?.moves ?: emptyList()) }
+    var editSize by remember { mutableStateOf(19 to 19) }
     when (screen) {
         Screen.SETUP -> SetupScreen(
             onStart = {
                 config = it
+                restoreMoves = emptyList()
                 screen = Screen.GAME
             },
-            onOpenModels = { screen = Screen.MODELS }
+            onOpenModels = { screen = Screen.MODELS },
+            onOpenSettings = { screen = Screen.SETTINGS },
+            onOpenEditor = { w, h ->
+                editSize = w to h
+                screen = Screen.EDIT
+            }
         )
         Screen.MODELS -> ModelsScreen(onBack = { screen = Screen.SETUP })
+        Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.SETUP })
+        Screen.EDIT -> EditScreen(
+            width = editSize.first,
+            height = editSize.second,
+            onStart = {
+                config = it
+                restoreMoves = emptyList()
+                screen = Screen.GAME
+            },
+            onBack = { screen = Screen.SETUP }
+        )
         Screen.GAME -> {
             val current = config
             if (current == null) {
                 screen = Screen.SETUP
             } else {
-                key(current) {
-                    GameScreen(config = current, onExit = { screen = Screen.SETUP })
+                key(current, restoreMoves) {
+                    GameScreen(
+                        config = current,
+                        initialMoves = restoreMoves,
+                        onExit = { screen = Screen.SETUP }
+                    )
                 }
             }
         }
@@ -85,7 +119,7 @@ fun TuxunGoApp() {
 @Preview(showBackground = true)
 @Composable
 fun AppPreview() {
-    MaterialTheme(colorScheme = WarmColors) {
+    MaterialTheme(colorScheme = SakuraColors) {
         TuxunGoApp()
     }
 }

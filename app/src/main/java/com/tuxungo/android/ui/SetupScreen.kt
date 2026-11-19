@@ -15,6 +15,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -28,7 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
+fun SetupScreen(
+    onStart: (GameConfig) -> Unit,
+    onOpenModels: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenEditor: (Int, Int) -> Unit
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
         val models = com.tuxungo.android.engine.ModelStore.list(context)
@@ -41,6 +47,7 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
     var handicap by remember { mutableIntStateOf(0) }
     var humanStone by remember { mutableStateOf(com.tuxungo.android.go.Stone.BLACK) }
     var aiVisits by remember { mutableIntStateOf(200) }
+    var showUnsupportedDialog by remember { mutableStateOf(false) }
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
     val effectiveHandicap = if (handicapSupported) handicap else 0
@@ -116,10 +123,10 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
             steps = 19,
             modifier = Modifier.fillMaxWidth()
         )
-        val standard = (width in 7..19 && height in 7..19)
+        val aiSupported = (width in 7..19 && height in 7..19)
         Text(
-            text = if (standard) "KataGo 官方支持范围内" else "实验棋盘：人对人可正常下，AI 棋力不保证",
-            fontSize = 13.sp, color = Color.Gray
+            text = if (aiSupported) "KataGo 官方支持范围内" else "超出 KataGo 支持范围（7–19 路）：AI 下不了，人对人可以下",
+            fontSize = 13.sp, color = if (aiSupported) Color.Gray else Color(0xFFC62828)
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -152,18 +159,43 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(20.dp))
 
+        val needsAi = mode != GameMode.PVP
+        val blocked = needsAi && !aiSupported
         Button(
             onClick = {
-                onStart(
-                    GameConfig(
-                        mode, width, height, effectiveHandicap,
-                        komi = 7.5, humanStone = humanStone, aiVisits = aiVisits
+                if (blocked) {
+                    showUnsupportedDialog = true
+                } else {
+                    onStart(
+                        GameConfig(
+                            mode, width, height, effectiveHandicap,
+                            komi = 7.5, humanStone = humanStone, aiVisits = aiVisits
+                        )
                     )
+                }
+            },
+            colors = if (blocked) {
+                androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFC62828),
+                    contentColor = Color.White
                 )
+            } else {
+                androidx.compose.material3.ButtonDefaults.buttonColors()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "开始对局", fontSize = 16.sp)
+            Text(text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局", fontSize = 16.sp)
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { onOpenEditor(width, height) },
+                modifier = Modifier.weight(1f)
+            ) { Text("摆棋（自定义布局）") }
+            androidx.compose.material3.OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.weight(1f)
+            ) { Text("设置") }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -180,5 +212,27 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(text = "版本 0.1.0（开发中）", fontSize = 12.sp, color = Color.Gray)
+    }
+
+    if (showUnsupportedDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showUnsupportedDialog = false },
+            title = { Text("这个棋盘 AI 下不了") },
+            text = {
+                Text(
+                    "当前棋盘是 ${width}×${height} 路，超出了 KataGo 引擎可靠支持的范围（宽和高都要在 7–19 路之间）。" +
+                        "人对人模式不受影响，可以正常下。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsupportedDialog = false
+                    mode = GameMode.PVP
+                }) { Text("改下人对人") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsupportedDialog = false }) { Text("去改棋盘") }
+            }
+        )
     }
 }

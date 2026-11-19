@@ -136,6 +136,36 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         return true
     }
 
+    /**
+     * Loads an arbitrary start position (from the board editor). Returns
+     * false — leaving the game untouched — when stones overlap, sit out
+     * of bounds, or any group has no liberties (such a position cannot
+     * occur in a real game and KataGo would reject it too).
+     */
+    fun loadPosition(stones: List<Move>, toMove: Stone): Boolean {
+        if (_moves.isNotEmpty() || handicapStones.isNotEmpty()) return false
+        val next = arrayOfNulls<Stone>(size.area)
+        for (s in stones) {
+            if (s.isPass || !inBounds(s.x, s.y)) return false
+            val idx = index(s.x, s.y)
+            if (next[idx] != null) return false
+            next[idx] = s.stone
+        }
+        // Every group must have at least one liberty.
+        val seen = BooleanArray(size.area)
+        for (i in next.indices) {
+            if (next[i] == null || seen[i]) continue
+            val (group, libs) = groupAndLiberties(next, i)
+            for (g in group) seen[g] = true
+            if (libs == 0) return false
+        }
+        next.copyInto(board)
+        current = toMove
+        seenPositions.clear()
+        seenPositions.add(positionKey(board))
+        return true
+    }
+
     fun isLegal(x: Int, y: Int): Boolean {
         if (finished || !inBounds(x, y)) return false
         return simulate(x, y) != null

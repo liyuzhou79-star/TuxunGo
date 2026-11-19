@@ -120,6 +120,21 @@ class KataEngine private constructor(
         command("kata-set-param maxVisits $visits")
     }
 
+    /**
+     * Sets an arbitrary position with KataGo's set_position command
+     * (space-separated COLOR VERTEX pairs). Throws when KataGo rejects
+     * the placement (overlap or a group without liberties).
+     */
+    fun setPosition(stones: List<Move>, size: BoardSize) {
+        if (stones.isEmpty()) return
+        val sb = StringBuilder("set_position")
+        for (s in stones) {
+            sb.append(' ').append(if (s.stone == Stone.BLACK) "B" else "W")
+            sb.append(' ').append(toVertex(s, size))
+        }
+        command(sb.toString())
+    }
+
     fun play(move: Move, size: BoardSize) {
         val color = if (move.stone == Stone.BLACK) "black" else "white"
         command("play $color ${toVertex(move, size)}")

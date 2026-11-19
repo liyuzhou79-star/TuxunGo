@@ -124,7 +124,8 @@ class AnalysisEngine private constructor(
     fun analyze(
         size: BoardSize,
         komi: Double,
-        handicapStones: List<Pair<Int, Int>>,
+        initialStones: List<Move>,
+        initialPlayer: Stone,
         moves: List<Move>,
         sideToMove: Stone,
         maxVisits: Int,
@@ -141,12 +142,12 @@ class AnalysisEngine private constructor(
         query.put("maxVisits", maxVisits)
         query.put("includeOwnership", true)
         val initial = JSONArray()
-        for ((x, y) in handicapStones) {
-            val v = KataEngine.toVertex(Move(Stone.BLACK, x, y), size)
-            initial.put(JSONArray().put("B").put(v))
+        for (s in initialStones) {
+            val v = KataEngine.toVertex(s, size)
+            initial.put(JSONArray().put(if (s.stone == Stone.BLACK) "B" else "W").put(v))
         }
         query.put("initialStones", initial)
-        query.put("initialPlayer", if (handicapStones.isNotEmpty()) "W" else "B")
+        query.put("initialPlayer", if (initialPlayer == Stone.BLACK) "B" else "W")
         val moveArr = JSONArray()
         for (move in moves) {
             val color = if (move.stone == Stone.BLACK) "B" else "W"
@@ -280,7 +281,8 @@ class AnalysisEngine private constructor(
                 engine.analyze(
                     size = BoardSize(9, 9),
                     komi = 7.5,
-                    handicapStones = emptyList(),
+                    initialStones = emptyList(),
+                    initialPlayer = Stone.BLACK,
                     moves = emptyList(),
                     sideToMove = Stone.BLACK,
                     maxVisits = 1,

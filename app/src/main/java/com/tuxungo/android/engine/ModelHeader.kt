@@ -67,7 +67,7 @@ object TerritoryEstimate {
      * enclosures). [stones] is the board content in the same order
      * (null = empty). Only empty points count as territory.
      */
-    fun estimate(ownership: DoubleArray, stones: Array<Stone?>): Result {
+    fun estimate(ownership: DoubleArray, stones: Array<Stone?>, threshold: Double = 0.5): Result {
         var b = 0
         var w = 0
         var n = 0
@@ -76,8 +76,8 @@ object TerritoryEstimate {
             if (stones[i] != null) continue
             val v = ownership[i]
             when {
-                v > 0.5 -> b++
-                v < -0.5 -> w++
+                v > threshold -> b++
+                v < -threshold -> w++
                 else -> n++
             }
         }

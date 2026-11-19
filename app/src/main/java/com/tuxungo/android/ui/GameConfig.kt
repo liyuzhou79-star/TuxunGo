@@ -1,5 +1,6 @@
 package com.tuxungo.android.ui
 
+import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 
 enum class GameMode { PVP, PVE, EVE }
@@ -13,5 +14,10 @@ data class GameConfig(
     /** PVE only: which color the human plays. */
     val humanStone: Stone = Stone.BLACK,
     /** PVE only: KataGo search budget per move (difficulty). */
-    val aiVisits: Int = 200
+    val aiVisits: Int = 200,
+    /** Custom start position (from the board editor): stones pre-placed
+     * before the first move. Empty for normal and handicap games. */
+    val customStones: List<Move> = emptyList(),
+    /** Side to move in a custom start position. */
+    val startPlayer: Stone = Stone.BLACK
 )
