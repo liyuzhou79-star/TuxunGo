@@ -55,6 +55,11 @@ object LibraryStore {
         }
     }
 
+    fun ensureFolder(context: Context, name: String): LibraryFolder {
+        return listFolders(context).firstOrNull { it.name == name }
+            ?: createFolder(context, name)
+    }
+
     fun createFolder(context: Context, name: String): LibraryFolder {
         val folder = LibraryFolder(
             id = "f" + System.currentTimeMillis().toString(36),

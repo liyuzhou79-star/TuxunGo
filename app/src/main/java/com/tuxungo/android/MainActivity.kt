@@ -75,6 +75,9 @@ fun TuxunGoApp() {
     var screen by remember { mutableStateOf(if (restored != null) Screen.GAME else Screen.SETUP) }
     var config by remember { mutableStateOf(restored?.config) }
     var restoreMoves by remember { mutableStateOf<List<Move>>(restored?.moves ?: emptyList()) }
+    var restoreStats by remember {
+        mutableStateOf(restored?.turnStats ?: emptyMap())
+    }
     var editSize by remember { mutableStateOf(19 to 19) }
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
     var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
@@ -99,6 +102,7 @@ fun TuxunGoApp() {
             onStart = {
                 config = it
                 restoreMoves = emptyList()
+                restoreStats = emptyMap()
                 screen = Screen.GAME
             },
             onOpenModels = { screen = Screen.MODELS },
@@ -129,6 +133,7 @@ fun TuxunGoApp() {
                         if (screenBeforeReview == Screen.GAME) {
                             // Rebuild the finished board from its moves.
                             restoreMoves = g.moves
+                            restoreStats = com.tuxungo.android.engine.ReviewMath.decodeSparse(g.statsCache)
                             screen = Screen.GAME
                         } else {
                             screen = screenBeforeReview
@@ -137,6 +142,7 @@ fun TuxunGoApp() {
                     onContinue = {
                         config = it
                         restoreMoves = emptyList()
+                restoreStats = emptyMap()
                         screen = Screen.GAME
                     }
                 )
@@ -149,6 +155,7 @@ fun TuxunGoApp() {
             onStart = {
                 config = it
                 restoreMoves = emptyList()
+                restoreStats = emptyMap()
                 screen = Screen.GAME
             },
             onBack = { screen = Screen.SETUP }
@@ -167,7 +174,8 @@ fun TuxunGoApp() {
                             reviewGame = it
                             screenBeforeReview = Screen.GAME
                             screen = Screen.REVIEW
-                        }
+                        },
+                        initialStats = restoreStats
                     )
                 }
             }

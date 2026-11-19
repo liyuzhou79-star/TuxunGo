@@ -69,7 +69,8 @@ fun GameScreen(
     config: GameConfig,
     initialMoves: List<Move> = emptyList(),
     onExit: () -> Unit,
-    onReview: (com.tuxungo.android.LibraryGame) -> Unit = {}
+    onReview: (com.tuxungo.android.LibraryGame) -> Unit = {},
+    initialStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
@@ -461,6 +462,9 @@ fun GameScreen(
                     analysisKey = moveCount
                     selectedCandidate = 0
                     analysisStatus = ""
+                    // Manual analysis is deeper than the automatic one:
+                    // let it upgrade this turn's recorded review stat.
+                    recordTurnStat(moveCount, res, overwrite = true)
                     // Show the territory right away; the chip can hide it.
                     if (visitsOverride == null) showTerritory = true
                 } else {
@@ -477,6 +481,29 @@ fun GameScreen(
     var autoResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var autoKey by remember { mutableIntStateOf(-1) }
     var autoBusy by remember { mutableStateOf(false) }
+
+    // Per-turn win-rate stats recorded quietly while the game runs, so
+    // the post-game review opens (nearly) instantly instead of analyzing
+    // the whole game from scratch. Nothing in the UI reads this during
+    // play; it only rides along into the review / library record.
+    val liveStats = remember {
+        androidx.compose.runtime.mutableStateMapOf<Int, com.tuxungo.android.engine.TurnStat>()
+            .apply { putAll(initialStats) }
+    }
+
+    fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
+        val first = res.candidates.firstOrNull()
+        val stat = com.tuxungo.android.engine.TurnStat(
+            turn = moveCount,
+            winrateBlack = res.rootWinrateBlack,
+            scoreLeadBlack = res.rootScoreLeadBlack,
+            bestMove = first?.move,
+            bestIsPass = first != null && first.move == null
+        )
+        if (overwrite || !liveStats.containsKey(moveCount)) {
+            liveStats[moveCount] = stat
+        }
+    }
 
     fun runAutoAnalysis() {
         if (autoBusy || analyzing || aiThinking || game.finished || scoringMode) return
@@ -503,11 +530,14 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = 120
+                maxVisits = 80
             )
         }) { result ->
             autoBusy = false
             result.onSuccess { res ->
+                // Record the stat for this turn even if the game has
+                // already moved on — it is historical review data.
+                recordTurnStat(moveCount, res, overwrite = false)
                 if (game.moves.size == moveCount) {
                     autoResult = res
                     autoKey = moveCount
@@ -517,8 +547,17 @@ fun GameScreen(
     }
 
     LaunchedEffect(version) {
-        if (bothAi && eveRunning) return@LaunchedEffect
-        delay(900)
+        // In AI-vs-AI the recorder keeps up between moves; in human games
+        // it waits for the AI to finish thinking so the AI-to-move turns
+        // get recorded too. The analysis engine is a separate process,
+        // and nothing here touches the board or the move flow.
+        var waited = 0
+        while (aiThinking && !game.finished && waited < 40) {
+            delay(300)
+            waited++
+        }
+        if (waited >= 40) return@LaunchedEffect
+        delay(if (bothAi && eveRunning) 200 else 900)
         runAutoAnalysis()
     }
 
@@ -649,7 +688,27 @@ fun GameScreen(
     // Persist the game on every move so backgrounding or process death
     // never loses it; MainActivity restores it on the next launch.
     LaunchedEffect(version) {
-        GameStore.save(context, config, game.moves, game.finished)
+        GameStore.save(context, config, game.moves, game.finished, liveStats.toMap())
+    }
+
+    // Auto-save a game into the library's auto folder the moment it
+    // finishes, so it is never lost just because nobody tapped collect.
+    // Only on the in-session transition: a game restored already
+    // finished was saved when it ended (or predates this feature).
+    val finishedAtStart = remember { game.finished }
+    var autoSaved by remember { mutableStateOf(false) }
+    LaunchedEffect(game.finished) {
+        if (game.finished && !finishedAtStart && !autoSaved) {
+            autoSaved = true
+            try {
+                val folder = com.tuxungo.android.LibraryStore.ensureFolder(context, "自动保存")
+                com.tuxungo.android.LibraryStore.saveGame(
+                    context,
+                    buildLibraryGame().copy(folderId = folder.id)
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -703,7 +762,11 @@ fun GameScreen(
             startPlayer = config.startPlayer,
             moves = game.moves.toList(),
             resultText = if (game.finished) resultSummary() else "",
-            statsCache = null
+            statsCache = if (liveStats.isNotEmpty()) {
+                com.tuxungo.android.engine.ReviewMath.encodeSparse(liveStats)
+            } else {
+                null
+            }
         )
     }
 

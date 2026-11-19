@@ -14,10 +14,12 @@ object Sgf {
         blackName: String = "",
         whiteName: String = "",
         setupStones: List<Move> = emptyList(),
-        startPlayer: Stone = Stone.BLACK
+        startPlayer: Stone = Stone.BLACK,
+        /** Optional per-move comments (1-based move number), e.g. review notes. */
+        comments: Map<Int, String> = emptyMap()
     ): String {
         val sb = StringBuilder()
-        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:0.1.0]")
+        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:1.0.1]")
         if (game.size.isSquare) sb.append("SZ[").append(game.size.width).append("]")
         else sb.append("SZ[").append(game.size.width).append(':').append(game.size.height).append("]")
         sb.append("KM[").append(game.komi).append("]")
@@ -45,11 +47,16 @@ object Sgf {
             }
             sb.append("PL[").append(if (startPlayer == Stone.BLACK) "B" else "W").append("]")
         }
-        for (move in game.moves) {
+        for ((index, move) in game.moves.withIndex()) {
             sb.append(if (move.stone == Stone.BLACK) ";B[" else ";W[")
             if (move.isPass) sb.append("tt")
             else sb.append(coord(move.x)).append(coord(move.y))
             sb.append("]")
+            val comment = comments[index + 1]
+            if (!comment.isNullOrBlank()) {
+                val escaped = comment.replace("\\", "\\\\").replace("]", "\\]")
+                sb.append("C[").append(escaped).append("]")
+            }
         }
         if (game.finished) {
             val result = when {

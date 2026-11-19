@@ -67,6 +67,23 @@ class ReviewMathTest {
     }
 
     @Test
+    fun sparseStatsRoundTrip() {
+        val stats = mapOf(
+            0 to TurnStat(0, 0.5, 0.0, Move(Stone.BLACK, 3, 3), false),
+            2 to TurnStat(2, 0.61, 2.5, null, true),
+            5 to TurnStat(5, 0.42, -1.25, Move(Stone.WHITE, 10, 10), false)
+        )
+        val back = ReviewMath.decodeSparse(ReviewMath.encodeSparse(stats))
+        assertEquals(3, back.size)
+        assertEquals(0.61, back[2]!!.winrateBlack, 0.001)
+        assertEquals(-1.25, back[5]!!.scoreLeadBlack, 0.001)
+        assertEquals(10, back[5]!!.bestMove?.x)
+        assertTrue(back[2]!!.bestIsPass)
+        assertTrue(ReviewMath.decodeSparse(null).isEmpty())
+        assertTrue(ReviewMath.decodeSparse("").isEmpty())
+    }
+
+    @Test
     fun libraryMoveEncodingRoundTrip() {
         val moves = listOf(
             Move(Stone.BLACK, 3, 4),

@@ -1,6 +1,7 @@
 package com.tuxungo.android.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -73,21 +75,29 @@ fun ReviewScreen(
     var current by remember { mutableStateOf(game) }
     val totalMoves = current.moves.size
 
-    var turns by remember {
-        mutableStateOf(
-            current.statsCache?.let { ReviewMath.decodeTurns(it) }
-                ?.takeIf { it.size == totalMoves + 1 }
-        )
+    // Stats arrive sparse: turns recorded live during the game are
+    // already here, and only the missing ones get analyzed on open.
+    var statsMap by remember {
+        mutableStateOf(ReviewMath.decodeSparse(current.statsCache))
     }
+    val turns: List<TurnStat>? =
+        if (totalMoves > 0 && (0..totalMoves).all { it in statsMap }) {
+            (0..totalMoves).map { statsMap[it]!! }
+        } else {
+            null
+        }
+    val missingTurns: List<Int> = (0..totalMoves).filter { it !in statsMap }
     var analyzing by remember { mutableStateOf(false) }
     var progressDone by remember { mutableIntStateOf(0) }
-    var progressTotal by remember { mutableIntStateOf(totalMoves + 1) }
+    var progressTotal by remember { mutableIntStateOf(1) }
     var errorText by remember { mutableStateOf("") }
     var perspective by remember { mutableStateOf(Stone.BLACK) }
     var ply by remember { mutableIntStateOf(totalMoves) }
     var showBest by remember { mutableStateOf(true) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var savedNote by remember { mutableStateOf(false) }
+    var sgfCopied by remember { mutableStateOf(false) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
     val runner = remember { Executors.newSingleThreadExecutor() }
     DisposableEffect(Unit) { onDispose { runner.shutdownNow() } }
@@ -108,12 +118,14 @@ fun ReviewScreen(
         else -> emptyList()
     }
 
-    fun startAnalysis() {
+    fun startAnalysis(visits: Int) {
         if (analyzing || totalMoves == 0) return
+        val missing = (0..totalMoves).filter { it !in statsMap }
+        if (missing.isEmpty()) return
         analyzing = true
         errorText = ""
         progressDone = 0
-        progressTotal = totalMoves + 1
+        progressTotal = missing.size
         val g = current
         runner.execute {
             var eng: AnalysisEngine? = null
@@ -136,15 +148,20 @@ fun ReviewScreen(
                     initialPlayer = initPlayer,
                     moves = g.moves,
                     sideToMove = if (g.moves.isEmpty()) initPlayer else g.moves.last().stone.other(),
-                    maxVisits = 100,
+                    maxVisits = visits,
+                    onlyTurns = missing.toSet(),
                     onProgress = { d, t ->
                         progressDone = d
                         progressTotal = t
                     }
                 )
-                turns = result
+                val merged = statsMap.toMutableMap()
+                for (stat in result) merged[stat.turn] = stat
+                statsMap = merged
                 if (g.id.isNotBlank()) {
-                    LibraryStore.updateStatsCache(context, g.id, ReviewMath.encodeTurns(result))
+                    LibraryStore.updateStatsCache(
+                        context, g.id, ReviewMath.encodeSparse(merged)
+                    )
                 }
             } catch (e: Exception) {
                 errorText = "整场分析失败：${e.message ?: "未知错误"}"
@@ -159,26 +176,32 @@ fun ReviewScreen(
     }
 
     LaunchedEffect(current.id) {
-        if (turns == null && totalMoves > 0) startAnalysis()
+        // A handful of missing turns fills in automatically; a big gap
+        // (a library game with no live-recorded stats) lets the user
+        // pick fast vs precise first.
+        if (totalMoves > 0 && missingTurns.isNotEmpty() && missingTurns.size <= 30) {
+            startAnalysis(60)
+        }
     }
 
     val marks = remember(turns) {
         turns?.let { ReviewMath.marks(current.moves, it) } ?: emptyList()
     }
 
-    val replayGame = remember(ply, current.id) {
+    fun buildGame(upto: Int): GoGame =
         GoGame(current.size, current.komi).also { g ->
             when {
                 current.customStones.isNotEmpty() ->
                     g.loadPosition(current.customStones, current.startPlayer)
                 current.handicap > 0 -> g.setupHandicap(current.handicap)
             }
-            for (i in 0 until ply.coerceAtMost(current.moves.size)) {
+            for (i in 0 until upto.coerceAtMost(current.moves.size)) {
                 val m = current.moves[i]
                 if (m.isPass) g.pass() else g.play(m.x, m.y)
             }
         }
-    }
+
+    val replayGame = remember(ply, current.id) { buildGame(ply) }
 
     val bestMark: List<CandidateMark> = remember(turns, ply, showBest) {
         val t = turns
@@ -231,7 +254,7 @@ fun ReviewScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         Row {
-            TextButton(
+            Button(
                 onClick = { ply = (ply - 1).coerceAtLeast(0) },
                 enabled = ply > 0
             ) { Text("上一手") }
@@ -240,9 +263,9 @@ fun ReviewScreen(
                 fontSize = 14.sp,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(top = 10.dp)
+                    .padding(top = 10.dp, start = 10.dp)
             )
-            TextButton(
+            Button(
                 onClick = { ply = (ply + 1).coerceAtMost(totalMoves) },
                 enabled = ply < totalMoves
             ) { Text("下一手") }
@@ -324,15 +347,12 @@ fun ReviewScreen(
                     marks = marks,
                     onSeek = { ply = it }
                 )
-                Text(
-                    "红线：胜率 · 黄线：目差 · 绿色带：胜率 75% 以上的优势时段 · 拖动曲线或滑块回放",
-                    fontSize = 11.sp, color = Color.Gray
-                )
+                ChartLegend()
             }
             analyzing -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("正在分析整场对局…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("正在补算缺失的手数…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
                             progress = {
@@ -346,7 +366,7 @@ fun ReviewScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "已完成 $progressDone / $progressTotal 手，分析完会自动保存，下次打开直接看。",
+                            "对局时已算好 ${statsMap.size} 手，只需补算 $progressTotal 手；已完成 $progressDone 手。补完会自动保存，下次打开直接看。",
                             fontSize = 12.sp, color = Color.Gray
                         )
                     }
@@ -354,7 +374,29 @@ fun ReviewScreen(
             }
             errorText.isNotEmpty() -> {
                 Text(errorText, fontSize = 13.sp, color = Color(0xFFB3261E))
-                OutlinedButton(onClick = { startAnalysis() }) { Text("重新分析") }
+                OutlinedButton(onClick = { startAnalysis(60) }) { Text("重新分析") }
+            }
+            missingTurns.size > 30 -> {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("这局棋还没有逐手数据", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "共需分析 ${missingTurns.size} 手（以后新打的对局会在对局时就偷偷算好，复盘秒开）。选一种分析方式：",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = { startAnalysis(40) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("快速分析（够看恶手妙手）") }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { startAnalysis(100) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("精准分析（更慢，数字更准）") }
+                    }
+                }
             }
             totalMoves == 0 -> {
                 Text("这局还没有落子记录，没法复盘。", fontSize = 13.sp, color = Color.Gray)
@@ -407,6 +449,40 @@ fun ReviewScreen(
                 "判定：胜率掉 15% 以上为恶手；下出 AI 一选且不亏为妙手；全场胜率波动最大的一手为关键手。",
                 fontSize = 11.sp, color = Color.Gray
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    val t = turns!!
+                    val comments = HashMap<Int, String>()
+                    for (i in current.moves.indices) {
+                        val after = t[i + 1]
+                        val sb = StringBuilder()
+                        sb.append("黑胜率 ").append(fmtPct(after.winrateBlack))
+                        sb.append(" · 黑目差 ").append(String.format("%+.1f", after.scoreLeadBlack))
+                        for (mark in marks) {
+                            if (mark.moveNumber == i + 1) {
+                                val label = when (mark.kind) {
+                                    MarkKind.BLUNDER -> "恶手"
+                                    MarkKind.BRILLIANT -> "妙手"
+                                    MarkKind.KEY -> "关键手"
+                                }
+                                sb.append(" 【").append(label).append(" ")
+                                    .append(fmtDelta(mark.deltaPercent)).append("】")
+                            }
+                        }
+                        comments[i + 1] = sb.toString()
+                    }
+                    val sgf = com.tuxungo.android.go.Sgf.export(
+                        game = buildGame(totalMoves),
+                        setupStones = current.customStones,
+                        startPlayer = current.startPlayer,
+                        comments = comments
+                    )
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(sgf))
+                    sgfCopied = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (sgfCopied) "已复制，去粘贴分享吧" else "导出带解说棋谱（复制 SGF）") }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -436,17 +512,18 @@ fun ReviewScreen(
 
     if (showSaveDialog) {
         SaveGameDialog(
-            game = current,
+            game = current.copy(
+                statsCache = if (statsMap.isNotEmpty()) {
+                    ReviewMath.encodeSparse(statsMap)
+                } else {
+                    current.statsCache
+                }
+            ),
             onDismiss = { showSaveDialog = false },
             onSaved = { saved ->
                 current = saved
                 savedNote = true
                 showSaveDialog = false
-                if (turns != null) {
-                    LibraryStore.updateStatsCache(
-                        context, saved.id, ReviewMath.encodeTurns(turns!!)
-                    )
-                }
             }
         )
     }
@@ -565,18 +642,55 @@ private fun WinrateChart(
             drawCircle(color = color, radius = radius, center = center)
         }
 
-        // Cursor.
+        // Cursor: a line plus a ringed handle on the curve, easy to
+        // grab and drag along.
         val cx = xOf(ply.coerceIn(0, total))
-        drawLine(cursorColor, Offset(cx, 0f), Offset(cx, h), strokeWidth = 2f)
-        drawCircle(
-            color = cursorColor,
-            radius = 6f,
-            center = Offset(
-                cx,
-                yWr(ReviewMath.winrateFor(turns[ply.coerceIn(0, total)], perspective))
-            )
+        drawLine(cursorColor, Offset(cx, 0f), Offset(cx, h), strokeWidth = 3f)
+        val handle = Offset(
+            cx,
+            yWr(ReviewMath.winrateFor(turns[ply.coerceIn(0, total)], perspective))
         )
+        drawCircle(color = Color.White, radius = 10f, center = handle)
+        drawCircle(color = cursorColor, radius = 7f, center = handle)
     }
+}
+
+/** Graphic legend for the chart: swatches first, words second. */
+@Composable
+private fun ChartLegend() {
+    Row(
+        modifier = Modifier.padding(top = 6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 16.dp, height = 3.dp)
+                .background(Color(0xFFB03A2E))
+        )
+        Text(" 胜率  ", fontSize = 11.sp, color = Color.Gray)
+        Box(
+            modifier = Modifier
+                .size(width = 16.dp, height = 3.dp)
+                .background(Color(0xFFE6A817))
+        )
+        Text(" 目差  ", fontSize = 11.sp, color = Color.Gray)
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(Color(0xFF43A047).copy(alpha = 0.40f))
+        )
+        Text(" 优势区 ≥75%  ", fontSize = 11.sp, color = Color.Gray)
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(Color(0xFF6A1B9A), shape = androidx.compose.foundation.shape.CircleShape)
+        )
+        Text(" 当前手", fontSize = 11.sp, color = Color.Gray)
+    }
+    Text(
+        "按住曲线左右拖动，可以跳到任意一手",
+        fontSize = 11.sp, color = Color.Gray
+    )
 }
 
 private fun fmtPct(v: Double): String = String.format("%.1f%%", v * 100)

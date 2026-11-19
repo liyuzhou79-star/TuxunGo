@@ -17,10 +17,18 @@ object GameStore {
     data class SavedGame(
         val config: GameConfig,
         val moves: List<Move>,
-        val finished: Boolean
+        val finished: Boolean,
+        /** Per-turn win-rate stats recorded live during the game. */
+        val turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
     )
 
-    fun save(context: Context, config: GameConfig, moves: List<Move>, finished: Boolean) {
+    fun save(
+        context: Context,
+        config: GameConfig,
+        moves: List<Move>,
+        finished: Boolean,
+        turnStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap()
+    ) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("exists", true)
             .putString("mode", config.mode.name)
@@ -34,6 +42,10 @@ object GameStore {
             .putString("customStones", encodeMoves(config.customStones))
             .putString("moves", encodeMoves(moves))
             .putBoolean("finished", finished)
+            .putString(
+                "turnStats",
+                com.tuxungo.android.engine.ReviewMath.encodeSparse(turnStats)
+            )
             .apply()
     }
 
@@ -60,7 +72,10 @@ object GameStore {
         return SavedGame(
             config = config,
             moves = decodeMoves(p.getString("moves", "") ?: ""),
-            finished = p.getBoolean("finished", false)
+            finished = p.getBoolean("finished", false),
+            turnStats = com.tuxungo.android.engine.ReviewMath.decodeSparse(
+                p.getString("turnStats", "") ?: ""
+            )
         )
     }
 

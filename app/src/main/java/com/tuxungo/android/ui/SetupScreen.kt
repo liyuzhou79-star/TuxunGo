@@ -72,6 +72,36 @@ fun SetupScreen(
 
         Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "快速开始", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    onStart(GameConfig(mode = GameMode.PVE, width = 9, height = 9, aiVisits = 200))
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("9 路快棋") }
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    onStart(GameConfig(mode = GameMode.PVE, width = 19, height = 19, aiVisits = 200))
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("19 路标准局") }
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    onStart(GameConfig(mode = GameMode.EVE, width = 19, height = 19, aiVisits = 200))
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("AI 表演赛") }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "一键开局，参数按常用配置设好；想细调可以用下面的设置。", fontSize = 12.sp, color = Color.Gray)
+        }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "对弈模式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -239,7 +269,7 @@ fun SetupScreen(
         }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.0.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.0.1", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

@@ -108,4 +108,47 @@ object ReviewMath {
     }
 
     private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%.3f", v)
+
+    /**
+     * Sparse form: "turn=wr,lead,bx,by;..." — only the turns present in
+     * the map. Used for stats recorded live during a game, where some
+     * turns may be missing and get filled in at review time.
+     */
+    fun encodeSparse(stats: Map<Int, TurnStat>): String =
+        stats.entries.sortedBy { it.key }.joinToString(";") { (turn, t) ->
+            val bx = t.bestMove?.x ?: -1
+            val by = t.bestMove?.y ?: -1
+            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by"
+        }
+
+    /** Parses the sparse form; also tolerates the dense form. */
+    fun decodeSparse(text: String?): Map<Int, TurnStat> {
+        if (text.isNullOrBlank()) return emptyMap()
+        val out = HashMap<Int, TurnStat>()
+        val parts = text.split(";")
+        for ((idx, part) in parts.withIndex()) {
+            if (part.isBlank()) continue
+            val eq = part.indexOf('=')
+            val turn: Int
+            val body: String
+            if (eq >= 0) {
+                turn = part.substring(0, eq).toIntOrNull() ?: continue
+                body = part.substring(eq + 1)
+            } else {
+                turn = idx
+                body = part
+            }
+            val f = body.split(",")
+            val bx = f.getOrNull(2)?.toIntOrNull() ?: -1
+            val by = f.getOrNull(3)?.toIntOrNull() ?: -1
+            out[turn] = TurnStat(
+                turn = turn,
+                winrateBlack = f.getOrNull(0)?.toDoubleOrNull() ?: 0.5,
+                scoreLeadBlack = f.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
+                bestMove = if (bx >= 0 && by >= 0) Move(Stone.BLACK, bx, by) else null,
+                bestIsPass = bx < 0
+            )
+        }
+        return out
+    }
 }

@@ -209,6 +209,7 @@ class AnalysisEngine private constructor(
         sideToMove: Stone,
         maxVisits: Int,
         timeoutSeconds: Long = 900,
+        onlyTurns: Set<Int>? = null,
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): List<TurnStat> {
         check(isAlive) { "分析引擎未运行。${diagnostics()}" }
@@ -234,8 +235,9 @@ class AnalysisEngine private constructor(
             moveArr.put(JSONArray().put(color).put(KataEngine.toVertex(move, size)))
         }
         query.put("moves", moveArr)
+        val wantedTurns = onlyTurns?.sorted() ?: (0..moves.size).toList()
         val turnsArr = JSONArray()
-        for (t in 0..moves.size) turnsArr.put(t)
+        for (t in wantedTurns) turnsArr.put(t)
         query.put("analyzeTurns", turnsArr)
 
         responses.clear()
@@ -244,7 +246,7 @@ class AnalysisEngine private constructor(
             input.newLine()
             input.flush()
         }
-        val total = moves.size + 1
+        val total = wantedTurns.size
         val byTurn = HashMap<Int, TurnStat>()
         val deadline = System.currentTimeMillis() + timeoutSeconds * 1000
         while (byTurn.size < total) {
@@ -290,7 +292,7 @@ class AnalysisEngine private constructor(
             byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass)
             onProgress(byTurn.size, total)
         }
-        return (0..moves.size).map { byTurn[it] ?: TurnStat(it, 0.5, 0.0, null, false) }
+        return wantedTurns.map { byTurn[it] ?: TurnStat(it, 0.5, 0.0, null, false) }
     }
 
     private fun parseResult(resp: JSONObject, size: BoardSize, sideToMove: Stone): AnalysisResult {
