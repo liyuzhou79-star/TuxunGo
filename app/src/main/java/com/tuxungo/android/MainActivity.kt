@@ -11,6 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -130,6 +131,7 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
     var restoreTimeoutBy by remember {
         mutableStateOf(restored?.timeoutBy)
     }
+    var restartNonce by remember { mutableIntStateOf(0) }
     var editSize by remember { mutableStateOf(19 to 19) }
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
     var reviewInitialPly by remember { mutableStateOf<Int?>(null) }
@@ -243,11 +245,18 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
             if (current == null) {
                 screen = Screen.SETUP
             } else {
-                key(current, restoreMoves) {
+                key(current, restoreMoves, restartNonce) {
                     GameScreen(
                         config = current,
                         initialMoves = restoreMoves,
                         onExit = { screen = Screen.SETUP },
+                        onRestart = {
+                            restoreMoves = emptyList()
+                            restoreStats = emptyMap()
+                            restoreClock = null
+                            restoreTimeoutBy = null
+                            restartNonce++
+                        },
                         onReview = {
                             reviewGame = it
                             reviewInitialPly = null

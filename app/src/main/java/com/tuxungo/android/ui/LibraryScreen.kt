@@ -200,21 +200,21 @@ fun LibraryScreen(
             FilterChip(
                 selected = selected == "ALL",
                 onClick = { selected = "ALL" },
-                label = { Text("全部") }
+                label = { Text("全部 ${games.size}") }
             )
             for (f in folders) {
                 Spacer(modifier = Modifier.padding(start = 6.dp))
                 FilterChip(
                     selected = selected == f.id,
                     onClick = { selected = f.id },
-                    label = { Text(f.name) }
+                    label = { Text("${f.name} ${games.count { it.folderId == f.id }}") }
                 )
             }
             Spacer(modifier = Modifier.padding(start = 6.dp))
             FilterChip(
                 selected = selected == null,
                 onClick = { selected = null },
-                label = { Text("未分类") }
+                label = { Text("未分类 ${games.count { it.folderId == null }}") }
             )
         }
         val selectedFolder = folders.firstOrNull { it.id == selected }

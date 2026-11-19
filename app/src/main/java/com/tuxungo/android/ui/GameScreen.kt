@@ -72,6 +72,7 @@ fun GameScreen(
     onExit: () -> Unit,
     onReview: (com.tuxungo.android.LibraryGame) -> Unit = {},
     onReviewAtPly: (com.tuxungo.android.LibraryGame, Int) -> Unit = { g, _ -> onReview(g) },
+    onRestart: () -> Unit = {},
     initialStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap(),
     initialClock: GameStore.ClockSnapshot? = null,
     initialTimeoutBy: Stone? = null
@@ -1006,6 +1007,21 @@ fun GameScreen(
                 autoKey == game.moves.size -> autoResult
                 else -> null
             }
+            Box(modifier = Modifier.fillMaxWidth().height(8.dp)) {
+                if (fsRes != null) {
+                    val bw = fsRes.rootWinrateBlack.toFloat().coerceIn(0.02f, 0.98f)
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                        Box(
+                            modifier = Modifier.weight(bw).height(6.dp)
+                                .background(Color(0xFF263238))
+                        )
+                        Box(
+                            modifier = Modifier.weight(1f - bw).height(6.dp)
+                                .background(Color(0xFFCFD8DC))
+                        )
+                    }
+                }
+            }
             Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
                 if (fsRes != null) {
                     Text(
@@ -1763,6 +1779,7 @@ fun GameScreen(
                             }
                         ) { Text("跳到转折手复盘") }
                     }
+                    TextButton(onClick = { onRestart() }) { Text("再来一局（相同设置）") }
                 }
             },
             confirmButton = {

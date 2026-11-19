@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -155,6 +156,10 @@ fun TsumegoScreen(onBack: () -> Unit) {
     var statusText by remember {
         mutableStateOf("轮到黑棋下：点棋盘选点，再点一次确认。")
     }
+    var startedAt by remember {
+        mutableLongStateOf(System.currentTimeMillis())
+    }
+    var solveInfo by remember { mutableStateOf("") }
 
     fun reset(idx: Int) {
         index = idx
@@ -167,6 +172,8 @@ fun TsumegoScreen(onBack: () -> Unit) {
         hintPoint = null
         replyPending = false
         solved = false
+        startedAt = System.currentTimeMillis()
+        solveInfo = ""
         statusText = "轮到黑棋下：点棋盘选点，再点一次确认。"
     }
 
@@ -242,6 +249,9 @@ fun TsumegoScreen(onBack: () -> Unit) {
             fontSize = 13.sp,
             color = if (solved) Color(0xFF2E7D32) else Color(0xFF2F7CF6)
         )
+        if (solveInfo.isNotEmpty()) {
+            Text(text = solveInfo, fontSize = 12.sp, color = Color.Gray)
+        }
         Spacer(modifier = Modifier.height(6.dp))
 
         BoardView(
@@ -262,6 +272,15 @@ fun TsumegoScreen(onBack: () -> Unit) {
                         version++
                         if (step >= problem.steps.size - 1) {
                             solved = true
+                            val secs = ((System.currentTimeMillis() - startedAt) / 1000)
+                                .toInt().coerceAtLeast(1)
+                            val bestKey = "best_$index"
+                            val prevBest = prefs.getInt(bestKey, Int.MAX_VALUE)
+                            val newBest = minOf(prevBest, secs)
+                            if (newBest != prevBest) {
+                                prefs.edit().putInt(bestKey, newBest).apply()
+                            }
+                            solveInfo = "用时 $secs 秒 · 本题最佳 $newBest 秒"
                             statusText = problem.doneText +
                                 if (mistakes > 0) "（本題错了 $mistakes 次）" else "（一次没错，漂亮）"
                             if (index !in solvedSet) {
