@@ -3,11 +3,6 @@ package com.tuxungo.android.ui
 import android.media.AudioAttributes
 import android.media.SoundPool
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -70,7 +65,12 @@ import kotlinx.coroutines.delay
 private val Rose = Color(0xFFD81B60)
 
 @Composable
-fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExit: () -> Unit) {
+fun GameScreen(
+    config: GameConfig,
+    initialMoves: List<Move> = emptyList(),
+    onExit: () -> Unit,
+    onReview: (com.tuxungo.android.LibraryGame) -> Unit = {}
+) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
     val game = remember(config) {
@@ -671,6 +671,42 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         onExit()
     }
 
+    var showSaveToLibrary by remember { mutableStateOf(false) }
+    var savedToLibrary by remember { mutableStateOf(false) }
+
+    fun resultSummary(): String {
+        if (game.resignedBy != null) {
+            return "${if (game.resignedBy == Stone.BLACK) "白" else "黑"}方胜（对方认输）"
+        }
+        val s = game.scoringDead?.let { game.scoreWithDead(it) } ?: game.score()
+        val winner = if (s.lead > 0) "黑" else "白"
+        return "${winner}方胜 ${formatNum(kotlin.math.abs(s.lead))} 目"
+    }
+
+    fun buildLibraryGame(): com.tuxungo.android.LibraryGame {
+        val modeLabel = when {
+            config.customStones.isNotEmpty() -> "摆棋对局"
+            config.mode == GameMode.EVE -> "AI 对 AI"
+            config.mode == GameMode.PVE -> "人机对弈"
+            else -> "双人对弈"
+        }
+        return com.tuxungo.android.LibraryGame(
+            id = "",
+            folderId = null,
+            title = "$modeLabel · ${config.width}×${config.height} · ${game.moves.size} 手",
+            createdAt = System.currentTimeMillis(),
+            modeLabel = modeLabel,
+            size = game.size,
+            komi = game.komi,
+            handicap = config.handicap,
+            customStones = config.customStones,
+            startPlayer = config.startPlayer,
+            moves = game.moves.toList(),
+            resultText = if (game.finished) resultSummary() else "",
+            statsCache = null
+        )
+    }
+
     // Read version so Compose recomposes after each move.
     @Suppress("UNUSED_EXPRESSION") version
 
@@ -705,6 +741,9 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
     fun doUndo() {
         if (game.moves.isEmpty()) return
         cancelAi()
+        // Undoing during an AI-vs-AI run pauses it, so the position
+        // stays where the user put it instead of playing on at once.
+        if (bothAi) eveRunning = false
         if ((takeoverBlack || takeoverWhite) && !bothAi) {
             // Undo back to the last turn a human controls.
             var guard = game.moves.size + 2
@@ -867,27 +906,36 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             autoKey == game.moves.size -> autoResult
             else -> null
         }
-        if (liveRes != null) {
-            val stonesArr = Array(game.size.area) { i ->
-                game.stoneAt(i % game.size.width, i / game.size.width)
-            }
-            val est = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr, 0.5)
-            var aliveB = 0
-            var aliveW = 0
-            for (i in stonesArr.indices) {
-                val s = stonesArr[i] ?: continue
-                val v = if (i < liveRes.ownershipBlack.size) liveRes.ownershipBlack[i] else 0.0
-                val dead = (s == Stone.BLACK && v < -0.5) || (s == Stone.WHITE && v > 0.5)
-                if (!dead) {
-                    if (s == Stone.BLACK) aliveB++ else aliveW++
+        // Fixed height whether or not an estimate is ready yet, so the
+        // board never gets pushed down when the numbers arrive.
+        Box(modifier = Modifier.fillMaxWidth().height(18.dp)) {
+            if (liveRes != null) {
+                val stonesArr = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
                 }
+                val est = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr, 0.5)
+                var aliveB = 0
+                var aliveW = 0
+                for (i in stonesArr.indices) {
+                    val s = stonesArr[i] ?: continue
+                    val v = if (i < liveRes.ownershipBlack.size) liveRes.ownershipBlack[i] else 0.0
+                    val dead = (s == Stone.BLACK && v < -0.5) || (s == Stone.WHITE && v > 0.5)
+                    if (!dead) {
+                        if (s == Stone.BLACK) aliveB++ else aliveW++
+                    }
+                }
+                val blackTotal = est.blackTerritory + aliveB
+                val whiteTotal = est.whiteTerritory + aliveW + game.komi
+                Text(
+                    text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            } else {
+                Text(
+                    text = "形势：等待分析…",
+                    fontSize = 12.sp, color = Color.LightGray
+                )
             }
-            val blackTotal = est.blackTerritory + aliveB
-            val whiteTotal = est.whiteTerritory + aliveW + game.komi
-            Text(
-                text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}",
-                fontSize = 12.sp, color = Color.Gray
-            )
         }
         // Fixed-height status strip: the AI-thinking text and the
         // tap-to-confirm hint live here so the board never jumps up or
@@ -905,6 +953,23 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
+        }
+        if (finished) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onReview(buildLibraryGame()) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("查看复盘") }
+                OutlinedButton(
+                    onClick = { showSaveToLibrary = true },
+                    modifier = Modifier.weight(1f),
+                    enabled = !savedToLibrary
+                ) { Text(if (savedToLibrary) "已收藏" else "收藏棋谱") }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
         }
         if (anyEngineFailed) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -997,12 +1062,8 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
 
         // ---- Judgment panel ----
-        AnimatedVisibility(
-            visible = judgmentActive,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            val j = judgment ?: return@AnimatedVisibility
+        if (judgmentActive) {
+            val j = judgment!!
             val stones = Array(game.size.area) { i ->
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
@@ -1035,11 +1096,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         }
 
         // ---- Analysis panel ----
-        AnimatedVisibility(
-            visible = !judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null),
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
+        if (!judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null)) {
             if (analyzing || (currentAnalysis == null && analysisStatus.isNotEmpty())) {
                 Text(text = analysisStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1301,6 +1358,17 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
         )
     }
 
+    if (showSaveToLibrary) {
+        SaveGameDialog(
+            game = buildLibraryGame(),
+            onDismiss = { showSaveToLibrary = false },
+            onSaved = {
+                savedToLibrary = true
+                showSaveToLibrary = false
+            }
+        )
+    }
+
     if (finished && !resultDismissed) {
         val resultText = if (game.resignedBy != null) {
             "${if (game.resignedBy == Stone.BLACK) "白" else "黑"}方胜（对方认输）"
@@ -1361,7 +1429,13 @@ private fun AiSideSection(
                     OutlinedButton(
                         onClick = { expanded = true },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("模型：$currentName") }
+                    ) {
+                        Text(
+                            "模型：$currentName",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
                     androidx.compose.material3.DropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
@@ -1383,7 +1457,8 @@ private fun AiSideSection(
                         FilterChip(
                             selected = cfg.visits == v,
                             onClick = { onCfgChange(cfg.copy(visits = v)) },
-                            label = { Text(label) }
+                            label = { Text(label, maxLines = 1) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }

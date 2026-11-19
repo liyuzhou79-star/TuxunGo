@@ -147,8 +147,8 @@ fun ModelsScreen(onBack: () -> Unit) {
                                 Toast.makeText(context, "已切换为：${model.displayName}", Toast.LENGTH_SHORT).show()
                             }) { Text("使用") }
                         }
+                        OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
                         if (!model.isBundled) {
-                            OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
                             OutlinedButton(onClick = { deleteTarget = model }) { Text("删除") }
                         }
                     }

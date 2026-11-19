@@ -22,7 +22,9 @@ import com.tuxungo.android.go.Move
 import com.tuxungo.android.ui.EditScreen
 import com.tuxungo.android.ui.GameConfig
 import com.tuxungo.android.ui.GameScreen
+import com.tuxungo.android.ui.LibraryScreen
 import com.tuxungo.android.ui.ModelsScreen
+import com.tuxungo.android.ui.ReviewScreen
 import com.tuxungo.android.ui.SettingsScreen
 import com.tuxungo.android.ui.SetupScreen
 
@@ -61,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW }
 
 @Composable
 fun TuxunGoApp() {
@@ -74,6 +76,8 @@ fun TuxunGoApp() {
     var config by remember { mutableStateOf(restored?.config) }
     var restoreMoves by remember { mutableStateOf<List<Move>>(restored?.moves ?: emptyList()) }
     var editSize by remember { mutableStateOf(19 to 19) }
+    var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
+    var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
         transitionSpec = {
@@ -98,6 +102,7 @@ fun TuxunGoApp() {
                 screen = Screen.GAME
             },
             onOpenModels = { screen = Screen.MODELS },
+            onOpenLibrary = { screen = Screen.LIBRARY },
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenEditor = { w, h ->
                 editSize = w to h
@@ -105,6 +110,38 @@ fun TuxunGoApp() {
             }
         )
         Screen.MODELS -> ModelsScreen(onBack = { screen = Screen.SETUP })
+        Screen.LIBRARY -> LibraryScreen(
+            onBack = { screen = Screen.SETUP },
+            onOpenGame = {
+                reviewGame = it
+                screenBeforeReview = Screen.LIBRARY
+                screen = Screen.REVIEW
+            }
+        )
+        Screen.REVIEW -> {
+            val g = reviewGame
+            if (g == null) {
+                screen = Screen.SETUP
+            } else {
+                ReviewScreen(
+                    game = g,
+                    onBack = {
+                        if (screenBeforeReview == Screen.GAME) {
+                            // Rebuild the finished board from its moves.
+                            restoreMoves = g.moves
+                            screen = Screen.GAME
+                        } else {
+                            screen = screenBeforeReview
+                        }
+                    },
+                    onContinue = {
+                        config = it
+                        restoreMoves = emptyList()
+                        screen = Screen.GAME
+                    }
+                )
+            }
+        }
         Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.SETUP })
         Screen.EDIT -> EditScreen(
             width = editSize.first,
@@ -125,7 +162,12 @@ fun TuxunGoApp() {
                     GameScreen(
                         config = current,
                         initialMoves = restoreMoves,
-                        onExit = { screen = Screen.SETUP }
+                        onExit = { screen = Screen.SETUP },
+                        onReview = {
+                            reviewGame = it
+                            screenBeforeReview = Screen.GAME
+                            screen = Screen.REVIEW
+                        }
                     )
                 }
             }

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 fun SetupScreen(
     onStart: (GameConfig) -> Unit,
     onOpenModels: () -> Unit,
+    onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenEditor: (Int, Int) -> Unit
 ) {
@@ -225,7 +226,20 @@ fun SetupScreen(
         }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 0.1.0（开发中）", fontSize = 12.sp, color = Color.Gray)
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "棋谱库", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "收藏的对局都在这里，点开就能复盘整场。", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenLibrary,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("打开棋谱库") }
+        }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(text = "版本 1.0.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

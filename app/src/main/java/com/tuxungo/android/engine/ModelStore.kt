@@ -67,11 +67,21 @@ object ModelStore {
         }
         return ModelInfo(
             id = BUNDLED_ID,
-            displayName = header?.name ?: "内置默认模型",
+            displayName = nickname(context, BUNDLED_ID) ?: "内置默认模型",
             archText = (header?.describe() ?: "KataGo 官方网络") + " · 内置",
             sizeBytes = file.length(),
             isBundled = true
         )
+    }
+
+    /** A user-chosen nickname for any model (bundled included), if set. */
+    fun nickname(context: Context, id: String): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("nick_$id", null)?.takeIf { it.isNotBlank() }
+
+    fun setNickname(context: Context, id: String, name: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString("nick_$id", name).apply()
     }
 
     fun list(context: Context): List<ModelInfo> {
@@ -91,7 +101,10 @@ object ModelStore {
                 )
             )
         }
-        return out
+        // Nicknames win over stored names everywhere the list is shown.
+        return out.map { info ->
+            nickname(context, info.id)?.let { info.copy(displayName = it) } ?: info
+        }
     }
 
     fun activeId(context: Context): String =
@@ -125,6 +138,11 @@ object ModelStore {
     fun resolveActiveFile(context: Context): File = resolveFile(context, activeId(context))
 
     fun rename(context: Context, id: String, newName: String) {
+        if (id == BUNDLED_ID) {
+            setNickname(context, id, newName)
+            return
+        }
+        setNickname(context, id, newName)
         val index = readIndex(context)
         for (i in 0 until index.length()) {
             val o = index.optJSONObject(i) ?: continue

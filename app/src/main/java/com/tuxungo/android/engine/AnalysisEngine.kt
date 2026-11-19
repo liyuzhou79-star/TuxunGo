@@ -194,6 +194,105 @@ class AnalysisEngine private constructor(
         }
     }
 
+    /**
+     * Analyzes EVERY turn of a finished game in one query (for the
+     * review screen). Returns one TurnStat per turn 0..moves.size.
+     * [onProgress] is called with (done, total) as turns stream in.
+     */
+    @Synchronized
+    fun analyzeGame(
+        size: BoardSize,
+        komi: Double,
+        initialStones: List<Move>,
+        initialPlayer: Stone,
+        moves: List<Move>,
+        sideToMove: Stone,
+        maxVisits: Int,
+        timeoutSeconds: Long = 900,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): List<TurnStat> {
+        check(isAlive) { "分析引擎未运行。${diagnostics()}" }
+        val id = "q${nextId++}"
+        val query = JSONObject()
+        query.put("id", id)
+        query.put("rules", "chinese")
+        query.put("komi", komi)
+        query.put("boardXSize", size.width)
+        query.put("boardYSize", size.height)
+        query.put("maxVisits", maxVisits)
+        query.put("includeOwnership", false)
+        val initial = JSONArray()
+        for (s in initialStones) {
+            val v = KataEngine.toVertex(s, size)
+            initial.put(JSONArray().put(if (s.stone == Stone.BLACK) "B" else "W").put(v))
+        }
+        query.put("initialStones", initial)
+        query.put("initialPlayer", if (initialPlayer == Stone.BLACK) "B" else "W")
+        val moveArr = JSONArray()
+        for (move in moves) {
+            val color = if (move.stone == Stone.BLACK) "B" else "W"
+            moveArr.put(JSONArray().put(color).put(KataEngine.toVertex(move, size)))
+        }
+        query.put("moves", moveArr)
+        val turnsArr = JSONArray()
+        for (t in 0..moves.size) turnsArr.put(t)
+        query.put("analyzeTurns", turnsArr)
+
+        responses.clear()
+        synchronized(input) {
+            input.write(query.toString())
+            input.newLine()
+            input.flush()
+        }
+        val total = moves.size + 1
+        val byTurn = HashMap<Int, TurnStat>()
+        val deadline = System.currentTimeMillis() + timeoutSeconds * 1000
+        while (byTurn.size < total) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) {
+                throw IllegalStateException("整场分析超时。${diagnostics()}")
+            }
+            val resp = responses.poll(remaining, TimeUnit.MILLISECONDS)
+                ?: throw IllegalStateException("整场分析超时。${diagnostics()}")
+            if (resp.optString("id") != id) continue
+            if (resp.has("error")) {
+                throw IllegalStateException("分析引擎报错：${resp.optString("error")} ${diagnostics()}")
+            }
+            if (resp.optBoolean("isDuringSearch", false)) continue
+            val turn = resp.optInt("turnNumber", -1)
+            if (turn < 0 || byTurn.containsKey(turn)) continue
+            val mover = if (turn < moves.size) moves[turn].stone else sideToMove
+            val root = resp.optJSONObject("rootInfo")
+            val rootWr = root?.optDouble("winrate", 0.5) ?: 0.5
+            val rootLead = root?.optDouble("scoreLead", 0.0) ?: 0.0
+            val (wrB, leadB) = AnalysisMath.toBlackPerspective(rootWr, rootLead, mover)
+            var best: Move? = null
+            var bestIsPass = false
+            val infos = resp.optJSONArray("moveInfos")
+            if (infos != null && infos.length() > 0) {
+                var bestOrder = Int.MAX_VALUE
+                for (i in 0 until infos.length()) {
+                    val info = infos.optJSONObject(i) ?: continue
+                    val order = info.optInt("order", Int.MAX_VALUE)
+                    if (order < bestOrder) {
+                        bestOrder = order
+                        val vertex = info.optString("move", "pass")
+                        if (vertex.equals("pass", ignoreCase = true)) {
+                            bestIsPass = true
+                            best = null
+                        } else {
+                            best = KataEngine.fromVertex(vertex, mover, size)
+                            bestIsPass = false
+                        }
+                    }
+                }
+            }
+            byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass)
+            onProgress(byTurn.size, total)
+        }
+        return (0..moves.size).map { byTurn[it] ?: TurnStat(it, 0.5, 0.0, null, false) }
+    }
+
     private fun parseResult(resp: JSONObject, size: BoardSize, sideToMove: Stone): AnalysisResult {
         val root = resp.optJSONObject("rootInfo")
         val rootWr = root?.optDouble("winrate", 0.5) ?: 0.5
