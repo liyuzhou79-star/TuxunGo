@@ -408,13 +408,14 @@ fun GameScreen(
         judging = false
         scoringBusy = false
         analysisStatus = "已取消分析"
-        // Retire the engine so a stuck query cannot block the next one;
-        // the quit runs after the in-flight task on the same runner.
+        // Retire the engine RIGHT NOW (destroy is non-blocking): the
+        // in-flight analyze() notices the dead process within half a
+        // second and unwinds, freeing the runner. Queueing the quit
+        // behind the stuck task was the old behavior — the quit then
+        // never ran and everything stayed "analyzing" forever.
         val eng = analysisEngine
         analysisEngine = null
-        if (eng != null) {
-            analysisRunner.submit({ eng.quit() }) { }
-        }
+        eng?.quit()
     }
 
     // Per-turn win-rate stats recorded quietly while the game runs, so
@@ -445,7 +446,10 @@ fun GameScreen(
             onDone?.invoke()
             return
         }
-        val token = ++analysisToken
+        // Only cancelAnalysis() may invalidate a token. Starting one
+        // task must never silently kill another task's callback (that
+        // cross-invalidation left "analyzing" stuck on forever).
+        val token = analysisToken
         // Fresh result for this exact position: reuse instantly.
         if (!deep && visitsOverride == null && analysis != null && analysisKey == game.moves.size) {
             onDone?.invoke()
@@ -477,7 +481,12 @@ fun GameScreen(
                 maxVisits = visitsOverride ?: if (deep) 1200 else 300
             )
         }) { result ->
-            if (token != analysisToken) return@submit // cancelled meanwhile
+            if (token != analysisToken) {
+                // Cancelled meanwhile; cancel already reset the flags,
+                // but never leave this one dangling either way.
+                analyzing = false
+                return@submit
+            }
             analyzing = false
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
@@ -590,7 +599,7 @@ fun GameScreen(
         cancelAi()
         scoringBusy = true
         scoringNote = "引擎判定死子中…"
-        val token = ++analysisToken
+        val token = analysisToken
         val movesSnapshot = game.moves.toList()
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
@@ -615,8 +624,8 @@ fun GameScreen(
                 maxVisits = 600
             )
         }) { result ->
-            if (token != analysisToken) return@submit
             scoringBusy = false
+            if (token != analysisToken) return@submit // cancelled meanwhile
             val suggested = mutableSetOf<Int>()
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
@@ -906,11 +915,23 @@ fun GameScreen(
                     enabled = analysisAllowed && !finished,
                     modifier = Modifier.weight(1f)
                 ) { Text(if (analyzing) "分析中…" else "AI 分析") }
-                Button(
-                    onClick = { runJudgment() },
-                    enabled = analysisAllowed && !finished,
-                    modifier = Modifier.weight(1f)
-                ) { Text(if (judging) "判断中…" else "形式判断") }
+                val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
+                when {
+                    judging -> Button(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("判断中…") }
+                    judgmentFreshFs -> Button(
+                        onClick = { judgment = null; judgmentKey = -1 },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("关闭形式判断") }
+                    else -> Button(
+                        onClick = { runJudgment() },
+                        enabled = analysisAllowed && !finished,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("形式判断") }
+                }
                 OutlinedButton(
                     onClick = { fullscreen = false },
                     modifier = Modifier.weight(1f)
@@ -1286,11 +1307,23 @@ fun GameScreen(
                 enabled = analysisAllowed && !finished,
                 modifier = Modifier.weight(1f)
             ) { Text(if (analyzing) "分析中…" else "AI 分析") }
-            OutlinedButton(
-                onClick = { runJudgment() },
-                enabled = !analyzing && !judging && !aiThinking && !finished,
-                modifier = Modifier.weight(1f)
-            ) { Text(if (judging) "判断中…" else "形式判断") }
+            val judgmentFresh = judgment != null && judgmentKey == game.moves.size
+            when {
+                judging -> OutlinedButton(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.weight(1f)
+                ) { Text("判断中…") }
+                judgmentFresh -> Button(
+                    onClick = { judgment = null; judgmentKey = -1 },
+                    modifier = Modifier.weight(1f)
+                ) { Text("关闭形式判断") }
+                else -> OutlinedButton(
+                    onClick = { runJudgment() },
+                    enabled = !analyzing && !aiThinking && !finished,
+                    modifier = Modifier.weight(1f)
+                ) { Text("形式判断") }
+            }
             OutlinedButton(
                 onClick = { enterScoring() },
                 enabled = !finished && !scoringBusy && !aiThinking && (!bothAi || !eveRunning),

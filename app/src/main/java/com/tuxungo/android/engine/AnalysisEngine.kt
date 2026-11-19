@@ -179,18 +179,34 @@ class AnalysisEngine private constructor(
         }
         val deadline = System.currentTimeMillis() + timeoutSeconds * 1000
         while (true) {
+            // Sliced polling: notice a dead engine within half a
+            // second instead of sleeping through the whole timeout.
+            if (!process.isAlive) {
+                isAlive = false
+                throw IllegalStateException("分析引擎已退出。${diagnostics()}")
+            }
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= 0) {
+                killWedged()
                 throw IllegalStateException("分析超时（${timeoutSeconds} 秒）。${diagnostics()}")
             }
-            val resp = responses.poll(remaining, TimeUnit.MILLISECONDS)
-                ?: throw IllegalStateException("分析超时（${timeoutSeconds} 秒）。${diagnostics()}")
+            val resp = responses.poll(minOf(500L, remaining), TimeUnit.MILLISECONDS)
+                ?: continue
             if (resp.optString("id") != id) continue
             if (resp.has("error")) {
                 throw IllegalStateException("分析引擎报错：${resp.optString("error")} ${diagnostics()}")
             }
             if (resp.optBoolean("isDuringSearch", false)) continue
             return parseResult(resp, size, sideToMove)
+        }
+    }
+
+    /** A wedged engine is destroyed so the next task builds a fresh one. */
+    private fun killWedged() {
+        isAlive = false
+        try {
+            process.destroy()
+        } catch (_: Exception) {
         }
     }
 
@@ -250,12 +266,17 @@ class AnalysisEngine private constructor(
         val byTurn = HashMap<Int, TurnStat>()
         val deadline = System.currentTimeMillis() + timeoutSeconds * 1000
         while (byTurn.size < total) {
+            if (!process.isAlive) {
+                isAlive = false
+                throw IllegalStateException("分析引擎已退出。${diagnostics()}")
+            }
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= 0) {
+                killWedged()
                 throw IllegalStateException("整场分析超时。${diagnostics()}")
             }
-            val resp = responses.poll(remaining, TimeUnit.MILLISECONDS)
-                ?: throw IllegalStateException("整场分析超时。${diagnostics()}")
+            val resp = responses.poll(minOf(500L, remaining), TimeUnit.MILLISECONDS)
+                ?: continue
             if (resp.optString("id") != id) continue
             if (resp.has("error")) {
                 throw IllegalStateException("分析引擎报错：${resp.optString("error")} ${diagnostics()}")

@@ -37,6 +37,26 @@ class KataEngine private constructor(
     /** Last stderr lines from the engine, kept so failures can show the real cause. */
     private val stderrTail = StringBuffer()
 
+    /** Complete GTP responses (each ends with a blank line), in order. */
+    private val responseBlocks = java.util.concurrent.LinkedBlockingQueue<String>()
+
+    private val readerThread = thread(start = true, isDaemon = true, name = "katago-gtp-reader") {
+        try {
+            val sb = StringBuilder()
+            while (true) {
+                val line = output.readLine() ?: break
+                if (line.isEmpty()) {
+                    responseBlocks.put(sb.toString())
+                    sb.setLength(0)
+                } else {
+                    sb.append(line).append('\n')
+                }
+            }
+        } catch (_: Exception) {
+        }
+        isAlive = false
+    }
+
     private val stderrDrain = thread(start = true, isDaemon = true, name = "katago-stderr") {
         try {
             process.errorStream.bufferedReader().forEachLine { line ->
@@ -67,23 +87,48 @@ class KataEngine private constructor(
         return sb.toString()
     }
 
-    /** Sends one GTP command and returns the response payload (without the leading '='). */
+    /**
+     * Sends one GTP command and returns the response payload (without
+     * the leading '='). The wait is sliced so a dead engine fails at
+     * once and a wedged engine hits [timeoutSeconds] instead of
+     * hanging the caller forever; a timeout kills the process so the
+     * failure path can rebuild it.
+     */
     @Synchronized
-    fun command(cmd: String): String {
-        check(isAlive) { "KataGo engine is not running" }
+    fun command(cmd: String, timeoutSeconds: Long = 240): String {
+        check(isAlive) { "KataGo engine is not running. ${diagnostics()}" }
         val id = nextId++
         try {
-            input.write("$id $cmd")
-            input.newLine()
-            input.flush()
-            val sb = StringBuilder()
-            while (true) {
-                val line = output.readLine()
-                    ?: throw IllegalStateException("KataGo engine closed its output. ${diagnostics()}")
-                if (line.isEmpty()) break
-                sb.append(line).append('\n')
+            synchronized(input) {
+                input.write("$id $cmd")
+                input.newLine()
+                input.flush()
             }
-            val text = sb.toString().trim()
+            val deadline = System.currentTimeMillis() + timeoutSeconds * 1000
+            var block: String? = null
+            while (block == null) {
+                if (!process.isAlive) {
+                    isAlive = false
+                    throw IllegalStateException(
+                        "KataGo engine closed its output. ${diagnostics()}"
+                    )
+                }
+                val remaining = deadline - System.currentTimeMillis()
+                if (remaining <= 0) {
+                    isAlive = false
+                    try {
+                        process.destroy()
+                    } catch (_: Exception) {
+                    }
+                    throw IllegalStateException(
+                        "引擎无响应（${timeoutSeconds} 秒超时）。${diagnostics()}"
+                    )
+                }
+                block = responseBlocks.poll(
+                    minOf(500L, remaining), TimeUnit.MILLISECONDS
+                )
+            }
+            val text = block.trim()
             if (text.startsWith("?")) {
                 throw IllegalStateException(
                     "KataGo error for '$cmd': ${text.removePrefix("?").trim()} ${diagnostics()}"
@@ -150,7 +195,7 @@ class KataEngine private constructor(
 
     fun quit() {
         try {
-            command("quit")
+            command("quit", timeoutSeconds = 5)
         } catch (_: Exception) {
         }
         isAlive = false
