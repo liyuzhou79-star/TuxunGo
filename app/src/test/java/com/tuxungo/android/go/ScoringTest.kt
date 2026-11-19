@@ -39,17 +39,18 @@ class ScoringTest {
     fun deadStonePointGoesToOpponent() {
         val g = cornerGame()
         val alive = g.score()
-        // Alive: corner empties border both colors -> neutral.
+        // Alive: the 3 corner empties border both colors -> neutral;
+        // the other 72 empty points border only Black -> Black's.
         assertEquals(5, alive.blackStones)
         assertEquals(1, alive.whiteStones)
-        assertEquals(0, alive.blackTerritory)
+        assertEquals(72, alive.blackTerritory)
         assertEquals(0, alive.whiteTerritory)
 
         val withDead = g.scoreWithDead(setOf(g.index(0, 0)))
-        // Dead: the white stone vanishes and all 4 corner points
-        // (its point + 3 empties) become Black territory.
+        // Dead: the white stone vanishes and the 4 corner points
+        // (its point + 3 empties) also become Black territory.
         assertEquals(0, withDead.whiteStones)
-        assertEquals(4, withDead.blackTerritory)
+        assertEquals(76, withDead.blackTerritory)
         assertEquals(5, withDead.blackStones)
     }
 }
