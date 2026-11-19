@@ -1,0 +1,50 @@
+package com.tuxungo.android.go
+
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Minimal SGF (FF[4]) export for finished or in-progress games. */
+object Sgf {
+
+    private fun coord(x: Int): Char = 'a' + x
+
+    fun export(game: GoGame, blackName: String = "", whiteName: String = ""): String {
+        val sb = StringBuilder()
+        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:0.1.0]")
+        if (game.size.isSquare) sb.append("SZ[").append(game.size.width).append("]")
+        else sb.append("SZ[").append(game.size.width).append(':').append(game.size.height).append("]")
+        sb.append("KM[").append(game.komi).append("]")
+        sb.append("DT[").append(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())).append("]")
+        if (blackName.isNotEmpty()) sb.append("PB[").append(blackName).append("]")
+        if (whiteName.isNotEmpty()) sb.append("PW[").append(whiteName).append("]")
+        if (game.handicapStones.isNotEmpty()) {
+            sb.append("HA[").append(game.handicapStones.size).append("]")
+            sb.append("AB")
+            for ((x, y) in game.handicapStones) {
+                sb.append('[').append(coord(x)).append(coord(y)).append(']')
+            }
+        }
+        for (move in game.moves) {
+            sb.append(if (move.stone == Stone.BLACK) ";B[" else ";W[")
+            if (move.isPass) sb.append("tt")
+            else sb.append(coord(move.x)).append(coord(move.y))
+            sb.append("]")
+        }
+        if (game.finished) {
+            val result = when {
+                game.resignedBy != null ->
+                    if (game.resignedBy == Stone.BLACK) "W+R" else "B+R"
+                else -> {
+                    val s = game.score()
+                    val diff = kotlin.math.abs(s.lead)
+                    val text = if (diff % 1.0 == 0.0) diff.toInt().toString() else diff.toString()
+                    if (s.lead > 0) "B+$text" else "W+$text"
+                }
+            }
+            sb.append("RE[").append(result).append("]")
+        }
+        sb.append(')')
+        return sb.toString()
+    }
+}
