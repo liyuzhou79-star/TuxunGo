@@ -20,7 +20,12 @@ private val MarkerBlue = Color(0xFF2F7CF6)
 private val LastMoveRed = Color(0xFFD43D2A)
 
 @Composable
-fun BoardView(game: GoGame, enabled: Boolean, onPointTap: (Int, Int) -> Unit) {
+fun BoardView(
+    game: GoGame,
+    enabled: Boolean,
+    suggestion: Pair<Int, Int>? = null,
+    onPointTap: (Int, Int) -> Unit
+) {
     val w = game.size.width
     val h = game.size.height
     Canvas(
@@ -99,6 +104,22 @@ fun BoardView(game: GoGame, enabled: Boolean, onPointTap: (Int, Int) -> Unit) {
                     )
                 }
             }
+        }
+        // AI first-choice suggestion: solid blue disc with a white "1".
+        if (suggestion != null) {
+            val (sx, sy) = suggestion
+            val center = Offset(cellX * (sx + 1), cellY * (sy + 1))
+            drawCircle(MarkerBlue, radius = cellX * 0.34f, center = center)
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = cellX * 0.42f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isFakeBoldText = true
+                isAntiAlias = true
+            }
+            val metrics = paint.fontMetrics
+            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText("1", center.x, baseline, paint)
         }
     }
 }

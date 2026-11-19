@@ -34,11 +34,37 @@ class KataEngine private constructor(
     var isAlive: Boolean = true
         private set
 
+    /** Last stderr lines from the engine, kept so failures can show the real cause. */
+    private val stderrTail = StringBuffer()
+
     private val stderrDrain = thread(start = true, isDaemon = true, name = "katago-stderr") {
         try {
-            process.errorStream.bufferedReader().forEachLine { /* discard; keeps pipe from blocking */ }
+            process.errorStream.bufferedReader().forEachLine { line ->
+                synchronized(stderrTail) {
+                    stderrTail.append(line).append('\n')
+                    if (stderrTail.length > 4000) {
+                        stderrTail.delete(0, stderrTail.length - 4000)
+                    }
+                }
+            }
         } catch (_: Exception) {
         }
+    }
+
+    /** Exit code (if the process already ended) plus the engine's own last words. */
+    fun diagnostics(): String {
+        val sb = StringBuilder()
+        if (!process.isAlive) {
+            try {
+                sb.append("引擎进程已退出，退出码 ").append(process.exitValue()).append("。")
+            } catch (_: Exception) {
+            }
+        }
+        val tail = synchronized(stderrTail) { stderrTail.toString() }.trim()
+        if (tail.isNotEmpty()) {
+            sb.append("引擎报错：").append(tail.lines().takeLast(4).joinToString(" / "))
+        }
+        return sb.toString()
     }
 
     /** Sends one GTP command and returns the response payload (without the leading '='). */
@@ -53,13 +79,15 @@ class KataEngine private constructor(
             val sb = StringBuilder()
             while (true) {
                 val line = output.readLine()
-                    ?: throw IllegalStateException("KataGo engine closed its output")
+                    ?: throw IllegalStateException("KataGo engine closed its output. ${diagnostics()}")
                 if (line.isEmpty()) break
                 sb.append(line).append('\n')
             }
             val text = sb.toString().trim()
             if (text.startsWith("?")) {
-                throw IllegalStateException("KataGo error for '$cmd': ${text.removePrefix("?").trim()}")
+                throw IllegalStateException(
+                    "KataGo error for '$cmd': ${text.removePrefix("?").trim()} ${diagnostics()}"
+                )
             }
             check(text.startsWith("=")) { "Unexpected KataGo response: $text" }
             // Strip "=id" prefix.
@@ -157,7 +185,7 @@ class KataEngine private constructor(
                 maxVisits = $maxVisits
                 numSearchThreads = 2
                 nnMaxBatchSize = 8
-                ponderEnabled = false
+                ponderingEnabled = false
                 """.trimIndent() + "\n"
             )
             val process = ProcessBuilder(
@@ -168,8 +196,22 @@ class KataEngine private constructor(
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val engine = KataEngine(process, writer, reader)
-            // First command also serves as a readiness probe.
-            engine.command("name")
+            // First command also serves as a readiness probe. On failure,
+            // give the process a moment to finish dying so the exception
+            // can carry its exit code and stderr.
+            try {
+                engine.command("name")
+            } catch (e: Exception) {
+                try {
+                    process.waitFor(1, TimeUnit.SECONDS)
+                } catch (_: Exception) {
+                }
+                val detail = engine.diagnostics()
+                throw IllegalStateException(
+                    "KataGo 启动失败：${e.message ?: "未知错误"}" +
+                        if (detail.isNotEmpty()) "（$detail）" else ""
+                )
+            }
             return engine
         }
     }

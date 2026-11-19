@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.tuxungo.android.engine.EngineAssets
 import com.tuxungo.android.engine.EngineRunner
 import com.tuxungo.android.engine.KataEngine
+import com.tuxungo.android.engine.ModelStore
 import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.GoGame
 import com.tuxungo.android.go.Sgf
@@ -54,6 +55,16 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     var engine by remember { mutableStateOf<KataEngine?>(null) }
     var engineStatus by remember { mutableStateOf(if (isPve) "引擎启动中…" else "") }
     var aiThinking by remember { mutableStateOf(false) }
+    var engineFailed by remember { mutableStateOf(false) }
+    var engineStarting by remember { mutableStateOf(false) }
+    var suggestion by remember { mutableStateOf<com.tuxungo.android.go.Move?>(null) }
+    var suggestionIsPass by remember { mutableStateOf(false) }
+    var suggesting by remember { mutableStateOf(false) }
+
+    fun clearSuggestion() {
+        suggestion = null
+        suggestionIsPass = false
+    }
 
     fun syncAndGenmove() {
         val eng = engine ?: return
@@ -87,26 +98,79 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
         }
     }
 
-    LaunchedEffect(config) {
-        if (!isPve) return@LaunchedEffect
+    fun startEngine(onReady: (Boolean) -> Unit) {
+        if (engine != null) {
+            onReady(true)
+            return
+        }
+        if (engineStarting) {
+            onReady(false)
+            return
+        }
+        engineStarting = true
+        engineFailed = false
+        engineStatus = "引擎启动中…"
         runner.submit({
-            val model = EngineAssets.ensureDefaultModel(context)
-            val started = KataEngine.start(
+            val model = ModelStore.resolveActiveFile(context)
+            KataEngine.start(
                 nativeLibDir = context.applicationInfo.nativeLibraryDir,
                 workDir = EngineAssets.engineWorkDir(context),
                 modelFile = model,
                 maxVisits = config.aiVisits
             )
-            started
         }) { result ->
+            engineStarting = false
             result.onSuccess { started ->
                 engine = started
                 engineStatus = ""
-                syncAndGenmove()
+                onReady(true)
             }.onFailure { e ->
-                engineStatus = "引擎启动失败：${e.message ?: "未知错误"}（可先当双人对局玩）"
+                engineFailed = true
+                engineStatus = "引擎启动失败：${e.message ?: "未知错误"}"
+                onReady(false)
             }
         }
+    }
+
+    fun requestSuggestion() {
+        if (game.finished || aiThinking || suggesting) return
+        if (isPve && game.current != config.humanStone) return
+        suggesting = true
+        engineStatus = "AI 正在选点…"
+        startEngine { ok ->
+            val eng = engine
+            if (!ok || eng == null) {
+                suggesting = false
+                return@startEngine
+            }
+            runner.submit({
+                eng.clearBoard()
+                eng.setBoardSize(game.size)
+                eng.setKomi(game.komi)
+                if (config.handicap > 0) eng.command("fixed_handicap ${config.handicap}")
+                for (move in game.moves) eng.play(move, game.size)
+                eng.genmove(game.current, game.size)
+            }) { result ->
+                suggesting = false
+                result.onSuccess { move ->
+                    engineStatus = ""
+                    if (move == null) {
+                        suggestion = null
+                        suggestionIsPass = true
+                    } else {
+                        suggestion = move
+                        suggestionIsPass = false
+                    }
+                }.onFailure { e ->
+                    engineStatus = "选点失败：${e.message ?: "未知错误"}"
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(config) {
+        if (!isPve) return@LaunchedEffect
+        startEngine { ok -> if (ok) syncAndGenmove() }
     }
 
     DisposableEffect(Unit) {
@@ -123,7 +187,9 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") version
 
     val finished = game.finished
-    val humanTurn = !isPve || game.current == config.humanStone
+    // If the engine failed to start, never soft-lock the game: the human
+    // can keep playing both sides manually.
+    val humanTurn = !isPve || engineFailed || game.current == config.humanStone
     val status = when {
         finished && game.resignedBy != null ->
             "对局结束：${if (game.resignedBy == Stone.BLACK) "黑" else "白"}方认输"
@@ -145,14 +211,31 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                 if (config.handicap > 0) " · 让 ${config.handicap} 子" else "",
             fontSize = 13.sp, color = Color.Gray
         )
-        if (isPve && engineStatus.isNotEmpty()) {
+        if (engineStatus.isNotEmpty()) {
             Text(text = engineStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
         }
+        if (engineFailed) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { startEngine { ok -> if (ok && isPve) syncAndGenmove() } }) {
+                    Text("重试引擎")
+                }
+                Text(
+                    text = "引擎不可用时可先双人对下",
+                    fontSize = 13.sp, color = Color.Gray,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        BoardView(game = game, enabled = !finished && humanTurn && !aiThinking) { x, y ->
+        BoardView(
+            game = game,
+            enabled = !finished && humanTurn && !aiThinking,
+            suggestion = suggestion?.let { it.x to it.y }
+        ) { x, y ->
             if (game.play(x, y)) {
                 version++
                 resultDismissed = false
+                clearSuggestion()
                 if (isPve) syncAndGenmove()
             }
         }
@@ -163,6 +246,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                     if (game.pass()) {
                         version++
                         resultDismissed = false
+                        clearSuggestion()
                         if (isPve) syncAndGenmove()
                     }
                 },
@@ -171,7 +255,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
             ) { Text("停一手") }
             OutlinedButton(
                 onClick = {
-                    if (isPve) {
+                    if (isPve && !engineFailed) {
                         if (!aiThinking) {
                             var guard = 0
                             while (game.moves.isNotEmpty() && guard < 2) {
@@ -180,9 +264,11 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                                 if (game.current == config.humanStone) break
                             }
                             version++
+                            clearSuggestion()
                         }
                     } else if (game.undo()) {
                         version++
+                        clearSuggestion()
                     }
                 },
                 enabled = game.moves.isNotEmpty() && !aiThinking,
@@ -193,6 +279,45 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                 enabled = !finished,
                 modifier = Modifier.weight(1f)
             ) { Text("认输") }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { requestSuggestion() },
+                enabled = !finished && humanTurn && !aiThinking && !suggesting,
+                modifier = Modifier.weight(1f)
+            ) { Text(if (suggesting) "AI 选点中…" else "AI 选点") }
+            if (suggestion != null || suggestionIsPass) {
+                Button(
+                    onClick = {
+                        val s = suggestion
+                        val applied = when {
+                            suggestionIsPass -> game.pass()
+                            s != null -> game.play(s.x, s.y)
+                            else -> false
+                        }
+                        if (applied) {
+                            version++
+                            resultDismissed = false
+                            clearSuggestion()
+                            if (isPve) syncAndGenmove()
+                        }
+                    },
+                    enabled = !finished && humanTurn && !aiThinking,
+                    modifier = Modifier.weight(1f)
+                ) { Text("就下这步") }
+            }
+        }
+        if (suggestion != null || suggestionIsPass) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (suggestionIsPass) {
+                    "AI 一选：停一手"
+                } else {
+                    "AI 一选：${KataEngine.toVertex(suggestion!!, game.size)}（棋盘上的蓝色 1）"
+                },
+                fontSize = 13.sp, color = Color(0xFF2F7CF6)
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(
