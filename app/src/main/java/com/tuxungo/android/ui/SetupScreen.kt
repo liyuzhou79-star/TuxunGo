@@ -32,6 +32,8 @@ fun SetupScreen(onStart: (GameConfig) -> Unit) {
     var width by remember { mutableIntStateOf(19) }
     var height by remember { mutableIntStateOf(19) }
     var handicap by remember { mutableIntStateOf(0) }
+    var humanStone by remember { mutableStateOf(com.tuxungo.android.go.Stone.BLACK) }
+    var aiVisits by remember { mutableIntStateOf(200) }
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
     val effectiveHandicap = if (handicapSupported) handicap else 0
@@ -54,12 +56,29 @@ fun SetupScreen(onStart: (GameConfig) -> Unit) {
             FilterChip(selected = mode == GameMode.PVE, onClick = { mode = GameMode.PVE }, label = { Text("人对 AI") })
             FilterChip(selected = mode == GameMode.EVE, onClick = { mode = GameMode.EVE }, label = { Text("AI 对 AI") })
         }
-        if (mode != GameMode.PVP) {
+        if (mode == GameMode.EVE) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "AI 模式将在 KataGo 引擎接入后开放，当前版本先玩人对人。",
+                text = "AI 对 AI 将在分析功能阶段开放。",
                 fontSize = 13.sp, color = Color.Gray
             )
+        }
+        if (mode == GameMode.PVE) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "你执子", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = humanStone == com.tuxungo.android.go.Stone.BLACK, onClick = { humanStone = com.tuxungo.android.go.Stone.BLACK }, label = { Text("执黑") })
+                FilterChip(selected = humanStone == com.tuxungo.android.go.Stone.WHITE, onClick = { humanStone = com.tuxungo.android.go.Stone.WHITE }, label = { Text("执白") })
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = "AI 难度", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = aiVisits == 50, onClick = { aiVisits = 50 }, label = { Text("简单") })
+                FilterChip(selected = aiVisits == 200, onClick = { aiVisits = 200 }, label = { Text("中等") })
+                FilterChip(selected = aiVisits == 800, onClick = { aiVisits = 800 }, label = { Text("困难") })
+            }
         }
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -113,9 +132,14 @@ fun SetupScreen(onStart: (GameConfig) -> Unit) {
 
         Button(
             onClick = {
-                onStart(GameConfig(mode, width, height, effectiveHandicap, komi = 7.5))
+                onStart(
+                    GameConfig(
+                        mode, width, height, effectiveHandicap,
+                        komi = 7.5, humanStone = humanStone, aiVisits = aiVisits
+                    )
+                )
             },
-            enabled = mode == GameMode.PVP,
+            enabled = mode != GameMode.EVE,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "开始对局", fontSize = 16.sp)

@@ -195,9 +195,9 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         return true
     }
 
-    fun resign() {
+    fun resign(stone: Stone = current) {
         if (finished) return
-        resignedBy = current
+        resignedBy = stone
         finished = true
     }
 

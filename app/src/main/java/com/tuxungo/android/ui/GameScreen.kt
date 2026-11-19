@@ -15,6 +15,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +28,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tuxungo.android.engine.EngineAssets
+import com.tuxungo.android.engine.EngineRunner
+import com.tuxungo.android.engine.KataEngine
 import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.GoGame
 import com.tuxungo.android.go.Sgf
@@ -44,10 +49,81 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     var showResignConfirm by remember { mutableStateOf(false) }
     var resultDismissed by remember { mutableStateOf(false) }
 
+    val isPve = config.mode == GameMode.PVE
+    val runner = remember { EngineRunner() }
+    var engine by remember { mutableStateOf<KataEngine?>(null) }
+    var engineStatus by remember { mutableStateOf(if (isPve) "引擎启动中…" else "") }
+    var aiThinking by remember { mutableStateOf(false) }
+
+    fun syncAndGenmove() {
+        val eng = engine ?: return
+        if (game.finished || game.current == config.humanStone || aiThinking) return
+        aiThinking = true
+        engineStatus = "AI 思考中…"
+        runner.submit({
+            eng.clearBoard()
+            eng.setBoardSize(game.size)
+            eng.setKomi(game.komi)
+            if (config.handicap > 0) eng.command("fixed_handicap ${config.handicap}")
+            for (move in game.moves) eng.play(move, game.size)
+            eng.genmove(game.current, game.size)
+        }) { result ->
+            aiThinking = false
+            result.onSuccess { aiMove ->
+                engineStatus = ""
+                if (!game.finished && game.current != config.humanStone) {
+                    val applied = when {
+                        aiMove == null -> game.pass()
+                        else -> game.play(aiMove.x, aiMove.y) || game.pass()
+                    }
+                    if (applied) {
+                        version++
+                        resultDismissed = false
+                    }
+                }
+            }.onFailure { e ->
+                engineStatus = "引擎出错：${e.message ?: "未知错误"}"
+            }
+        }
+    }
+
+    LaunchedEffect(config) {
+        if (!isPve) return@LaunchedEffect
+        runner.submit({
+            val model = EngineAssets.ensureDefaultModel(context)
+            val started = KataEngine.start(
+                nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                workDir = EngineAssets.engineWorkDir(context),
+                modelFile = model,
+                maxVisits = config.aiVisits
+            )
+            started
+        }) { result ->
+            result.onSuccess { started ->
+                engine = started
+                engineStatus = ""
+                syncAndGenmove()
+            }.onFailure { e ->
+                engineStatus = "引擎启动失败：${e.message ?: "未知错误"}（可先当双人对局玩）"
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            val eng = engine
+            runner.shutdown()
+            if (eng != null) {
+                Thread { eng.quit() }.start()
+            }
+        }
+    }
+
     // Read version so Compose recomposes after each move.
     @Suppress("UNUSED_EXPRESSION") version
 
     val finished = game.finished
+    val humanTurn = !isPve || game.current == config.humanStone
     val status = when {
         finished && game.resignedBy != null ->
             "对局结束：${if (game.resignedBy == Stone.BLACK) "黑" else "白"}方认输"
@@ -69,23 +145,47 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                 if (config.handicap > 0) " · 让 ${config.handicap} 子" else "",
             fontSize = 13.sp, color = Color.Gray
         )
+        if (isPve && engineStatus.isNotEmpty()) {
+            Text(text = engineStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        BoardView(game = game, enabled = !finished) { x, y ->
+        BoardView(game = game, enabled = !finished && humanTurn && !aiThinking) { x, y ->
             if (game.play(x, y)) {
                 version++
                 resultDismissed = false
+                if (isPve) syncAndGenmove()
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { if (game.pass()) { version++; resultDismissed = false } },
-                enabled = !finished,
+                onClick = {
+                    if (game.pass()) {
+                        version++
+                        resultDismissed = false
+                        if (isPve) syncAndGenmove()
+                    }
+                },
+                enabled = !finished && humanTurn && !aiThinking,
                 modifier = Modifier.weight(1f)
             ) { Text("停一手") }
             OutlinedButton(
-                onClick = { if (game.undo()) version++ },
-                enabled = game.moves.isNotEmpty(),
+                onClick = {
+                    if (isPve) {
+                        if (!aiThinking) {
+                            var guard = 0
+                            while (game.moves.isNotEmpty() && guard < 2) {
+                                if (!game.undo()) break
+                                guard++
+                                if (game.current == config.humanStone) break
+                            }
+                            version++
+                        }
+                    } else if (game.undo()) {
+                        version++
+                    }
+                },
+                enabled = game.moves.isNotEmpty() && !aiThinking,
                 modifier = Modifier.weight(1f)
             ) { Text("悔棋") }
             OutlinedButton(
@@ -108,13 +208,14 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     }
 
     if (showResignConfirm) {
+        val resignStone = if (isPve) config.humanStone else game.current
         AlertDialog(
             onDismissRequest = { showResignConfirm = false },
             title = { Text("确认认输？") },
-            text = { Text("${if (game.current == Stone.BLACK) "黑方" else "白方"}将判负。") },
+            text = { Text("${if (resignStone == Stone.BLACK) "黑方" else "白方"}将判负。") },
             confirmButton = {
                 TextButton(onClick = {
-                    game.resign()
+                    game.resign(resignStone)
                     showResignConfirm = false
                     version++
                     resultDismissed = false

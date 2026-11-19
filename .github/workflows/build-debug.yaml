@@ -18,11 +18,68 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Checkout KataGo v1.15.3
+        uses: actions/checkout@v4
+        with:
+          repository: lightvector/KataGo
+          ref: v1.15.3
+          path: katago-src
+
+      - name: Install Eigen headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libeigen3-dev
+
+      - name: Build KataGo engine for Android arm64
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          echo "Using NDK: $NDK"
+          EIGEN_DIR=$(dirname "$(find /usr -name 'Eigen3Config.cmake' | head -1)")
+          cd katago-src/cpp
+          cmake -B build-android \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-29 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_BACKEND=EIGEN \
+            -DUSE_OPENSSL=OFF \
+            -DNO_GIT_REVISION=ON \
+            -DCMAKE_C_FLAGS="-DBYTE_ORDER=1234 -DLITTLE_ENDIAN=1234 -DBIG_ENDIAN=4321" \
+            -DCMAKE_CXX_FLAGS="-DBYTE_ORDER=1234 -DLITTLE_ENDIAN=1234 -DBIG_ENDIAN=4321" \
+            -DEigen3_DIR="$EIGEN_DIR"
+          cmake --build build-android -j"$(nproc)"
+          ls -la build-android/katago
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" build-android/katago
+          echo "After strip:"
+          ls -la build-android/katago
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          cp build-android/katago "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libkatago.so"
+          file "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libkatago.so" || true
+
+      - name: Fetch bundled default model from KataGo release
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sL -o katago-release.zip "https://github.com/lightvector/KataGo/releases/download/v1.15.3/katago-v1.15.3-eigen-linux-x64.zip"
+          ls -la katago-release.zip
+          unzip -o -q katago-release.zip -d katago-release
+          echo "Release contents:"
+          find katago-release -type f | head -30
+          MODEL=$(find katago-release -name "*.bin.gz" | head -1)
+          echo "Model found: $MODEL"
+          test -n "$MODEL"
+          ls -la "$MODEL"
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets/models"
+          cp "$MODEL" "$GITHUB_WORKSPACE/app/src/main/assets/models/default.bin.gz"
+
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: Report APK size
+        run: ls -la app/build/outputs/apk/debug/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

@@ -11,3 +11,6 @@ app/build
 local.properties
 *.keystore
 keystore.properties
+# Fetched/built by CI at build time, never committed
+app/src/main/jniLibs/
+app/src/main/assets/models/

@@ -21,6 +21,13 @@ android {
             isMinifyEnabled = false
         }
     }
+    packaging {
+        jniLibs {
+            // The KataGo executable ships as libkatago.so and must be
+            // extracted to nativeLibraryDir so the app can exec it.
+            useLegacyPackaging = true
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
