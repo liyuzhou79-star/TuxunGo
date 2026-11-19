@@ -44,6 +44,8 @@ jobs:
             -DUSE_BACKEND=EIGEN \
             -DUSE_OPENSSL=OFF \
             -DNO_GIT_REVISION=ON \
+            -DCMAKE_C_FLAGS="-DBYTE_ORDER=1234 -DLITTLE_ENDIAN=1234 -DBIG_ENDIAN=4321" \
+            -DCMAKE_CXX_FLAGS="-DBYTE_ORDER=1234 -DLITTLE_ENDIAN=1234 -DBIG_ENDIAN=4321" \
             -DEigen3_DIR="$EIGEN_DIR"
 
       - name: Build KataGo
