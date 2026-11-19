@@ -12,7 +12,9 @@ data class AppSettings(
     val showCoordinates: Boolean = true,
     val vibrationEnabled: Boolean = true,
     /** AI-vs-AI spectating pace: fast / normal / slow. */
-    val eveSpeed: String = "normal"
+    val eveSpeed: String = "normal",
+    /** Theme accent: sakura / matcha / indigo. */
+    val accent: String = "sakura"
 )
 
 object SettingsStore {
@@ -30,6 +32,12 @@ object SettingsStore {
         "real" to "真实录音（真提子声·随机）",
         "double" to "提子双击",
         "heavy" to "提子沉稳"
+    )
+
+    val ACCENTS = listOf(
+        "sakura" to "樱花粉",
+        "matcha" to "抹茶绿",
+        "indigo" to "靛蓝"
     )
 
     val EVE_SPEEDS = listOf(
@@ -55,7 +63,8 @@ object SettingsStore {
             confirmMove = p.getBoolean("confirmMove", true),
             showCoordinates = p.getBoolean("showCoordinates", true),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
-            eveSpeed = p.getString("eveSpeed", "normal") ?: "normal"
+            eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
+            accent = p.getString("accent", "sakura") ?: "sakura"
         )
     }
 
@@ -69,6 +78,7 @@ object SettingsStore {
             .putBoolean("showCoordinates", s.showCoordinates)
             .putBoolean("vibrationEnabled", s.vibrationEnabled)
             .putString("eveSpeed", s.eveSpeed)
+            .putString("accent", s.accent)
             .apply()
     }
 

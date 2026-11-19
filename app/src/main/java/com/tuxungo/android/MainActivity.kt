@@ -47,16 +47,62 @@ private val SakuraColors = lightColorScheme(
     onError = Color.White
 )
 
+/** Matcha-green palette. */
+private val MatchaColors = lightColorScheme(
+    primary = Color(0xFF5B8C5A),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDCEBD8),
+    onPrimaryContainer = Color(0xFF1E3A1E),
+    secondary = Color(0xFF3E6B3E),
+    onSecondary = Color.White,
+    background = Color(0xFFF6F9F3),
+    onBackground = Color(0xFF22301F),
+    surface = Color(0xFFFEFFFE),
+    onSurface = Color(0xFF22301F),
+    surfaceVariant = Color(0xFFE3EDDC),
+    onSurfaceVariant = Color(0xFF4A5E46),
+    outline = Color(0xFFA7BFA0),
+    error = Color(0xFFC62828),
+    onError = Color.White
+)
+
+/** Indigo palette. */
+private val IndigoColors = lightColorScheme(
+    primary = Color(0xFF4A5DA9),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDDE3F7),
+    onPrimaryContainer = Color(0xFF1B2450),
+    secondary = Color(0xFF35477F),
+    onSecondary = Color.White,
+    background = Color(0xFFF5F6FC),
+    onBackground = Color(0xFF23273A),
+    surface = Color(0xFFFEFEFF),
+    onSurface = Color(0xFF23273A),
+    surfaceVariant = Color(0xFFE1E6F5),
+    onSurfaceVariant = Color(0xFF4A5170),
+    outline = Color(0xFFA3AED6),
+    error = Color(0xFFC62828),
+    onError = Color.White
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = SakuraColors) {
+            var accent by remember {
+                mutableStateOf(SettingsStore.load(this@MainActivity).accent)
+            }
+            val colors = when (accent) {
+                "matcha" -> MatchaColors
+                "indigo" -> IndigoColors
+                else -> SakuraColors
+            }
+            MaterialTheme(colorScheme = colors) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    TuxunGoApp()
+                    TuxunGoApp(onAccentChange = { accent = it })
                 }
             }
         }
@@ -66,7 +112,7 @@ class MainActivity : ComponentActivity() {
 private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO }
 
 @Composable
-fun TuxunGoApp() {
+fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
     val context = LocalContext.current
     // Restore an unfinished game after backgrounding / process death.
     val restored = remember {
@@ -169,7 +215,10 @@ fun TuxunGoApp() {
                 )
             }
         }
-        Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.SETUP })
+        Screen.SETTINGS -> SettingsScreen(
+            onBack = { screen = Screen.SETUP },
+            onAccentChange = onAccentChange
+        )
         Screen.GUESS -> com.tuxungo.android.ui.GuessScreen(
             onBack = { screen = Screen.SETUP }
         )

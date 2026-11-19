@@ -471,6 +471,28 @@ fun ReviewScreen(
                 onClick = { enterBranch() },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("从这手试下（分支探索）") }
+            if (marks.isNotEmpty()) {
+                val markPlys = marks.map { it.moveNumber }.distinct().sorted()
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            markPlys.lastOrNull { it < ply }?.let { ply = it }
+                        },
+                        enabled = markPlys.any { it < ply },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("‹ 上个关键点") }
+                    OutlinedButton(
+                        onClick = {
+                            markPlys.firstOrNull { it > ply }?.let { ply = it }
+                        },
+                        enabled = markPlys.any { it > ply },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("下个关键点 ›") }
+                }
+            }
         }
 
         val stat = turns?.getOrNull(ply)

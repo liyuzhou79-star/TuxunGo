@@ -716,10 +716,10 @@ fun GameScreen(
         mutableLongStateOf(initialClock?.whiteMainMs ?: config.clockMinutes * 60_000L)
     }
     var clockBlackPeriods by remember {
-        mutableIntStateOf(initialClock?.blackPeriods ?: 3)
+        mutableIntStateOf(initialClock?.blackPeriods ?: config.byoyomiPeriods)
     }
     var clockWhitePeriods by remember {
-        mutableIntStateOf(initialClock?.whitePeriods ?: 3)
+        mutableIntStateOf(initialClock?.whitePeriods ?: config.byoyomiPeriods)
     }
     var clockBlackPeriodMs by remember {
         mutableLongStateOf(initialClock?.blackPeriodMs ?: 30_000L)

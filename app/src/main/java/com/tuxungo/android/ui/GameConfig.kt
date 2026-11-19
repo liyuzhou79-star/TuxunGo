@@ -22,5 +22,7 @@ data class GameConfig(
     val startPlayer: Stone = Stone.BLACK,
     /** Per-side main time in minutes; 0 = no clock. When the main time
      * runs out, byoyomi starts: 3 periods of 30 seconds each. */
-    val clockMinutes: Int = 0
+    val clockMinutes: Int = 0,
+    /** Byoyomi periods per side once the main time runs out. */
+    val byoyomiPeriods: Int = 3
 )

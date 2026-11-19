@@ -202,10 +202,21 @@ fun TsumegoScreen(onBack: () -> Unit) {
             )
             TextButton(onClick = onBack) { Text("返回") }
         }
-        Text(
-            text = "已解 ${solvedSet.size} / ${TSUMEGO_PROBLEMS.size} 题",
-            fontSize = 13.sp, color = Color.Gray
-        )
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(
+                text = "已解 ${solvedSet.size} / ${TSUMEGO_PROBLEMS.size} 题",
+                fontSize = 13.sp, color = Color.Gray,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = {
+                    val unsolved = TSUMEGO_PROBLEMS.indices.filter { it !in solvedSet }
+                    val pool = unsolved.ifEmpty { TSUMEGO_PROBLEMS.indices.toList() }
+                    val pick = pool.random()
+                    if (pick != index) reset(pick) else reset(index)
+                }
+            ) { Text("随机一题") }
+        }
         Spacer(modifier = Modifier.height(6.dp))
         Row(
             modifier = Modifier

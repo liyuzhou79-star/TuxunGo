@@ -34,7 +34,10 @@ import com.tuxungo.android.AppSettings
 import com.tuxungo.android.SettingsStore
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onAccentChange: (String) -> Unit = {}
+) {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(SettingsStore.load(context)) }
 
@@ -125,6 +128,22 @@ fun SettingsScreen(onBack: () -> Unit) {
                 FilterChip(
                     selected = settings.eveSpeed == id,
                     onClick = { update(settings.copy(eveSpeed = id)) },
+                    label = { Text(label) }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "主题色", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((id, label) in SettingsStore.ACCENTS) {
+                FilterChip(
+                    selected = settings.accent == id,
+                    onClick = {
+                        update(settings.copy(accent = id))
+                        onAccentChange(id)
+                    },
                     label = { Text(label) }
                 )
             }

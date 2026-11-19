@@ -78,10 +78,14 @@ fun SetupScreen(
     }
     var aiVisits by remember { mutableIntStateOf(setupPrefs.getInt("aiVisits", 200)) }
     var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
+    var byoyomiPeriods by remember {
+        mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
+    }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(
-        mode, width, height, handicapText, komiText, humanStone, aiVisits, clockMinutes
+        mode, width, height, handicapText, komiText, humanStone, aiVisits,
+        clockMinutes, byoyomiPeriods
     ) {
         setupPrefs.edit()
             .putString("mode", mode.name)
@@ -92,6 +96,7 @@ fun SetupScreen(
             .putString("humanStone", humanStone.name)
             .putInt("aiVisits", aiVisits)
             .putInt("clockMinutes", clockMinutes)
+            .putInt("byoyomiPeriods", byoyomiPeriods)
             .apply()
     }
 
@@ -200,8 +205,22 @@ fun SetupScreen(
         }
         if (clockMinutes > 0) {
             Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text(text = "读秒次数", fontSize = 13.sp, color = Color.Gray)
+                for (n in listOf(3, 5)) {
+                    FilterChip(
+                        selected = byoyomiPeriods == n,
+                        onClick = { byoyomiPeriods = n },
+                        label = { Text("$n 次") }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "每方主时间 ${clockMinutes} 分钟，用完进入读秒（3 次 × 30 秒），读秒也用完判负。第一手落子后开始计时。",
+                text = "每方主时间 ${clockMinutes} 分钟，用完进入读秒（${byoyomiPeriods} 次 × 30 秒），读秒也用完判负。第一手落子后开始计时。",
                 fontSize = 12.sp, color = Color.Gray
             )
         }
@@ -287,7 +306,8 @@ fun SetupScreen(
                         GameConfig(
                             mode, width, height, effectiveHandicap,
                             komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
-                            clockMinutes = clockMinutes
+                            clockMinutes = clockMinutes,
+                            byoyomiPeriods = byoyomiPeriods
                         )
                     )
                 }
@@ -391,7 +411,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.3.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.4.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
