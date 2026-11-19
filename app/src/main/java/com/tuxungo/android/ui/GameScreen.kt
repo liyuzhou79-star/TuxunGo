@@ -34,6 +34,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.media.AudioAttributes
+import android.media.SoundPool
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import com.tuxungo.android.R
 import com.tuxungo.android.engine.AnalysisEngine
 import com.tuxungo.android.engine.AnalysisResult
 import com.tuxungo.android.engine.EngineAssets
@@ -82,6 +89,30 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
     var analysisStatus by remember { mutableStateOf("") }
     var selectedCandidate by remember { mutableIntStateOf(0) }
     var showTerritory by remember { mutableStateOf(true) }
+    // Tap-to-confirm: first tap previews a translucent stone, second tap
+    // on the same point places it.
+    var pendingPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    // Stone sounds (synthesized clicks bundled in res/raw).
+    val soundPool = remember {
+        SoundPool.Builder()
+            .setMaxStreams(4)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            .build()
+    }
+    val placeSoundId = remember { soundPool.load(context, R.raw.stone_place, 1) }
+    val captureSoundId = remember { soundPool.load(context, R.raw.stone_capture, 1) }
+
+    fun playMoveSound(wasCapture: Boolean) {
+        soundPool.play(if (wasCapture) captureSoundId else placeSoundId, 0.9f, 0.9f, 1, 0, 1f)
+    }
+
+    fun totalCaptures(): Int = game.capturesByBlack + game.capturesByWhite
 
     fun clearAnalysis() {
         analysis = null
@@ -142,6 +173,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
             result.onSuccess { aiMove ->
                 engineStatus = ""
                 if (!game.finished) {
+                    val capsBefore = totalCaptures()
                     val applied = when {
                         aiMove == null -> game.pass()
                         else -> game.play(aiMove.x, aiMove.y) || game.pass()
@@ -149,6 +181,8 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                     if (applied) {
                         version++
                         resultDismissed = false
+                        pendingPoint = null
+                        playMoveSound(totalCaptures() > capsBefore)
                         clearAnalysis()
                     }
                 }
@@ -233,6 +267,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
             val aEng = analysisEngine
             runner.shutdown()
             analysisRunner.shutdown()
+            soundPool.release()
             if (eng != null) Thread { eng.quit() }.start()
             if (aEng != null) Thread { aEng.quit() }.start()
         }
@@ -263,19 +298,49 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = status, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             TextButton(onClick = onExit) { Text("返回") }
         }
-        Text(
-            text = "黑提子 ${game.capturesByBlack} · 白提子 ${game.capturesByWhite}" +
-                if (config.handicap > 0) " · 让 ${config.handicap} 子" else "",
-            fontSize = 13.sp, color = Color.Gray
-        )
-        if (engineStatus.isNotEmpty()) {
-            Text(text = engineStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF1A1A1A), CircleShape)
+                    .size(10.dp)
+            )
+            Spacer(modifier = Modifier.padding(start = 4.dp))
+            Text(text = "提子 ${game.capturesByBlack}", fontSize = 13.sp, color = Color.Gray)
+            Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+            Box(
+                modifier = Modifier
+                    .border(BorderStroke(1.dp, Color(0xFFB0A58F)), CircleShape)
+                    .background(Color.White, CircleShape)
+                    .size(10.dp)
+            )
+            Spacer(modifier = Modifier.padding(start = 4.dp))
+            Text(text = "提子 ${game.capturesByWhite}", fontSize = 13.sp, color = Color.Gray)
+            if (config.handicap > 0) {
+                Text(text = " · 让 ${config.handicap} 子", fontSize = 13.sp, color = Color.Gray)
+            }
+        }
+        // Fixed-height status strip: the AI-thinking text and the
+        // tap-to-confirm hint live here so the board never jumps up or
+        // down when they appear and disappear.
+        Box(modifier = Modifier.fillMaxWidth().height(22.dp)) {
+            val hint = when {
+                pendingPoint != null -> "已选中落子点，再点一次确认落子"
+                else -> engineStatus
+            }
+            if (hint.isNotEmpty()) {
+                Text(
+                    text = hint,
+                    fontSize = 13.sp,
+                    color = if (pendingPoint != null) Color(0xFF2456C8) else Color(0xFF2F7CF6),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
         if (engineFailed) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,13 +368,29 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                 cand.move?.let { CandidateMark(it.x, it.y, currentAnalysis.candidates.indexOf(cand) + 1) }
             } ?: emptyList(),
             ownership = if (showTerritory) currentAnalysis?.ownershipBlack else null,
-            pvGhost = selected?.pvMoves?.take(7) ?: emptyList()
+            pvGhost = selected?.pvMoves?.take(7) ?: emptyList(),
+            preview = pendingPoint
         ) { x, y ->
-            if (game.play(x, y)) {
-                version++
-                resultDismissed = false
-                clearAnalysis()
-                if (isPve) requestAiTurn()
+            val tapped = x to y
+            when {
+                // Second tap on the previewed point confirms the move.
+                pendingPoint == tapped -> {
+                    val capsBefore = totalCaptures()
+                    if (game.play(x, y)) {
+                        version++
+                        resultDismissed = false
+                        pendingPoint = null
+                        playMoveSound(totalCaptures() > capsBefore)
+                        clearAnalysis()
+                        if (isPve) requestAiTurn()
+                    } else {
+                        pendingPoint = null
+                    }
+                }
+                // First tap on a legal empty point shows the preview stone.
+                game.stoneAt(x, y) == null && game.isLegal(x, y) -> pendingPoint = tapped
+                // Tapping anywhere else cancels the preview.
+                else -> pendingPoint = null
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -385,6 +466,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                         Button(
                             onClick = {
                                 val cand = selected
+                                val capsBefore = totalCaptures()
                                 val applied = when {
                                     cand.move == null -> game.pass()
                                     else -> game.play(cand.move.x, cand.move.y)
@@ -392,6 +474,8 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                                 if (applied) {
                                     version++
                                     resultDismissed = false
+                                    pendingPoint = null
+                                    playMoveSound(totalCaptures() > capsBefore)
                                     clearAnalysis()
                                     if (isPve) requestAiTurn()
                                 }
@@ -414,6 +498,7 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                     if (game.pass()) {
                         version++
                         resultDismissed = false
+                        pendingPoint = null
                         clearAnalysis()
                         if (isPve) requestAiTurn()
                     }
@@ -432,10 +517,12 @@ fun GameScreen(config: GameConfig, onExit: () -> Unit) {
                                 if (game.current == config.humanStone) break
                             }
                             version++
+                            pendingPoint = null
                             clearAnalysis()
                         }
                     } else if (game.undo()) {
                         version++
+                        pendingPoint = null
                         clearAnalysis()
                     }
                 },

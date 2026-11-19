@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -48,13 +49,15 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp)
+            .padding(20.dp)
     ) {
         Text(text = "TuxunGo", fontSize = 30.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "免费开源的围棋对弈与 AI 分析应用，内置 KataGo 引擎。", fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "对弈模式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -123,7 +126,7 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
         Text(text = "让子（仅 9 / 13 / 19 路方棋盘）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (n in listOf(0, 2, 3, 4, 5, 6, 7, 8, 9)) {
+            for (n in listOf(0, 2, 3, 4, 5)) {
                 FilterChip(
                     selected = effectiveHandicap == n,
                     enabled = handicapSupported,
@@ -133,8 +136,21 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (n in listOf(6, 7, 8, 9)) {
+                FilterChip(
+                    selected = effectiveHandicap == n,
+                    enabled = handicapSupported,
+                    onClick = { handicap = n },
+                    label = { Text("$n 子") }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         Text(text = "贴目：7.5 目（中国规则）", fontSize = 13.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(32.dp))
+        }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
@@ -150,6 +166,8 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
             Text(text = "开始对局", fontSize = 16.sp)
         }
         Spacer(modifier = Modifier.height(16.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "AI 模型", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "当前模型：$activeModelName", fontSize = 13.sp, color = Color.Gray)
@@ -158,6 +176,8 @@ fun SetupScreen(onStart: (GameConfig) -> Unit, onOpenModels: () -> Unit) {
             onClick = onOpenModels,
             modifier = Modifier.fillMaxWidth()
         ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
+        }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Text(text = "版本 0.1.0（开发中）", fontSize = 12.sp, color = Color.Gray)
     }
