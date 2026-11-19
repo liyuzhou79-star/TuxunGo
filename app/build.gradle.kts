@@ -16,9 +16,27 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing is injected by CI from repository secrets (the
+    // keystore is restored to a temp path and passed via environment).
+    // Without those variables the release build stays unsigned and local
+    // debug builds are unaffected.
+    signingConfigs {
+        if (System.getenv("TUXUNGO_KEYSTORE_PATH") != null) {
+            create("release") {
+                storeFile = file(System.getenv("TUXUNGO_KEYSTORE_PATH"))
+                storePassword = System.getenv("TUXUNGO_STORE_PASSWORD")
+                keyAlias = System.getenv("TUXUNGO_KEY_ALIAS")
+                keyPassword = System.getenv("TUXUNGO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (System.getenv("TUXUNGO_KEYSTORE_PATH") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     androidResources {
