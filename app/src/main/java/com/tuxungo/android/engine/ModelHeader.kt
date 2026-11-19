@@ -62,10 +62,16 @@ object TerritoryEstimate {
     /**
      * [ownership] has one value per board point in row-major order from
      * the top-left (index = y * width + x), in BLACK's perspective
-     * (positive = Black owns it) — which is exactly the sign KataGo
-     * v1.15.3's analysis engine returns (verified locally with corner
-     * enclosures). [stones] is the board content in the same order
-     * (null = empty). Only empty points count as territory.
+     * (positive = Black owns it). Note KataGo itself reports ownership
+     * from the side-to-move perspective; [AnalysisEngine] converts it
+     * to Black's perspective before it reaches this function.
+     * [stones] is the board content in the same order (null = empty).
+     *
+     * Counting follows Chinese scoring intuition: an empty point owned
+     * above [threshold] counts for its owner, and a stone the engine
+     * judges dead (its point is owned by the opponent above
+     * [threshold]) also counts for the opponent — the point becomes
+     * the opponent's territory once the dead stone is removed.
      */
     fun estimate(ownership: DoubleArray, stones: Array<Stone?>, threshold: Double = 0.5): Result {
         var b = 0
@@ -73,12 +79,14 @@ object TerritoryEstimate {
         var n = 0
         val count = minOf(ownership.size, stones.size)
         for (i in 0 until count) {
-            if (stones[i] != null) continue
             val v = ownership[i]
+            val stone = stones[i]
             when {
-                v > threshold -> b++
-                v < -threshold -> w++
-                else -> n++
+                stone == null && v > threshold -> b++
+                stone == null && v < -threshold -> w++
+                stone == Stone.WHITE && v > threshold -> b++ // dead white stone
+                stone == Stone.BLACK && v < -threshold -> w++ // dead black stone
+                stone == null -> n++
             }
         }
         return Result(b, w, n)

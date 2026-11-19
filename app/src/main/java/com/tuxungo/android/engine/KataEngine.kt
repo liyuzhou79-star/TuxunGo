@@ -207,8 +207,8 @@ class KataEngine private constructor(
                 scoringRule = AREA
                 multiStoneSuicideLegal = false
                 maxVisits = $maxVisits
-                numSearchThreads = 2
-                nnMaxBatchSize = 8
+                numSearchThreads = 4
+                nnMaxBatchSize = 16
                 ponderingEnabled = false
                 """.trimIndent() + "\n"
             )

@@ -142,7 +142,41 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
 
     fun playMoveSound(wasCapture: Boolean) {
         if (!settings.soundEnabled) return
-        soundPool.play(if (wasCapture) captureSoundId else placeSoundId, 0.9f, 0.9f, 1, 0, 1f)
+        // Tiny random pitch jitter: real stones never sound identical.
+        val rate = 0.96f + kotlin.random.Random.nextFloat() * 0.08f
+        soundPool.play(if (wasCapture) captureSoundId else placeSoundId, 0.9f, 0.9f, 1, 0, rate)
+    }
+
+    val vibrator = remember {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            (context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE)
+                as android.os.VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+        }
+    }
+
+    fun vibrateMove(wasCapture: Boolean) {
+        if (!settings.vibrationEnabled) return
+        try {
+            if (wasCapture) {
+                vibrator.vibrate(
+                    android.os.VibrationEffect.createWaveform(longArrayOf(0, 16, 45, 16), -1)
+                )
+            } else {
+                vibrator.vibrate(
+                    android.os.VibrationEffect.createOneShot(16, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                )
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Sound + haptics for a stone that just landed. */
+    fun onStonePlayed(wasCapture: Boolean) {
+        playMoveSound(wasCapture)
+        vibrateMove(wasCapture)
     }
 
     fun totalCaptures(): Int = game.capturesByBlack + game.capturesByWhite
@@ -231,7 +265,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                         version++
                         resultDismissed = false
                         pendingPoint = null
-                        playMoveSound(totalCaptures() > capsBefore)
+                        onStonePlayed(totalCaptures() > capsBefore)
                         clearAnalysis()
                     }
                 }
@@ -300,6 +334,8 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                     analysisKey = moveCount
                     selectedCandidate = 0
                     analysisStatus = ""
+                    // Show the territory right away; the chip can hide it.
+                    if (visitsOverride == null) showTerritory = true
                 } else {
                     analysisStatus = "棋盘已变化，刚才的分析已过期，请重新分析。"
                 }
@@ -319,7 +355,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             return
         }
         judging = true
-        runAnalysis(deep = false, visitsOverride = 250) {
+        runAnalysis(deep = false, visitsOverride = 400) {
             judging = false
             if (analysis != null && analysisKey == game.moves.size) {
                 judgment = analysis
@@ -330,6 +366,20 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
 
     LaunchedEffect(config) {
         if (isPve || isEve) startEngine()
+        // Pre-warm the analysis engine in AI modes so the first
+        // analysis / judgment does not pay the engine startup cost.
+        if (config.mode != GameMode.PVP) {
+            analysisRunner.submit({
+                if (analysisEngine == null) {
+                    val model = ModelStore.resolveActiveFile(context)
+                    analysisEngine = AnalysisEngine.start(
+                        nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                        workDir = EngineAssets.engineWorkDir(context),
+                        modelFile = model
+                    )
+                }
+            }) { }
+        }
     }
 
     // Drives AI turns for PVE, AI-vs-AI and mid-game takeovers alike.
@@ -390,7 +440,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
             version++
             resultDismissed = false
             pendingPoint = null
-            playMoveSound(totalCaptures() > capsBefore)
+            onStonePlayed(totalCaptures() > capsBefore)
             clearAnalysis()
         }
     }
@@ -625,7 +675,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
                                     version++
                                     resultDismissed = false
                                     pendingPoint = null
-                                    playMoveSound(totalCaptures() > capsBefore)
+                                    onStonePlayed(totalCaptures() > capsBefore)
                                     clearAnalysis()
                                 }
                             },

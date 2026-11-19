@@ -24,6 +24,18 @@ object AnalysisMath {
             (1.0 - winrate) to (-scoreLead)
         }
     }
+
+    /**
+     * KataGo's ownership array is from the SIDE-TO-MOVE perspective
+     * (positive = the player to move owns the point) — verified locally
+     * with corner enclosures run under both Black-to-move and
+     * White-to-move (drive5/drive6): the signs flip with the side to
+     * move. Convert to Black's perspective (positive = Black owns).
+     */
+    fun ownershipToBlack(raw: DoubleArray, sideToMove: Stone): DoubleArray {
+        if (sideToMove == Stone.BLACK) return raw.copyOf()
+        return DoubleArray(raw.size) { i -> -raw[i] }
+    }
 }
 
 data class Candidate(
@@ -55,7 +67,9 @@ data class AnalysisResult(
  * Protocol facts verified locally against KataGo v1.15.3 with the bundled
  * model (see project checkpoint): root and move win rates / score leads
  * are reported from the side-to-move perspective; the ownership array is
- * row-major from the top-left with POSITIVE meaning Black owns the point
+ * ALSO side-to-move perspective (positive = the player to move owns the
+ * point), row-major from the top-left. Win rates, score leads and
+ * ownership are all converted to Black's perspective in [parse].
  * (verified with asymmetric corner enclosures and on-stone values);
  * rectangular boards and handicap initial stones are supported.
  *
@@ -231,17 +245,16 @@ class AnalysisEngine private constructor(
             candidates.addAll(parsed.sortedBy { it.first }.take(5).map { it.second })
         }
 
-        val ownership = DoubleArray(size.area)
+        val rawOwnership = DoubleArray(size.area)
         val ownArr = resp.optJSONArray("ownership")
         if (ownArr != null) {
             val n = minOf(ownArr.length(), size.area)
             for (i in 0 until n) {
-                // KataGo v1.15.3 reports ownership in Black's perspective
-                // already (positive = Black owns the point) — verified
-                // locally; do NOT negate.
-                ownership[i] = ownArr.optDouble(i, 0.0)
+                rawOwnership[i] = ownArr.optDouble(i, 0.0)
             }
         }
+        // KataGo ownership is side-to-move perspective; store Black's.
+        val ownership = AnalysisMath.ownershipToBlack(rawOwnership, sideToMove)
         return AnalysisResult(sideToMove, rootWrB, rootLeadB, candidates, ownership)
     }
 
@@ -264,8 +277,8 @@ class AnalysisEngine private constructor(
             configFile.writeText(
                 """
                 logFile = analysis.log
-                numSearchThreads = 2
-                nnMaxBatchSize = 8
+                numSearchThreads = 4
+                nnMaxBatchSize = 16
                 numAnalysisThreads = 1
                 """.trimIndent() + "\n"
             )

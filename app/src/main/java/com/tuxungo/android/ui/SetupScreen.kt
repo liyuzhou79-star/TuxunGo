@@ -44,13 +44,17 @@ fun SetupScreen(
     var mode by remember { mutableStateOf(GameMode.PVP) }
     var width by remember { mutableIntStateOf(19) }
     var height by remember { mutableIntStateOf(19) }
-    var handicap by remember { mutableIntStateOf(0) }
+    var handicapText by remember { mutableStateOf("0") }
+    var komiText by remember { mutableStateOf("7.5") }
     var humanStone by remember { mutableStateOf(com.tuxungo.android.go.Stone.BLACK) }
     var aiVisits by remember { mutableIntStateOf(200) }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
 
     val handicapSupported = width == height && width in listOf(9, 13, 19)
-    val effectiveHandicap = if (handicapSupported) handicap else 0
+    val handicapInput = handicapText.toIntOrNull()?.coerceIn(0, 9) ?: 0
+    // A 1-stone "handicap" is just an even game with adjusted komi.
+    val effectiveHandicap = if (handicapSupported && handicapInput != 1) handicapInput else 0
+    val komiInput = komiText.toDoubleOrNull()?.coerceIn(0.0, 20.0) ?: 7.5
     /** KataGo reliably supports boards with both sides in 7..19. */
     val aiSupported = (width in 7..19 && height in 7..19)
 
@@ -131,31 +135,40 @@ fun SetupScreen(
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "让子（仅 9 / 13 / 19 路方棋盘）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = "让子与贴目（自己填）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (n in listOf(0, 2, 3, 4, 5)) {
-                FilterChip(
-                    selected = effectiveHandicap == n,
-                    enabled = handicapSupported,
-                    onClick = { handicap = n },
-                    label = { Text(if (n == 0) "无" else "$n 子") }
-                )
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            androidx.compose.material3.OutlinedTextField(
+                value = handicapText,
+                onValueChange = { v -> handicapText = v.filter { it.isDigit() }.take(1) },
+                label = { Text("让子数") },
+                enabled = handicapSupported,
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = komiText,
+                onValueChange = { v -> komiText = v.filter { it.isDigit() || it == '.' }.take(5) },
+                label = { Text("贴目") },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                ),
+                modifier = Modifier.weight(1f)
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (n in listOf(6, 7, 8, 9)) {
-                FilterChip(
-                    selected = effectiveHandicap == n,
-                    enabled = handicapSupported,
-                    onClick = { handicap = n },
-                    label = { Text("$n 子") }
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "贴目：7.5 目（中国规则）", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = if (handicapSupported) {
+                "让子填 2–9（仅 9 / 13 / 19 路方棋盘）；填 0 或 1 按分先处理。贴目随便填：中国规则常用 7.5，日本规则常用 6.5，不贴目填 0。"
+            } else {
+                "当前棋盘不支持让子（仅 9 / 13 / 19 路方棋盘可以）。贴目随便填：中国规则常用 7.5，日本规则常用 6.5，不贴目填 0。"
+            },
+            fontSize = 13.sp, color = Color.Gray
+        )
         }
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -170,7 +183,7 @@ fun SetupScreen(
                     onStart(
                         GameConfig(
                             mode, width, height, effectiveHandicap,
-                            komi = 7.5, humanStone = humanStone, aiVisits = aiVisits
+                            komi = komiInput, humanStone = humanStone, aiVisits = aiVisits
                         )
                     )
                 }
@@ -192,7 +205,7 @@ fun SetupScreen(
             androidx.compose.material3.OutlinedButton(
                 onClick = { onOpenEditor(width, height) },
                 modifier = Modifier.weight(1f)
-            ) { Text("摆棋（自定义布局）") }
+            ) { Text("摆棋") }
             androidx.compose.material3.OutlinedButton(
                 onClick = onOpenSettings,
                 modifier = Modifier.weight(1f)

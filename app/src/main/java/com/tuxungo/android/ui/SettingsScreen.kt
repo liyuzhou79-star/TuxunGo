@@ -137,6 +137,36 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Live board preview with the selected skin.
+        val demoGame = remember {
+            com.tuxungo.android.go.GoGame(com.tuxungo.android.go.BoardSize(9, 9), 7.5).apply {
+                loadPosition(
+                    listOf(
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.BLACK, 2, 2),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.WHITE, 6, 6),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.BLACK, 6, 2),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.WHITE, 2, 6),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.BLACK, 3, 6)
+                    ),
+                    com.tuxungo.android.go.Stone.WHITE
+                )
+                play(4, 4)
+            }
+        }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.layout.Box(modifier = Modifier.width(240.dp)) {
+                BoardView(
+                    game = demoGame,
+                    enabled = false,
+                    skin = BoardSkin.fromId(settings.boardSkin),
+                    showCoordinates = settings.showCoordinates
+                ) { _, _ -> }
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(text = "音效", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
@@ -150,6 +180,21 @@ fun SettingsScreen(onBack: () -> Unit) {
             Switch(
                 checked = settings.soundEnabled,
                 onCheckedChange = { update(settings.copy(soundEnabled = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "落子震动", fontSize = 15.sp)
+                Text(text = "落子时轻震一下，提子时震两下", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.vibrationEnabled,
+                onCheckedChange = { update(settings.copy(vibrationEnabled = it)) }
             )
         }
         Spacer(modifier = Modifier.height(12.dp))

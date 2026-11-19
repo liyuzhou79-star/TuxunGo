@@ -68,7 +68,7 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = "摆棋 · 自定义布局", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(text = "摆棋", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             TextButton(onClick = onBack) { Text("返回") }
         }
         Text(

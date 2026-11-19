@@ -9,7 +9,8 @@ data class AppSettings(
     val captureSound: String = "double",
     val boardSkin: String = "wood_light",
     val confirmMove: Boolean = true,
-    val showCoordinates: Boolean = true
+    val showCoordinates: Boolean = true,
+    val vibrationEnabled: Boolean = true
 )
 
 object SettingsStore {
@@ -42,7 +43,8 @@ object SettingsStore {
             captureSound = p.getString("captureSound", "double") ?: "double",
             boardSkin = p.getString("boardSkin", "wood_light") ?: "wood_light",
             confirmMove = p.getBoolean("confirmMove", true),
-            showCoordinates = p.getBoolean("showCoordinates", true)
+            showCoordinates = p.getBoolean("showCoordinates", true),
+            vibrationEnabled = p.getBoolean("vibrationEnabled", true)
         )
     }
 
@@ -54,6 +56,7 @@ object SettingsStore {
             .putString("boardSkin", s.boardSkin)
             .putBoolean("confirmMove", s.confirmMove)
             .putBoolean("showCoordinates", s.showCoordinates)
+            .putBoolean("vibrationEnabled", s.vibrationEnabled)
             .apply()
     }
 
