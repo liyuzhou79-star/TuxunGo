@@ -396,7 +396,7 @@ fun GameScreen(config: GameConfig, initialMoves: List<Move> = emptyList(), onExi
      * engine cannot judge this board.
      */
     fun enterScoring() {
-        if (scoringBusy || finished) return
+        if (scoringBusy || game.finished) return
         cancelAi()
         scoringBusy = true
         scoringNote = "引擎判定死子中…"
