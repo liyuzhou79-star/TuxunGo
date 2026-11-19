@@ -1017,11 +1017,29 @@ fun GameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    onClick = { runAnalysis(false) },
-                    enabled = analysisAllowed && !finished,
-                    modifier = Modifier.weight(1f)
-                ) { Text(if (analyzing) "分析中…" else "AI 分析") }
+                val analysisFreshFs = analysis != null && analysisKey == game.moves.size
+                when {
+                    analyzing -> Button(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("分析中…") }
+                    analysisFreshFs -> Button(
+                        onClick = {
+                            analysis = null
+                            analysisKey = -1
+                            selectedCandidate = 0
+                            analysisStatus = ""
+                            if (!judgmentActive) showTerritory = false
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("关闭分析") }
+                    else -> Button(
+                        onClick = { runAnalysis(false) },
+                        enabled = analysisAllowed && !finished,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("AI 分析") }
+                }
                 val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
                 when {
                     judging -> Button(
@@ -1429,11 +1447,29 @@ fun GameScreen(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { runAnalysis(deep = false) },
-                enabled = analysisAllowed && !finished,
-                modifier = Modifier.weight(1f)
-            ) { Text(if (analyzing) "分析中…" else "AI 分析") }
+            val analysisFresh = analysis != null && analysisKey == game.moves.size
+            when {
+                analyzing -> OutlinedButton(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.weight(1f)
+                ) { Text("分析中…") }
+                analysisFresh -> Button(
+                    onClick = {
+                        analysis = null
+                        analysisKey = -1
+                        selectedCandidate = 0
+                        analysisStatus = ""
+                        if (!judgmentActive) showTerritory = false
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("关闭分析") }
+                else -> OutlinedButton(
+                    onClick = { runAnalysis(deep = false) },
+                    enabled = analysisAllowed && !finished,
+                    modifier = Modifier.weight(1f)
+                ) { Text("AI 分析") }
+            }
             val judgmentFresh = judgment != null && judgmentKey == game.moves.size
             when {
                 judging -> OutlinedButton(

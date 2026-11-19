@@ -436,6 +436,12 @@ fun ReviewScreen(
                         .fillMaxWidth()
                         .padding(vertical = 2.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 5.dp, end = 6.dp)
+                            .size(10.dp)
+                            .background(color, shape = androidx.compose.foundation.shape.CircleShape)
+                    )
                     Text(label, fontSize = 14.sp, color = color, fontWeight = FontWeight.SemiBold)
                     Text(
                         " 第 ${mark.moveNumber} 手 · 胜率 ${fmtDelta(mark.deltaPercent)}",
