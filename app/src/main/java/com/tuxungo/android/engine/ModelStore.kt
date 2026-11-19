@@ -202,11 +202,13 @@ object ModelStore {
         // Stage 1+2: integrity check and header parse.
         val isGzip = FileInputStream(tmp).use { it.read() == 0x1f && it.read() == 0x8b }
         var header: ModelHeader? = null
+        var sawNonTextByte = false
         try {
             val raw: InputStream = if (isGzip) GZIPInputStream(FileInputStream(tmp)) else FileInputStream(tmp)
             raw.use { stream ->
                 val head = ByteArray(8192)
                 var filled = 0
+                var scanned = 0
                 // Drain the whole stream: for gzip this verifies the CRC
                 // and proves the archive is complete.
                 val chunk = ByteArray(64 * 1024)
@@ -217,6 +219,22 @@ object ModelStore {
                         val take = minOf(n, head.size - filled)
                         System.arraycopy(chunk, 0, head, filled, take)
                         filled += take
+                    }
+                    // A text model is printable ASCII from start to end.
+                    // A .bin.gz model also STARTS with a text header (name,
+                    // version), but its weights are binary and follow within
+                    // the first kilobytes — so scan the first megabyte of
+                    // decompressed bytes for any non-text byte.
+                    if (!sawNonTextByte && scanned < 1_000_000) {
+                        val scanN = minOf(n, 1_000_000 - scanned)
+                        for (i in 0 until scanN) {
+                            val b = chunk[i].toInt()
+                            if (b != 9 && b != 10 && b != 13 && (b < 32 || b > 126)) {
+                                sawNonTextByte = true
+                                break
+                            }
+                        }
+                        scanned += scanN
                     }
                 }
                 if (filled > 0) {
@@ -230,50 +248,83 @@ object ModelStore {
                 else "读取文件内容失败：${e.message ?: "未知错误"}"
             )
         }
-        val isText = header != null
+        // NOT "header != null": binary models have a parseable text header
+        // too, and misjudging one as text makes KataGo load it with the
+        // wrong parser (the failure this scan exists to prevent).
+        val isText = !sawNonTextByte
 
         // Stage 3: real engine test-load. KataGo picks its loader from the
-        // file extension, so the probe file needs the right suffix.
-        val probeName = when {
-            isGzip && isText -> "probe.txt.gz"
+        // file extension, so the probe file needs the right suffix. If the
+        // first choice fails, try the other format before giving up.
+        fun probeSuffix(text: Boolean): String = when {
+            isGzip && text -> "probe.txt.gz"
             isGzip -> "probe.bin.gz"
-            isText -> "probe.txt"
+            text -> "probe.txt"
             else -> "probe.bin"
         }
-        val probe = File(context.cacheDir, probeName)
-        probe.delete()
-        tmp.copyTo(probe, overwrite = true)
-        val probeError: String? = try {
-            val engine = KataEngine.start(
-                nativeLibDir = context.applicationInfo.nativeLibraryDir,
-                workDir = File(context.filesDir, "engine-probe").apply { mkdirs() },
-                modelFile = probe,
-                maxVisits = 1
-            )
-            try {
-                engine.setBoardSize(BoardSize(9, 9))
-                engine.genmove(Stone.BLACK, BoardSize(9, 9))
-            } finally {
-                engine.quit()
+
+        fun tryProbe(text: Boolean): String? {
+            val probe = File(context.cacheDir, probeSuffix(text))
+            probe.delete()
+            tmp.copyTo(probe, overwrite = true)
+            val error: String? = try {
+                val engine = KataEngine.start(
+                    nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                    workDir = File(context.filesDir, "engine-probe").apply { mkdirs() },
+                    modelFile = probe,
+                    maxVisits = 1
+                )
+                try {
+                    engine.setBoardSize(BoardSize(9, 9))
+                    engine.genmove(Stone.BLACK, BoardSize(9, 9))
+                } finally {
+                    engine.quit()
+                }
+                null
+            } catch (e: Exception) {
+                e.message ?: "未知错误"
             }
-            null
-        } catch (e: Exception) {
-            e.message ?: "未知错误"
+            probe.delete()
+            return error
         }
-        probe.delete()
+
+        var probeError = tryProbe(isText)
+        var detectedText = isText
+        if (probeError != null) {
+            val altError = tryProbe(!isText)
+            if (altError == null) {
+                probeError = null
+                detectedText = !isText
+            }
+        }
         if (probeError != null) {
             tmp.delete()
             return ImportResult.Failed("引擎实测加载失败，这个文件不是可用的 KataGo 模型。（$probeError）")
         }
 
-        // Stage 4: file it into the library.
-        val cleanName = sourceName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        // Stage 4: file it into the library. The stored name must end with
+        // the suffix matching the detected format, whatever the picked
+        // file was called — KataGo chooses its loader by extension on
+        // every later load too.
+        val properSuffix = when {
+            isGzip && detectedText -> ".txt.gz"
+            isGzip -> ".bin.gz"
+            detectedText -> ".txt"
+            else -> ".bin"
+        }
+        var baseName = sourceName.replace(Regex("[^A-Za-z0-9._-]"), "_")
             .ifBlank { "model" }
-        var finalName = cleanName
+        for (suf in listOf(".txt.gz", ".bin.gz", ".txt", ".bin", ".gz")) {
+            if (baseName.endsWith(suf)) {
+                baseName = baseName.dropLast(suf.length)
+                break
+            }
+        }
+        if (baseName.isBlank()) baseName = "model"
+        var finalName = baseName + properSuffix
         var counter = 1
         while (File(userDir(context), finalName).exists()) {
-            finalName = "${cleanName.substringBeforeLast('.', cleanName)}-$counter" +
-                if (cleanName.contains('.')) ".${cleanName.substringAfterLast('.')}" else ""
+            finalName = "$baseName-$counter$properSuffix"
             counter++
         }
         val dest = File(userDir(context), finalName)
@@ -284,9 +335,12 @@ object ModelStore {
         val id = "u${System.currentTimeMillis()}"
         val displayName = customName?.trim()?.takeIf { it.isNotBlank() }
             ?: header?.name
-            ?: cleanName.substringBeforeLast('.').ifBlank { cleanName }
-        val archText = header?.describe()
-            ?: if (isText) "文本模型" else "二进制模型（引擎已验证可加载）"
+            ?: baseName
+        val archText = if (detectedText) {
+            header?.describe() ?: "文本模型"
+        } else {
+            "二进制模型（引擎已验证可加载）"
+        }
         val index = readIndex(context)
         index.put(
             JSONObject()
