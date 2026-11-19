@@ -18,16 +18,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Pin the test-build signature: every CI runner would otherwise
-      # generate a fresh debug keystore and test APKs could never be
-      # installed over each other. tools/test-signing.keystore is a
-      # throwaway key for TEST builds only (password "android"); the
-      # release build uses a different key kept in Secrets.
-      - name: Install pinned test keystore
-        run: |
-          mkdir -p ~/.android
-          cp tools/test-signing.keystore ~/.android/debug.keystore
-          ls -la ~/.android/
 
       - name: Restore cached KataGo engine
         id: engine-cache
@@ -106,10 +96,18 @@ jobs:
       - name: Report APK size
         run: ls -la app/build/outputs/apk/debug/
 
-      - name: Print APK signing certificate
+      - name: Verify APK signing certificate
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | head -5
+          ACTUAL=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | grep "certificate SHA-256 digest" | awk '{print $NF}')
+          EXPECTED="06ffef1ef532d569ec2f9a178c5638ab7cdf57309d98783b91946c79ed87a6a6"
+          echo "expected: $EXPECTED"
+          echo "actual:   $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Test signing pin did not take effect"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

@@ -12,8 +12,8 @@ android {
         applicationId = "com.tuxungo.android"
         minSdk = 29
         targetSdk = 35
-        versionCode = 107
-        versionName = "1.0.7"
+        versionCode = 108
+        versionName = "1.0.8"
     }
 
     // Release signing is injected by CI from repository secrets (the
@@ -21,6 +21,16 @@ android {
     // Without those variables the release build stays unsigned and local
     // debug builds are unaffected.
     signingConfigs {
+        // Pinned TEST signing: without this, every CI runner generates
+        // a fresh debug keystore and test builds can never be installed
+        // over each other. This key is a throwaway committed on purpose
+        // (standard debug alias/password); it is NOT the release key.
+        create("testPin") {
+            storeFile = rootProject.file("tools/test-signing.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (System.getenv("TUXUNGO_KEYSTORE_PATH") != null) {
             create("release") {
                 storeFile = file(System.getenv("TUXUNGO_KEYSTORE_PATH"))
@@ -32,6 +42,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("testPin")
+        }
         release {
             isMinifyEnabled = false
             if (System.getenv("TUXUNGO_KEYSTORE_PATH") != null) {
