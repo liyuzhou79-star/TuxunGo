@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO }
 
 @Composable
 fun TuxunGoApp() {
@@ -86,6 +86,7 @@ fun TuxunGoApp() {
     }
     var editSize by remember { mutableStateOf(19 to 19) }
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
+    var reviewInitialPly by remember { mutableStateOf<Int?>(null) }
     var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
@@ -116,6 +117,13 @@ fun TuxunGoApp() {
             onOpenModels = { screen = Screen.MODELS },
             onOpenLibrary = { screen = Screen.LIBRARY },
             onOpenGuess = { screen = Screen.GUESS },
+            onOpenTsumego = { screen = Screen.TSUMEGO },
+            onOpenGame = {
+                reviewGame = it
+                reviewInitialPly = null
+                screenBeforeReview = Screen.SETUP
+                screen = Screen.REVIEW
+            },
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenEditor = { w, h ->
                 editSize = w to h
@@ -127,6 +135,7 @@ fun TuxunGoApp() {
             onBack = { screen = Screen.SETUP },
             onOpenGame = {
                 reviewGame = it
+                reviewInitialPly = null
                 screenBeforeReview = Screen.LIBRARY
                 screen = Screen.REVIEW
             }
@@ -138,6 +147,7 @@ fun TuxunGoApp() {
             } else {
                 ReviewScreen(
                     game = g,
+                    initialPly = reviewInitialPly ?: -1,
                     onBack = {
                         if (screenBeforeReview == Screen.GAME) {
                             // Rebuild the finished board from its moves.
@@ -161,6 +171,9 @@ fun TuxunGoApp() {
         }
         Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.SETUP })
         Screen.GUESS -> com.tuxungo.android.ui.GuessScreen(
+            onBack = { screen = Screen.SETUP }
+        )
+        Screen.TSUMEGO -> com.tuxungo.android.ui.TsumegoScreen(
             onBack = { screen = Screen.SETUP }
         )
         Screen.EDIT -> EditScreen(
@@ -188,6 +201,13 @@ fun TuxunGoApp() {
                         onExit = { screen = Screen.SETUP },
                         onReview = {
                             reviewGame = it
+                            reviewInitialPly = null
+                            screenBeforeReview = Screen.GAME
+                            screen = Screen.REVIEW
+                        },
+                        onReviewAtPly = { g, ply ->
+                            reviewGame = g
+                            reviewInitialPly = ply
                             screenBeforeReview = Screen.GAME
                             screen = Screen.REVIEW
                         },

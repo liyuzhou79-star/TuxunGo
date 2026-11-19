@@ -1,0 +1,306 @@
+package com.tuxungo.android.ui
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.tuxungo.android.SettingsStore
+import com.tuxungo.android.go.BoardSize
+import com.tuxungo.android.go.GoGame
+import com.tuxungo.android.go.Move
+import com.tuxungo.android.go.Stone
+import kotlinx.coroutines.delay
+
+/**
+ * One step of a tsumego solution: the set of acceptable moves
+ * for the player, and the scripted reply the app plays back
+ * (null when the problem ends with the player's move).
+ */
+data class TsumegoStep(
+    val accept: Set<Pair<Int, Int>>,
+    val reply: Pair<Int, Int>?
+)
+
+/**
+ * A built-in tsumego problem. Every problem in this list was
+ * verified move by move with a brute-force rules solver: the
+ * accepted first move(s) force the capture, and the tempting
+ * wrong moves provably fail.
+ */
+data class TsumegoProblem(
+    val title: String,
+    val goal: String,
+    val width: Int,
+    val height: Int,
+    val black: List<Pair<Int, Int>>,
+    val white: List<Pair<Int, Int>>,
+    val steps: List<TsumegoStep>,
+    val hint: String,
+    val doneText: String
+)
+
+val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
+    TsumegoProblem(
+        title = "第一题 · 紧气",
+        goal = "黑先，提掉角上的白棋",
+        width = 5, height = 5,
+        black = listOf(2 to 0, 0 to 2),
+        white = listOf(0 to 0, 1 to 0, 0 to 1),
+        steps = listOf(TsumegoStep(setOf(1 to 1), null)),
+        hint = "先数一数：白棋还剩几口气？",
+        doneText = "白棋只剩一口气，填上最后一气，三子全提。"
+    ),
+    TsumegoProblem(
+        title = "第二题 · 双吃",
+        goal = "黑先，一手同时叫吃两个白子",
+        width = 5, height = 5,
+        black = listOf(0 to 1, 1 to 0, 3 to 2, 2 to 3, 0 to 2, 1 to 3),
+        white = listOf(1 to 1, 2 to 2),
+        steps = listOf(TsumegoStep(setOf(2 to 1), null)),
+        hint = "找一个同时挨着两个白子的点。注意：另一侧的连接点已被黑棋封住，白棋连不上。",
+        doneText = "一手双叫吃：两个白子同时只剩一口气，而白棋的连接点是禁着点，救哪个都来不及。"
+    ),
+    TsumegoProblem(
+        title = "第三题 · 共气对杀",
+        goal = "黑先，对杀取胜（填错一口气，死的是自己）",
+        width = 6, height = 4,
+        black = listOf(
+            0 to 0, 1 to 0, 0 to 1, 0 to 2, 1 to 2,
+            3 to 0, 3 to 1, 3 to 2, 3 to 3
+        ),
+        white = listOf(2 to 0, 1 to 1, 2 to 1, 2 to 2, 2 to 3),
+        steps = listOf(TsumegoStep(setOf(1 to 3), null)),
+        hint = "黑白两块棋共用同一口气。先数清楚：哪口气是共用的，哪口气只是自己的？",
+        doneText = "两块棋共用最后一口气，谁先填上谁赢。填共用气，白棋五子全提；要是先填自己那边的气，白棋反手就把黑棋提掉。"
+    ),
+    TsumegoProblem(
+        title = "第四题 · 征子",
+        goal = "黑先，用征子吃掉白子",
+        width = 7, height = 7,
+        black = listOf(2 to 1, 1 to 2, 3 to 3),
+        white = listOf(2 to 2),
+        steps = listOf(
+            TsumegoStep(setOf(3 to 2), 2 to 3),
+            TsumegoStep(setOf(2 to 4), 1 to 3),
+            TsumegoStep(setOf(1 to 4), 0 to 3),
+            TsumegoStep(setOf(0 to 4), 0 to 2),
+            TsumegoStep(setOf(0 to 1), null)
+        ),
+        hint = "轮流从两侧叫吃，把白棋一步步赶向棋盘边缘，它的气永远只剩一口。",
+        doneText = "征子一路赶到棋盘边上，白子无处可逃，整串被提。"
+    )
+)
+
+@Composable
+fun TsumegoScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { SettingsStore.load(context) }
+    val prefs = remember {
+        context.getSharedPreferences("tsumego_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var solvedSet by remember {
+        mutableStateOf(
+            (prefs.getString("solved", "") ?: "")
+                .split(",")
+                .filter { it.isNotBlank() }
+                .mapNotNull { it.toIntOrNull() }
+                .toSet()
+        )
+    }
+    var index by remember { mutableIntStateOf(0) }
+    val problem = TSUMEGO_PROBLEMS[index]
+
+    var game by remember { mutableStateOf(buildProblemGame(problem)) }
+    var version by remember { mutableIntStateOf(0) }
+    var step by remember { mutableIntStateOf(0) }
+    var mistakes by remember { mutableIntStateOf(0) }
+    var pending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var hintPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var replyPending by remember { mutableStateOf(false) }
+    var solved by remember { mutableStateOf(false) }
+    var statusText by remember {
+        mutableStateOf("轮到黑棋下：点棋盘选点，再点一次确认。")
+    }
+
+    fun reset(idx: Int) {
+        index = idx
+        val p = TSUMEGO_PROBLEMS[idx]
+        game = buildProblemGame(p)
+        version++
+        step = 0
+        mistakes = 0
+        pending = null
+        hintPoint = null
+        replyPending = false
+        solved = false
+        statusText = "轮到黑棋下：点棋盘选点，再点一次确认。"
+    }
+
+    // The app answers with the scripted reply after a correct move.
+    LaunchedEffect(replyPending) {
+        if (!replyPending) return@LaunchedEffect
+        delay(550)
+        val reply = problem.steps[step].reply
+        if (reply != null) {
+            game.play(reply.first, reply.second)
+            version++
+        }
+        step++
+        replyPending = false
+        statusText = "对方应了一手，继续：找下一步的关键点。"
+    }
+
+    @Suppress("UNUSED_EXPRESSION")
+    version
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 12.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "死活题训练",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onBack) { Text("返回") }
+        }
+        Text(
+            text = "已解 ${solvedSet.size} / ${TSUMEGO_PROBLEMS.size} 题",
+            fontSize = 13.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .androidx.compose.foundation.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        ) {
+            TSUMEGO_PROBLEMS.forEachIndexed { i, _ ->
+                FilterChip(
+                    selected = index == i,
+                    onClick = { if (index != i) reset(i) },
+                    label = { Text("第 ${i + 1} 题" + if (i in solvedSet) " ✓" else "") }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "${problem.title}：${problem.goal}",
+            fontSize = 16.sp, fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = statusText,
+            fontSize = 13.sp,
+            color = if (solved) Color(0xFF2E7D32) else Color(0xFF2F7CF6)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        BoardView(
+            game = game,
+            enabled = !solved && !replyPending,
+            skin = BoardSkin.fromId(settings.boardSkin),
+            showCoordinates = settings.showCoordinates,
+            preview = pending ?: hintPoint,
+            onPointTap = { x, y ->
+                if (solved || replyPending) return@BoardView
+                if (!game.isLegal(x, y)) return@BoardView
+                if (pending == Pair(x, y)) {
+                    pending = null
+                    hintPoint = null
+                    val cur = problem.steps.getOrNull(step) ?: return@BoardView
+                    if (Pair(x, y) in cur.accept) {
+                        game.play(x, y)
+                        version++
+                        if (step >= problem.steps.size - 1) {
+                            solved = true
+                            statusText = problem.doneText +
+                                if (mistakes > 0) "（本題错了 $mistakes 次）" else "（一次没错，漂亮）"
+                            if (index !in solvedSet) {
+                                val next = solvedSet + index
+                                solvedSet = next
+                                prefs.edit()
+                                    .putString("solved", next.joinToString(","))
+                                    .apply()
+                            }
+                        } else {
+                            replyPending = true
+                            statusText = "对！对方正在应招…"
+                        }
+                    } else {
+                        mistakes++
+                        statusText = "这步不对，再想想。需要的话点「提示」看关键点。"
+                    }
+                } else {
+                    pending = Pair(x, y)
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (solved) {
+            if (index < TSUMEGO_PROBLEMS.size - 1) {
+                Button(
+                    onClick = { reset(index + 1) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("下一题") }
+            } else {
+                Text(
+                    "全部题目都解完了，厉害！",
+                    fontSize = 14.sp, color = Color(0xFF2E7D32)
+                )
+            }
+        } else {
+            Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        hintPoint = problem.steps.getOrNull(step)?.accept?.firstOrNull()
+                        statusText = "提示：${problem.hint}（棋盘上发光的点就是关键位置）"
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("提示") }
+                OutlinedButton(
+                    onClick = { reset(index) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("重新开始") }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+private fun buildProblemGame(p: TsumegoProblem): GoGame {
+    val g = GoGame(BoardSize(p.width, p.height), 0.5)
+    val stones = p.black.map { Move(Stone.BLACK, it.first, it.second) } +
+        p.white.map { Move(Stone.WHITE, it.first, it.second) }
+    g.loadPosition(stones, Stone.BLACK)
+    return g
+}

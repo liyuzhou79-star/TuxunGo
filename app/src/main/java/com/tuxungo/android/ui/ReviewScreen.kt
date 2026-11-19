@@ -68,7 +68,8 @@ import kotlin.math.roundToInt
 fun ReviewScreen(
     game: LibraryGame,
     onBack: () -> Unit,
-    onContinue: (GameConfig) -> Unit
+    onContinue: (GameConfig) -> Unit,
+    initialPly: Int = -1
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
@@ -92,7 +93,11 @@ fun ReviewScreen(
     var progressTotal by remember { mutableIntStateOf(1) }
     var errorText by remember { mutableStateOf("") }
     var perspective by remember { mutableStateOf(Stone.BLACK) }
-    var ply by remember { mutableIntStateOf(totalMoves) }
+    var ply by remember {
+        mutableIntStateOf(
+            if (initialPly in 0..totalMoves) initialPly else totalMoves
+        )
+    }
     // Branch ("what-if") exploration: a scratch game forked at the
     // current ply. The main line is never touched.
     var branchGame by remember { mutableStateOf<GoGame?>(null) }
@@ -106,6 +111,7 @@ fun ReviewScreen(
     // GoGame is not observable; bump this after every branch mutation
     // so the board redraws.
     var branchVersion by remember { mutableIntStateOf(0) }
+    var showBranchSave by remember { mutableStateOf(false) }
     var showBest by remember { mutableStateOf(true) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var savedNote by remember { mutableStateOf(false) }
@@ -395,9 +401,31 @@ fun ReviewScreen(
                     modifier = Modifier.weight(1f)
                 ) { Text("停一手") }
                 OutlinedButton(
+                    onClick = { showBranchSave = true },
+                    modifier = Modifier.weight(1f)
+                ) { Text("存为棋谱") }
+                OutlinedButton(
                     onClick = { exitBranch() },
                     modifier = Modifier.weight(1f)
                 ) { Text("退出试下") }
+            }
+            if (showBranchSave) {
+                SaveGameDialog(
+                    game = current.copy(
+                        id = "",
+                        folderId = null,
+                        title = current.title + "（分支）",
+                        createdAt = System.currentTimeMillis(),
+                        moves = branch.moves.toList(),
+                        resultText = "",
+                        statsCache = ""
+                    ),
+                    onDismiss = { showBranchSave = false },
+                    onSaved = {
+                        showBranchSave = false
+                        branchInfo = "分支已存入棋谱库"
+                    }
+                )
             }
         } else {
             BoardView(

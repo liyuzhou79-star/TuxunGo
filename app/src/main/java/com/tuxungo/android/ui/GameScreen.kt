@@ -71,6 +71,7 @@ fun GameScreen(
     initialMoves: List<Move> = emptyList(),
     onExit: () -> Unit,
     onReview: (com.tuxungo.android.LibraryGame) -> Unit = {},
+    onReviewAtPly: (com.tuxungo.android.LibraryGame, Int) -> Unit = { g, _ -> onReview(g) },
     initialStats: Map<Int, com.tuxungo.android.engine.TurnStat> = emptyMap(),
     initialClock: GameStore.ClockSnapshot? = null,
     initialTimeoutBy: Stone? = null
@@ -1142,6 +1143,28 @@ fun GameScreen(
             autoKey == game.moves.size -> autoResult
             else -> null
         }
+        // Mini win-rate bar: always occupies its strip so the board
+        // does not shift when data arrives.
+        Box(modifier = Modifier.fillMaxWidth().height(6.dp)) {
+            if (liveRes != null) {
+                val wr = liveRes.rootWinrateBlack.toFloat().coerceIn(0.02f, 0.98f)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(wr)
+                            .height(6.dp)
+                            .background(Color(0xFF263238))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f - wr)
+                            .height(6.dp)
+                            .background(Color(0xFFCFD8DC))
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
         // Fixed height whether or not an estimate is ready yet, so the
         // board never gets pushed down when the numbers arrive.
         Box(modifier = Modifier.fillMaxWidth().height(18.dp)) {
@@ -1657,10 +1680,42 @@ fun GameScreen(
                 "黑：棋子 ${s.blackStones} + 空 ${s.blackTerritory} = ${s.blackTotal.toInt()}\n" +
                 "白：棋子 ${s.whiteStones} + 空 ${s.whiteTerritory} + 贴目 ${s.komi} = ${s.whiteTotal}"
         }
+        // The single biggest win-rate swing of the game, from the
+        // live-recorded per-turn stats.
+        val swing: Pair<Int, Double>? = run {
+            val keys = liveStats.keys.sorted()
+            var best: Pair<Int, Double>? = null
+            for (i in 1 until keys.size) {
+                if (keys[i] != keys[i - 1] + 1) continue
+                val d = kotlin.math.abs(
+                    liveStats[keys[i]]!!.winrateBlack - liveStats[keys[i - 1]]!!.winrateBlack
+                )
+                if (best == null || d > best!!.second) best = keys[i] to d
+            }
+            best
+        }
         AlertDialog(
             onDismissRequest = { resultDismissed = true },
             title = { Text("对局结果") },
-            text = { Text(resultText) },
+            text = {
+                Column {
+                    Text(resultText)
+                    if (swing != null && swing.second >= 0.05) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "全场转折：第 ${swing.first} 手（胜率波动 " +
+                                String.format("%.1f%%", swing.second * 100) + "）",
+                            fontSize = 13.sp, color = Color.Gray
+                        )
+                        TextButton(
+                            onClick = {
+                                resultDismissed = true
+                                onReviewAtPly(buildLibraryGame(), swing.first)
+                            }
+                        ) { Text("跳到转折手复盘") }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { exitGame() }) { Text("返回主页") }
             },

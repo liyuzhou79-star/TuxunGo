@@ -35,13 +35,18 @@ fun SetupScreen(
     onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenEditor: (Int, Int) -> Unit,
-    onOpenGuess: () -> Unit = {}
+    onOpenGuess: () -> Unit = {},
+    onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
+    onOpenTsumego: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
         val models = com.tuxungo.android.engine.ModelStore.list(context)
         val activeId = com.tuxungo.android.engine.ModelStore.activeId(context)
         models.firstOrNull { it.id == activeId }?.displayName ?: "内置默认模型"
+    }
+    val recentGames = remember {
+        com.tuxungo.android.LibraryStore.listGames(context).take(3)
     }
     // The setup form remembers the last used configuration.
     val setupPrefs = remember {
@@ -94,6 +99,17 @@ fun SetupScreen(
     val handicapInput = handicapText.toIntOrNull()?.coerceIn(0, 9) ?: 0
     // A 1-stone "handicap" is just an even game with adjusted komi.
     val effectiveHandicap = if (handicapSupported && handicapInput != 1) handicapInput else 0
+    // Handicap games are normally played with a half-point komi: when
+    // a handicap is picked and the komi still shows the even-game
+    // default, switch it (and back when the handicap is removed).
+    // A komi the user typed themselves is never touched.
+    androidx.compose.runtime.LaunchedEffect(effectiveHandicap) {
+        if (effectiveHandicap >= 2 && komiText == "7.5") {
+            komiText = "0.5"
+        } else if (effectiveHandicap == 0 && komiText == "0.5") {
+            komiText = "7.5"
+        }
+    }
     val komiInput = komiText.toDoubleOrNull()?.coerceIn(0.0, 20.0) ?: 7.5
     /** KataGo reliably supports boards with both sides in 7..19. */
     val aiSupported = (width in 7..19 && height in 7..19)
@@ -328,6 +344,19 @@ fun SetupScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "死活题训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "从紧气、双吃到对杀、征子，做对一步，对方自动应招，练读秒般的计算力。", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenTsumego,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("开始做死活题") }
+        }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "棋谱库", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "收藏的对局都在这里，点开就能复盘整场。", fontSize = 13.sp, color = Color.Gray)
@@ -338,8 +367,31 @@ fun SetupScreen(
         ) { Text("打开棋谱库") }
         }
         }
+        if (recentGames.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "最近棋谱", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(4.dp))
+            for (g in recentGames) {
+                androidx.compose.material3.TextButton(
+                    onClick = { onOpenGame(g) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "${g.title} · ${g.moves.size} 手",
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+            }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.1.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.2.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
