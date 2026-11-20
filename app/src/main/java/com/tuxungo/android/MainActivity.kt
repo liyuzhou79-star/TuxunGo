@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 性能维护：棋谱缩略图缓存加了上限，棋谱存得再多也不会一直吃内存（超上限的旧缩略图下次看时自动重画）",
+            whatsNew = "· 仓库新增代码地图（docs/CODE_MAP.md）：每个文件管什么、改功能先看哪里，一页讲清（App 功能没有变化）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
