@@ -132,7 +132,10 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .windowInsetsPadding(WindowInsets.safeDrawing)
                     ) {
-                        TuxunGoApp(onAccentChange = { accent = it })
+                        TuxunGoApp(
+                            onAccentChange = { accent = it },
+                            shortcut = intent?.getStringExtra("shortcut")
+                        )
                     }
                 }
             }
@@ -143,14 +146,38 @@ class MainActivity : ComponentActivity() {
 private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS }
 
 @Composable
-fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
+fun TuxunGoApp(
+    onAccentChange: (String) -> Unit = {},
+    shortcut: String? = null
+) {
     val context = LocalContext.current
     // Restore an unfinished game after backgrounding / process death.
     val restored = remember {
         GameStore.load(context)?.takeIf { !it.finished }
     }
-    var screen by remember { mutableStateOf(if (restored != null) Screen.GAME else Screen.SETUP) }
-    var config by remember { mutableStateOf(restored?.config) }
+    var screen by remember {
+        mutableStateOf(
+            when {
+                shortcut == "guess" -> Screen.GUESS
+                restored != null -> Screen.GAME
+                shortcut == "quick" -> Screen.GAME
+                else -> Screen.SETUP
+            }
+        )
+    }
+    var config by remember {
+        mutableStateOf(
+            restored?.config
+                ?: if (shortcut == "quick") {
+                    GameConfig(
+                        mode = com.tuxungo.android.ui.GameMode.PVE,
+                        width = 19, height = 19, aiVisits = 200
+                    )
+                } else {
+                    null
+                }
+        )
+    }
     var restoreMoves by remember { mutableStateOf<List<Move>>(restored?.moves ?: emptyList()) }
     var restoreStats by remember {
         mutableStateOf(restored?.turnStats ?: emptyMap())

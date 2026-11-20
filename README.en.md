@@ -38,7 +38,7 @@ vs AI games, or play a friend on the same phone.
 
 ### Training
 
-- **Tsumego training**: seven problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, and the classic under-the-stones) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules; the home screen recommends a daily problem from the unsolved ones
+- **Tsumego training**: eight problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, the classic under-the-stones, and the vital-point kill) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules; the home screen recommends a daily problem from the unsolved ones
 - **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty; outright misses are saved to a **mistake book** you can review position by position until you nail them
 
 ### Game library

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="quick_game"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_quick"
+        android:shortcutLongLabel="@string/shortcut_quick_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.tuxungo.android"
+            android:targetClass="com.tuxungo.android.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="quick" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="guess_training"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_guess"
+        android:shortcutLongLabel="@string/shortcut_guess_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.tuxungo.android"
+            android:targetClass="com.tuxungo.android.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="guess" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

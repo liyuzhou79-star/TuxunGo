@@ -93,6 +93,16 @@ fun SetupScreen(
         mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
     }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
+    // First-launch guide: three pages, shown once, re-openable
+    // from the footer.
+    var showGuide by remember {
+        mutableStateOf(!setupPrefs.getBoolean("guide_seen", false))
+    }
+    var guidePage by remember { mutableIntStateOf(0) }
+    fun closeGuide() {
+        setupPrefs.edit().putBoolean("guide_seen", true).apply()
+        showGuide = false
+    }
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
@@ -524,7 +534,41 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 2.3.0", fontSize = 12.sp, color = Color.Gray)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(text = "版本 2.4.0", fontSize = 12.sp, color = Color.Gray)
+            TextButton(onClick = {
+                guidePage = 0
+                showGuide = true
+            }) { Text("新手指南", fontSize = 12.sp) }
+        }
+    }
+
+    if (showGuide) {
+        val guideTitles = listOf("欢迎来到 TuxunGo", "AI 陪你看棋", "练棋与模型")
+        val guideBodies = listOf(
+            "内置 KataGo 引擎的免费围棋 App，完全离线、没有账号。选个模式就能开局：人对 AI、AI 对 AI、人对人；棋盘 5–25 路任意宽高，让子、贴目都能自由设。",
+            "下棋时点「AI 分析」看候选着点和胜率，「形式判断」看地盘与死活。对局时每一手的胜率会在后台悄悄算好，终局打开复盘基本秒开：恶手、妙手、关键手自动标出，还能从任意一手试下分支。",
+            "主页有猜一选和死活题两种训练：猜错的题会进错题本，死活题每天推荐一道。模型库可以导入更强的 KataGo 模型（.txt.gz / .bin.gz），每个模型还能测速。祝你棋力大涨！"
+        )
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { closeGuide() },
+            title = { Text(guideTitles[guidePage]) },
+            text = { Text(guideBodies[guidePage], fontSize = 14.sp) },
+            confirmButton = {
+                if (guidePage < 2) {
+                    Button(onClick = { guidePage++ }) {
+                        Text("下一页（${guidePage + 1}/3）")
+                    }
+                } else {
+                    Button(onClick = { closeGuide() }) { Text("开始使用") }
+                }
+            },
+            dismissButton = {
+                if (guidePage < 2) {
+                    TextButton(onClick = { closeGuide() }) { Text("跳过") }
+                }
+            }
+        )
     }
 
     if (showUnsupportedDialog) {

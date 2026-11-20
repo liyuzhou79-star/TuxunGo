@@ -167,6 +167,24 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
         ),
         hint = "先扑一子进眼位：白棋提掉这颗扑入子之后，它留下的空点就是整块白棋的最后一口气。",
         doneText = "扑入、被提、再回到同一点回提——倒脱靴。白棋提掉一子，反而把自己最后一口气让了出来，十三子全提。"
+    ),
+    TsumegoProblem(
+        title = "第八题 · 点眼杀",
+        goal = "黑先，杀掉这块白棋",
+        level = "初级",
+        width = 5, height = 5,
+        black = listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3, 4 to 3),
+        white = listOf(
+            0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0,
+            0 to 1, 4 to 1,
+            0 to 2, 1 to 2, 2 to 2, 3 to 2, 4 to 2
+        ),
+        steps = listOf(
+            TsumegoStep(setOf(2 to 1), 1 to 1),
+            TsumegoStep(setOf(3 to 1), null)
+        ),
+        hint = "白棋的眼位是一条直三，点在正中心：白补一头，黑就从另一头下手。",
+        doneText = "点中直三的中心，白棋的眼位就成了假眼：补哪一头，黑都能从另一头把整块白棋提掉。这叫点眼杀。"
     )
 )
 
