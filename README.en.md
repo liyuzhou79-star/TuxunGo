@@ -61,7 +61,7 @@ vs AI games, or play a friend on the same phone.
 
 ### Model library
 
-- Ships with two models, ready out of the box: a **light model** (fast, plenty for everyday games and analysis) and a **strong model** (stronger play and more reliable position judgment, a little slower to think), switchable any time in the library; a third bundled file, the human-style model, powers Human-like play
+- Ships with two models ready out of the box: a **light model** (fast, plenty for everyday games and analysis) and the human-style model that powers Human-like play. The **strong model** (stronger play and more reliable position judgment, a little slower to think) is a free on-demand download (~98 MB) from the model library instead of bundle weight — and every model, bundled ones included, can be deleted to free space (bundled ones restore for free)
 - Import your own KataGo models (`.txt.gz` / `.bin.gz`, up to 99): integrity check, header parse and a real engine test-load — a broken file never enters the library
 - Every model, including the built-in one, can be given a nickname
 - Every model can be speed-tested (visits per second) right in the library; results are kept, so they are still there next visit
@@ -83,7 +83,7 @@ Grab the latest release APK from [Releases](https://github.com/liyuzhou79-star/T
 
 ## Stronger models (optional)
 
-The bundled strong model is already very capable. For even more strength, download a net from the [official KataGo model library](https://katagotraining.org/networks/):
+The downloadable strong model is already very capable. For even more strength, download a net from the [official KataGo model library](https://katagotraining.org/networks/) and import it:
 
 | Model | Size | Notes |
 | --- | --- | --- |
@@ -96,7 +96,7 @@ Import the `.bin.gz` file in the app's model library, give it a name, then assig
 ## Design principles
 
 - Simple pages, no decorative clutter
-- Ready out of the box: light, strong and human-style models are all bundled, nothing to download first; even bigger nets are user-added
+- Ready out of the box: light and human-style models are bundled; the strong model downloads on demand so the package stays lean; even bigger nets are user-added
 - Offline first, always
 
 ## Tech

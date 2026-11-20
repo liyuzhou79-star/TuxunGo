@@ -213,6 +213,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         mutableIntStateOf(initialIndex.coerceIn(0, TSUMEGO_PROBLEMS.size - 1))
     }
     var unsolvedOnly by remember { mutableStateOf(false) }
+    var mistakesOnly by remember { mutableStateOf(false) }
     val problem = TSUMEGO_PROBLEMS[index]
 
     var game by remember { mutableStateOf(buildProblemGame(problem)) }
@@ -349,8 +350,21 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 onClick = { unsolvedOnly = !unsolvedOnly },
                 label = { Text("只看未解") }
             )
+            FilterChip(
+                selected = mistakesOnly,
+                onClick = { mistakesOnly = !mistakesOnly },
+                label = { Text("只看错题") }
+            )
+            val missCounts = remember(index, solvedSet) {
+                TSUMEGO_PROBLEMS.indices.map { prefs.getInt("miss_$it", 0) }
+            }
             TSUMEGO_PROBLEMS.forEachIndexed { i, _ ->
                 if (unsolvedOnly && i in solvedSet && i != index) {
+                    return@forEachIndexed
+                }
+                if (mistakesOnly && i != index &&
+                    !(missCounts[i] > 0 && i !in solvedSet)
+                ) {
                     return@forEachIndexed
                 }
                 FilterChip(

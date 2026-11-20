@@ -106,6 +106,9 @@ fun LibraryScreen(
     var newFolderName by remember { mutableStateOf("") }
     var moveTarget by remember { mutableStateOf<LibraryGame?>(null) }
     var deleteTarget by remember { mutableStateOf<LibraryGame?>(null) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBatchDelete by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<LibraryGame?>(null) }
     var renameText by remember { mutableStateOf("") }
     var exportedNote by remember { mutableStateOf("") }
@@ -306,6 +309,33 @@ fun LibraryScreen(
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            if (!selectionMode) {
+                TextButton(
+                    onClick = {
+                        selectionMode = true
+                        selectedIds = emptySet()
+                    },
+                    enabled = shown.isNotEmpty()
+                ) { Text("多选删除", fontSize = 12.sp) }
+            } else {
+                Text(
+                    text = "已选 ${selectedIds.size} 项",
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = {
+                    selectedIds = shown.map { it.id }.toSet()
+                }) { Text("全选", fontSize = 12.sp) }
+                TextButton(
+                    onClick = { showBatchDelete = true },
+                    enabled = selectedIds.isNotEmpty()
+                ) { Text("删除所选", fontSize = 12.sp) }
+                TextButton(onClick = {
+                    selectionMode = false
+                    selectedIds = emptySet()
+                }) { Text("取消", fontSize = 12.sp) }
+            }
+        }
 
         if (exportedNote.isNotEmpty()) {
             Text(exportedNote, fontSize = 13.sp, color = Color(0xFF2F7CF6))
@@ -320,6 +350,27 @@ fun LibraryScreen(
         for (g in shown) {
             Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Column(modifier = Modifier.padding(12.dp)) {
+                    if (selectionMode) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(
+                                checked = g.id in selectedIds,
+                                onCheckedChange = { checked ->
+                                    selectedIds = if (checked) {
+                                        selectedIds + g.id
+                                    } else {
+                                        selectedIds - g.id
+                                    }
+                                }
+                            )
+                            Column {
+                                Text(g.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${g.moves.size} 手 · ${dateFmt.format(Date(g.createdAt))}",
+                                    fontSize = 12.sp, color = Color.Gray
+                                )
+                            }
+                        }
+                    } else {
                     Text(g.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text(
                         "${g.modeLabel} · ${g.resultText.ifBlank { "无结果" }} · ${g.moves.size} 手 · ${dateFmt.format(Date(g.createdAt))}",
@@ -342,6 +393,7 @@ fun LibraryScreen(
                         ) { Text("复制") }
                         TextButton(onClick = { exportSgf(g) }) { Text("导出") }
                         TextButton(onClick = { deleteTarget = g }) { Text("删除") }
+                    }
                     }
                 }
             }
@@ -512,6 +564,30 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showBatchDelete) {
+        AlertDialog(
+            onDismissRequest = { showBatchDelete = false },
+            title = { Text("删除所选棋谱？") },
+            text = { Text("将删除 ${selectedIds.size} 局棋谱，删了不能恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        for (id in selectedIds) {
+                            LibraryStore.deleteGame(context, id)
+                        }
+                        showBatchDelete = false
+                        selectionMode = false
+                        selectedIds = emptySet()
+                        refresh()
+                    }
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDelete = false }) { Text("取消") }
             }
         )
     }

@@ -58,7 +58,15 @@ data class AnalysisResult(
     val rootScoreLeadBlack: Double,
     val candidates: List<Candidate>,
     /** Ownership per point, index = y * width + x, Black's perspective (+ = Black). */
-    val ownershipBlack: DoubleArray
+    val ownershipBlack: DoubleArray,
+    /** The human-style model's favourite move for this position (null
+     *  when it prefers to pass, or when no human model is loaded). */
+    val humanTopMove: Move? = null,
+    /** GTP vertex of the human favourite ("pass" included), "" when
+     *  no human model is loaded. */
+    val humanTopVertex: String = "",
+    /** How likely a top human player is to play that move, 0..1. */
+    val humanTopProb: Double = 0.0
 )
 
 /**
@@ -82,6 +90,13 @@ class AnalysisEngine private constructor(
     @Volatile
     var isAlive: Boolean = true
         private set
+
+    /** True when a human-style model is loaded alongside: analyze()
+     *  then also asks for the human policy (verified locally: the
+     *  query needs includePolicy plus a humanSLProfile override, and
+     *  the reply carries a top-level "humanPolicy" array in the same
+     *  row-major-from-the-top layout as "policy"). */
+    var humanEnabled: Boolean = false
 
     private val responses = LinkedBlockingQueue<JSONObject>()
     private val stderrTail = StringBuffer()
@@ -155,6 +170,13 @@ class AnalysisEngine private constructor(
         query.put("boardYSize", size.height)
         query.put("maxVisits", maxVisits)
         query.put("includeOwnership", true)
+        query.put("includePolicy", true)
+        if (humanEnabled) {
+            query.put(
+                "overrideSettings",
+                JSONObject().put("humanSLProfile", "rank_9d")
+            )
+        }
         val initial = JSONArray()
         for (s in initialStones) {
             val v = KataEngine.toVertex(s, size)
@@ -397,7 +419,46 @@ class AnalysisEngine private constructor(
         }
         // KataGo ownership is side-to-move perspective; store Black's.
         val ownership = AnalysisMath.ownershipToBlack(rawOwnership, sideToMove)
-        return AnalysisResult(sideToMove, rootWrB, rootLeadB, candidates, ownership)
+
+        // Human-style favourite: argmax of the human policy array
+        // (board points in row-major order from the top, pass last).
+        var humanTopMove: Move? = null
+        var humanTopVertex = ""
+        var humanTopProb = 0.0
+        val humanArr = resp.optJSONArray("humanPolicy")
+        if (humanArr != null && humanArr.length() >= size.area) {
+            var bestIdx = -1
+            var bestVal = 0.0
+            for (i in 0 until size.area) {
+                val v = humanArr.optDouble(i, 0.0)
+                if (v > bestVal) {
+                    bestVal = v
+                    bestIdx = i
+                }
+            }
+            val passProb = if (humanArr.length() > size.area) {
+                humanArr.optDouble(size.area, 0.0)
+            } else {
+                0.0
+            }
+            if (bestIdx >= 0 && bestVal >= passProb && bestVal > 0.001) {
+                val move = Move(
+                    sideToMove,
+                    bestIdx % size.width,
+                    bestIdx / size.width
+                )
+                humanTopMove = move
+                humanTopVertex = KataEngine.toVertex(move, size)
+                humanTopProb = bestVal
+            } else if (passProb > 0.001) {
+                humanTopVertex = "pass"
+                humanTopProb = passProb
+            }
+        }
+        return AnalysisResult(
+            sideToMove, rootWrB, rootLeadB, candidates, ownership,
+            humanTopMove, humanTopVertex, humanTopProb
+        )
     }
 
     fun quit() {
@@ -409,7 +470,12 @@ class AnalysisEngine private constructor(
     }
 
     companion object {
-        fun start(nativeLibDir: String, workDir: File, modelFile: File): AnalysisEngine {
+        fun start(
+            nativeLibDir: String,
+            workDir: File,
+            modelFile: File,
+            humanModelFile: File? = null
+        ): AnalysisEngine {
             val binary = File(nativeLibDir, "libkatago.so")
             check(binary.exists()) { "KataGo binary missing: ${binary.absolutePath}" }
             check(modelFile.exists()) { "KataGo model missing: ${modelFile.absolutePath}" }
@@ -424,13 +490,20 @@ class AnalysisEngine private constructor(
                 numAnalysisThreads = 1
                 """.trimIndent() + "\n"
             )
-            val process = ProcessBuilder(
+            val args = mutableListOf(
                 binary.absolutePath, "analysis",
                 "-model", modelFile.absolutePath,
                 "-config", configFile.absolutePath
-            ).directory(workDir).start()
+            )
+            val humanOk = humanModelFile != null && humanModelFile.exists()
+            if (humanOk) {
+                args.add("-human-model")
+                args.add(humanModelFile.absolutePath)
+            }
+            val process = ProcessBuilder(args).directory(workDir).start()
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream))
             val engine = AnalysisEngine(process, writer)
+            engine.humanEnabled = humanOk
             // Readiness probe: an empty-board query with a single visit.
             try {
                 engine.analyze(

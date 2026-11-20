@@ -81,6 +81,9 @@ fun BoardView(
     showMoveNumbers: Boolean = false,
     /** One-colour Go: render every stone black. */
     oneColor: Boolean = false,
+    /** The human-style model's favourite point: drawn as a blue ring
+     *  so it reads differently from the AI's numbered discs. */
+    humanPoint: Pair<Int, Int>? = null,
     /** Render the board rotated 180 degrees (White's point of view). */
     flipped: Boolean = false,
     onPointTap: (Int, Int) -> Unit
@@ -300,18 +303,21 @@ fun BoardView(
             }
         }
 
-        // Territory marks: small solid squares in the owner's color on
-        // empty points, only where the engine is fairly confident
-        // (threshold), so early-game influence is not shown as territory.
+        // Territory marks: squares in the owner's color on empty
+        // points, shaded by how strongly the engine believes the
+        // point belongs to that side — a pale small square for a
+        // slight lean, a big dark one for settled territory. The
+        // weight IS the information, so there is no hard threshold.
         if (ownership != null) {
             for (y in 0 until h) {
                 for (x in 0 until w) {
                     if (game.stoneAt(x, y) != null) continue
                     val v = ownership.getOrNull(y * w + x) ?: continue
                     val mag = kotlin.math.abs(v)
-                    if (mag < territoryThreshold) continue
-                    val alpha = (0.55f + 0.45f * ((mag - territoryThreshold) / (1.0 - territoryThreshold)).coerceIn(0.0, 1.0).toFloat())
-                    val half = minOf(cellX, cellY) * 0.19f
+                    if (mag < 0.05) continue
+                    val alpha = (0.16f + 0.84f * mag.toFloat()).coerceIn(0f, 1f)
+                    val half = minOf(cellX, cellY) * 0.19f *
+                        (0.5f + 0.5f * mag.toFloat())
                     val topLeft = Offset(px(x) - half, py(y) - half)
                     val sqSize = Size(half * 2, half * 2)
                     if (v > 0) {
@@ -529,6 +535,24 @@ fun BoardView(
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
+        }
+        // Human-style favourite: a blue double ring, no number — the
+        // "where a human would play" marker, distinct from the AI's
+        // ranked discs even when both point at the same spot.
+        if (humanPoint != null) {
+            val center = Offset(px(humanPoint.first), py(humanPoint.second))
+            drawCircle(
+                Color(0xFF2F7CF6),
+                radius = r * 1.02f,
+                center = center,
+                style = Stroke(width = maxOf(2.5f, r * 0.10f))
+            )
+            drawCircle(
+                Color(0xFF2F7CF6).copy(alpha = 0.55f),
+                radius = r * 0.82f,
+                center = center,
+                style = Stroke(width = maxOf(1.5f, r * 0.05f))
+            )
         }
     }
 }

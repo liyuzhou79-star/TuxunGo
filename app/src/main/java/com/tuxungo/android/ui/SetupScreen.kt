@@ -2,6 +2,7 @@ package com.tuxungo.android.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,7 +49,8 @@ fun SetupScreen(
     onOpenEditor: (Int, Int) -> Unit,
     onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
     onOpenTraining: () -> Unit = {},
-    onOpenTools: () -> Unit = {}
+    onOpenTools: () -> Unit = {},
+    onOpenGuide: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
@@ -96,16 +98,11 @@ fun SetupScreen(
         mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
     }
     var showUnsupportedDialog by remember { mutableStateOf(false) }
-    // First-launch guide: three pages, shown once, re-openable
-    // from the footer.
-    var showGuide by remember {
-        mutableStateOf(!setupPrefs.getBoolean("guide_seen", false))
-    }
-    var guidePage by remember { mutableIntStateOf(0) }
-    fun closeGuide() {
-        setupPrefs.edit().putBoolean("guide_seen", true).apply()
-        showGuide = false
-    }
+    // The home page is deliberately minimal now: quick start, the
+    // start button and entry cards. Everything adjustable lives on
+    // the detail page behind the settings card.
+    var showDetail by remember { mutableStateOf(false) }
+    var showNigiri by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
@@ -145,6 +142,35 @@ fun SetupScreen(
     val komiInput = komiText.toDoubleOrNull()?.coerceIn(0.0, 20.0) ?: 7.5
     /** KataGo reliably supports boards with both sides in 7..19. */
     val aiSupported = (width in 7..19 && height in 7..19)
+    val needsAi = mode != GameMode.PVP
+    val blocked = needsAi && !aiSupported
+    fun startGame() {
+        if (blocked) {
+            showUnsupportedDialog = true
+        } else {
+            if (mode == GameMode.EVE && seriesTarget > 0) {
+                com.tuxungo.android.SeriesStore.reset(context)
+            }
+            onStart(
+                GameConfig(
+                    mode, width, height, effectiveHandicap,
+                    komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
+                    clockMinutes = clockMinutes,
+                    byoyomiPeriods = byoyomiPeriods,
+                    seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0,
+                    focusMode = focusMode,
+                    oneColor = if (mode != GameMode.EVE) oneColor else false
+                )
+            )
+        }
+    }
+    val modeLabel = when (mode) {
+        GameMode.PVP -> "人对人"
+        GameMode.PVE -> "人对 AI"
+        GameMode.EVE -> "AI 对 AI"
+    }
+    val configSummary = modeLabel + " · ${width}×${height} · " +
+        if (clockMinutes > 0) "${clockMinutes} 分钟" else "不限时"
 
     Column(
         modifier = Modifier
@@ -193,6 +219,7 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(20.dp))
 
+        if (!showDetail) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -221,11 +248,18 @@ fun SetupScreen(
             ) { Text("AI 表演赛") }
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "一键开局，参数按常用配置设好；想细调可以用下面的设置。", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "一键开局，参数按常用配置设好；想细调可以进下面的「对局设置」。", fontSize = 12.sp, color = Color.Gray)
         }
         }
         Spacer(modifier = Modifier.height(16.dp))
+        }
 
+        if (showDetail) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            TextButton(onClick = { showDetail = false }) { Text("‹ 返回", fontSize = 15.sp) }
+            Text(text = "对局设置", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -424,10 +458,27 @@ fun SetupScreen(
         )
         }
         }
+        if (mode != GameMode.EVE) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = "猜先", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "按围棋的老规矩决定谁执黑：一方抓一把白子，另一方猜单双，猜中者执黑。",
+                        fontSize = 13.sp, color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showNigiri = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("开始猜先") }
+                }
+            }
+        }
+        }
         Spacer(modifier = Modifier.height(20.dp))
 
-        val needsAi = mode != GameMode.PVP
-        val blocked = needsAi && !aiSupported
         val startInteraction = remember {
             androidx.compose.foundation.interaction.MutableInteractionSource()
         }
@@ -437,26 +488,7 @@ fun SetupScreen(
             label = "startButtonPress"
         )
         Button(
-            onClick = {
-                if (blocked) {
-                    showUnsupportedDialog = true
-                } else {
-                    if (mode == GameMode.EVE && seriesTarget > 0) {
-                        com.tuxungo.android.SeriesStore.reset(context)
-                    }
-                    onStart(
-                        GameConfig(
-                            mode, width, height, effectiveHandicap,
-                            komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
-                            clockMinutes = clockMinutes,
-                            byoyomiPeriods = byoyomiPeriods,
-                            seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0,
-                            focusMode = focusMode,
-                            oneColor = if (mode != GameMode.EVE) oneColor else false
-                        )
-                    )
-                }
-            },
+            onClick = { startGame() },
             colors = if (blocked) {
                 androidx.compose.material3.ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFC62828),
@@ -471,20 +503,27 @@ fun SetupScreen(
                 .height(54.dp)
                 .graphicsLayer { scaleX = startScale; scaleY = startScale }
         ) {
-            Text(text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局", fontSize = 17.sp)
+            Text(
+                text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局",
+                fontSize = 17.sp
+            )
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showDetail) {
+            Spacer(modifier = Modifier.height(10.dp))
             androidx.compose.material3.OutlinedButton(
                 onClick = { onOpenEditor(width, height) },
-                modifier = Modifier.weight(1f)
-            ) { Text("摆棋") }
-            androidx.compose.material3.OutlinedButton(
-                onClick = onOpenSettings,
-                modifier = Modifier.weight(1f)
-            ) { Text("设置") }
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("摆棋（自己摆局面开局）") }
         }
+        if (!showDetail) {
         Spacer(modifier = Modifier.height(20.dp))
+        MenuCard(
+            title = "对局设置",
+            desc = "模式 · 棋盘 · 让子贴目 · 棋钟 · 猜先",
+            foot = "当前：$configSummary",
+            onClick = { showDetail = true }
+        )
+        Spacer(modifier = Modifier.height(12.dp))
         MenuCard(
             title = "训练",
             desc = "猜一选 · 死活题，慢慢涨棋",
@@ -525,6 +564,7 @@ fun SetupScreen(
             }
             }
         }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(
@@ -539,38 +579,16 @@ fun SetupScreen(
                 },
                 fontSize = 12.sp, color = Color.Gray
             )
-            TextButton(onClick = {
-                guidePage = 0
-                showGuide = true
-            }) { Text("新手指南", fontSize = 12.sp) }
+            TextButton(onClick = onOpenSettings) { Text("设置", fontSize = 12.sp) }
+            TextButton(onClick = onOpenGuide) { Text("新手指南", fontSize = 12.sp) }
         }
     }
 
-    if (showGuide) {
-        val guideTitles = listOf("欢迎来到 TuxunGo", "AI 陪你看棋", "练棋与模型")
-        val guideBodies = listOf(
-            "内置 KataGo 引擎的免费围棋 App，完全离线、没有账号。选个模式就能开局：人对 AI、AI 对 AI、人对人；棋盘 5–25 路任意宽高，让子、贴目都能自由设。",
-            "下棋时点「AI 分析」看候选着点和胜率，「形式判断」看地盘与死活。对局时每一手的胜率会在后台悄悄算好，终局打开复盘基本秒开：恶手、妙手、关键手自动标出，还能从任意一手试下分支。",
-            "主页「训练」里有猜一选和死活题：猜错的题会进错题本，死活题每天推荐一道。「资料与工具」里可以导入更强的 KataGo 模型（.txt.gz / .bin.gz），每个模型还能测速。祝你棋力大涨！"
-        )
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { closeGuide() },
-            title = { Text(guideTitles[guidePage]) },
-            text = { Text(guideBodies[guidePage], fontSize = 14.sp) },
-            confirmButton = {
-                if (guidePage < 2) {
-                    Button(onClick = { guidePage++ }) {
-                        Text("下一页（${guidePage + 1}/3）")
-                    }
-                } else {
-                    Button(onClick = { closeGuide() }) { Text("开始使用") }
-                }
-            },
-            dismissButton = {
-                if (guidePage < 2) {
-                    TextButton(onClick = { closeGuide() }) { Text("跳过") }
-                }
-            }
+    if (showNigiri) {
+        NigiriDialog(
+            mode = mode,
+            onDismiss = { showNigiri = false },
+            onPveResult = { stone -> humanStone = stone }
         )
     }
 
@@ -668,3 +686,124 @@ private fun ModeOption(
     }
 }
 
+
+/**
+ * Nigiri （猜先）: one side grabs a handful of white stones, the other
+ * guesses odd or even; a correct guess takes Black. Against the AI
+ * the app grabs and the user guesses, and the result is applied to
+ * the "you play" colour. Between two humans it is a pass-the-phone
+ * ceremony and only announces who takes Black.
+ */
+@Composable
+private fun NigiriDialog(
+    mode: GameMode,
+    onDismiss: () -> Unit,
+    onPveResult: (com.tuxungo.android.go.Stone) -> Unit
+) {
+    val count = remember { kotlin.random.Random.nextInt(1, 11) }
+    var phase by remember { mutableIntStateOf(0) }
+    var guessedOdd by remember { mutableStateOf<Boolean?>(null) }
+    val isOdd = count % 2 == 1
+    val guesserWon = guessedOdd != null && guessedOdd == isOdd
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("猜先") },
+        text = {
+            Column {
+                when {
+                    phase == 0 && mode == GameMode.PVE -> {
+                        Text(
+                            "AI 已经抓了一把白子捂在手里。猜猜是单数还是双数：猜中了你执黑，猜错了你执白。",
+                            fontSize = 14.sp
+                        )
+                    }
+                    phase == 0 -> {
+                        Text(
+                            "玩家一先抓一把白子（自己心里有数就行），然后把手机递给玩家二来猜。",
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { phase = 1 },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("抓好了，递给玩家二") }
+                    }
+                    phase == 1 -> {
+                        Text(
+                            "玩家二猜一猜：玩家一抓的子是单数还是双数？猜中了玩家二执黑，猜错了玩家一执黑。",
+                            fontSize = 14.sp
+                        )
+                    }
+                    else -> {
+                        // Reveal: draw the grabbed stones.
+                        val rows = (1..count).chunked(5)
+                        for (row in rows) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                for (i in row) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .background(Color.White, CircleShape)
+                                            .border(1.dp, Color(0xFF9A9A9A), CircleShape)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                        Text(
+                            text = "一共 $count 子，是${if (isOdd) "单" else "双"}数。",
+                            fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (mode == GameMode.PVE) {
+                                if (guesserWon) "猜中了！你执黑。" else "猜错了，你执白。"
+                            } else {
+                                if (guesserWon) "玩家二猜中了，玩家二执黑。" else "玩家二猜错了，玩家一执黑。"
+                            },
+                            fontSize = 14.sp, color = Color(0xFF2F7CF6)
+                        )
+                    }
+                }
+                if (phase == 1 || (phase == 0 && mode == GameMode.PVE)) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                guessedOdd = true
+                                phase = 2
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("猜单数") }
+                        Button(
+                            onClick = {
+                                guessedOdd = false
+                                phase = 2
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("猜双数") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (phase == 2) {
+                Button(onClick = {
+                    if (mode == GameMode.PVE) {
+                        onPveResult(
+                            if (guesserWon) {
+                                com.tuxungo.android.go.Stone.BLACK
+                            } else {
+                                com.tuxungo.android.go.Stone.WHITE
+                            }
+                        )
+                    }
+                    onDismiss()
+                }) { Text(if (mode == GameMode.PVE) "就这样，回去开局" else "知道了") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}

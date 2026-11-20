@@ -31,6 +31,7 @@ import com.tuxungo.android.ui.GameConfig
 import com.tuxungo.android.ui.GameScreen
 import com.tuxungo.android.ui.LibraryScreen
 import com.tuxungo.android.ui.ModelsScreen
+import com.tuxungo.android.ui.OnboardingScreen
 import com.tuxungo.android.ui.PhysicalClockScreen
 import com.tuxungo.android.ui.ReviewScreen
 import com.tuxungo.android.ui.SettingsScreen
@@ -152,6 +153,22 @@ fun TuxunGoApp(
     shortcut: String? = null
 ) {
     val context = LocalContext.current
+    // Version guide: shown the first time the app opens after an
+    // install or an update, re-openable from the home footer.
+    val versionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0)
+                .versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+    val metaPrefs = remember {
+        context.getSharedPreferences("app_meta", android.content.Context.MODE_PRIVATE)
+    }
+    val seenVersion = remember { metaPrefs.getString("seen_version", "") ?: "" }
+    var showGuide by remember { mutableStateOf(seenVersion != versionName) }
+    val guideIsUpdate = seenVersion.isNotEmpty()
     // Restore an unfinished game after backgrounding / process death.
     val restored = remember {
         GameStore.load(context)?.takeIf { !it.finished }
@@ -221,6 +238,7 @@ fun TuxunGoApp(
             }
         )
     }
+    Box(modifier = Modifier.fillMaxSize()) {
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
         transitionSpec = {
@@ -268,6 +286,7 @@ fun TuxunGoApp(
                 screen = Screen.REVIEW
             },
             onOpenSettings = { screen = Screen.SETTINGS },
+            onOpenGuide = { showGuide = true },
             onOpenEditor = { w, h ->
                 editSize = w to h
                 screen = Screen.EDIT
@@ -391,6 +410,23 @@ fun TuxunGoApp(
                 }
             }
         }
+    }
+    }
+    if (showGuide) {
+        OnboardingScreen(
+            versionName = versionName,
+            isUpdate = guideIsUpdate,
+            whatsNew = "· 强力模型改为免费按需下载，安装包瘦身近 100 MB\n" +
+                "· 形势判断全面升级：目数明细、比例条、可信度，领地按归属深浅着色\n" +
+                "· AI 推荐落点新增人类一选（蓝圈），猜一选里也能看到\n" +
+                "· 新增猜先：开局前按老规矩决定谁执黑\n" +
+                "· 主页全面简化：细调项都收进「对局设置」\n" +
+                "· 所有模型都能删除腾空间，预装的删了可免费恢复",
+            onFinish = {
+                metaPrefs.edit().putString("seen_version", versionName).apply()
+                showGuide = false
+            }
+        )
     }
     }
 }

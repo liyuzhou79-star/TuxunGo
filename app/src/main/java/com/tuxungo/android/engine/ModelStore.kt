@@ -16,25 +16,49 @@ data class ModelInfo(
     val displayName: String,
     val archText: String,
     val sizeBytes: Long,
-    val isBundled: Boolean
+    val isBundled: Boolean,
+    /** False when the model is known but its file is not on the device
+     *  right now (strong model not downloaded yet, or a bundled model
+     *  the user deleted). */
+    val installed: Boolean = true,
+    /** The human-style model: a library entry for management, but it
+     *  is never a selectable playing model on its own. */
+    val isHumanOnly: Boolean = false
 )
 
 /**
- * The model library: two bundled models (a light one and a strong one)
- * plus user-uploaded KataGo models. Uploads are validated in stages —
- * gzip integrity, a header parse for text models, and a real engine
- * test-load — before they join the library. Metadata lives in
- * filesDir/models/index.json; the active choice lives in
- * SharedPreferences. A third bundled file, the human-style model, is
- * not a standalone library entry: engines load it alongside a normal
- * model when a side enables human-like play.
+ * The model library. Bundled in the APK: the light model and the
+ * human-style model (used alongside a normal model for human-like
+ * play). The strong model is a free in-app download instead of
+ * bundle weight. User-uploaded KataGo models complete the library;
+ * uploads are validated in stages — gzip integrity, a header parse
+ * for text models, and a real engine test-load — before they join.
+ * Metadata lives in filesDir/models/index.json; the active choice
+ * and the bundled-model "removed" flags live in SharedPreferences.
  */
 object ModelStore {
 
     const val BUNDLED_ID = "bundled"
     const val STRONG_ID = "bundled_strong"
+    const val HUMAN_ID = "bundled_human"
+    const val STRONG_URL =
+        "https://media.katagotraining.org/uploaded/networks/models/kata1/" +
+            "kata1-b18c384nbt-s9996604416-d4316597426.bin.gz"
+    const val STRONG_SIZE_BYTES = 97_898_094L
     private const val PREFS = "model_store"
     private const val KEY_ACTIVE = "active_id"
+    private const val KEY_REMOVED_PREFIX = "removed_"
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** A bundled model the user deleted (its file can be restored). */
+    fun isRemoved(context: Context, id: String): Boolean =
+        prefs(context).getBoolean(KEY_REMOVED_PREFIX + id, false)
+
+    private fun setRemoved(context: Context, id: String, removed: Boolean) {
+        prefs(context).edit().putBoolean(KEY_REMOVED_PREFIX + id, removed).apply()
+    }
 
     private fun userDir(context: Context): File =
         File(context.filesDir, "models/user").apply { mkdirs() }
@@ -57,6 +81,16 @@ object ModelStore {
     }
 
     private fun bundledInfo(context: Context): ModelInfo {
+        if (isRemoved(context, BUNDLED_ID)) {
+            return ModelInfo(
+                id = BUNDLED_ID,
+                displayName = nickname(context, BUNDLED_ID) ?: "轻量模型",
+                archText = "速度快 · 日常对局和分析都够用 · 已删除，可免费恢复",
+                sizeBytes = 0,
+                isBundled = true,
+                installed = false
+            )
+        }
         val file = EngineAssets.ensureDefaultModel(context)
         return ModelInfo(
             id = BUNDLED_ID,
@@ -68,13 +102,37 @@ object ModelStore {
     }
 
     private fun strongInfo(context: Context): ModelInfo {
-        val file = EngineAssets.ensureStrongModel(context)
+        val file = EngineAssets.strongFile(context)
+        val downloaded = file.exists()
         return ModelInfo(
             id = STRONG_ID,
             displayName = nickname(context, STRONG_ID) ?: "强力模型",
-            archText = "棋力更强 · 形势判断更准，思考稍慢 · 内置",
-            sizeBytes = file.length(),
-            isBundled = true
+            archText = if (downloaded) {
+                "棋力更强 · 形势判断更准，思考稍慢 · 已下载"
+            } else {
+                "棋力更强 · 形势判断更准，思考稍慢 · 免费下载（约 98 MB）"
+            },
+            sizeBytes = if (downloaded) file.length() else STRONG_SIZE_BYTES,
+            isBundled = true,
+            installed = downloaded
+        )
+    }
+
+    private fun humanInfo(context: Context): ModelInfo {
+        val removed = isRemoved(context, HUMAN_ID)
+        val file = EngineAssets.humanFile(context)
+        return ModelInfo(
+            id = HUMAN_ID,
+            displayName = nickname(context, HUMAN_ID) ?: "人类风格模型",
+            archText = if (removed) {
+                "模拟人类落子专用 · 已删除，可免费恢复"
+            } else {
+                "模拟人类落子专用 · 与对局模型搭配使用 · 内置"
+            },
+            sizeBytes = if (file.exists()) file.length() else 99_066_230L,
+            isBundled = true,
+            installed = !removed,
+            isHumanOnly = true
         )
     }
 
@@ -89,7 +147,7 @@ object ModelStore {
     }
 
     fun list(context: Context): List<ModelInfo> {
-        val out = mutableListOf(bundledInfo(context), strongInfo(context))
+        val out = mutableListOf(bundledInfo(context), strongInfo(context), humanInfo(context))
         val index = readIndex(context)
         for (i in 0 until index.length()) {
             val o = index.optJSONObject(i) ?: continue
@@ -123,10 +181,14 @@ object ModelStore {
     /** How many user-imported models are in the library. */
     fun userCount(context: Context): Int = readIndex(context).length()
 
-    /** The model file for any library id (falls back to the bundled model). */
+    /** The model file for any library id (falls back to whatever
+     *  usable model exists, so a stale reference never breaks a game). */
     fun resolveFile(context: Context, id: String): File {
-        if (id == STRONG_ID) return EngineAssets.ensureStrongModel(context)
-        if (id != BUNDLED_ID) {
+        if (id == STRONG_ID) {
+            val strong = EngineAssets.strongFile(context)
+            if (strong.exists()) return strong
+        }
+        if (id != BUNDLED_ID && id != STRONG_ID && id != HUMAN_ID) {
             val index = readIndex(context)
             for (i in 0 until index.length()) {
                 val o = index.optJSONObject(i) ?: continue
@@ -136,14 +198,26 @@ object ModelStore {
                 }
             }
         }
+        if (!isRemoved(context, BUNDLED_ID)) return EngineAssets.ensureDefaultModel(context)
+        val strong = EngineAssets.strongFile(context)
+        if (strong.exists()) return strong
+        // Both fallbacks are gone: the light model is still inside the
+        // APK, so bring it back rather than leaving the app model-less.
+        setRemoved(context, BUNDLED_ID, false)
         return EngineAssets.ensureDefaultModel(context)
+    }
+
+    /** The human-style model file, or null when the user deleted it. */
+    fun humanModelFile(context: Context): File? {
+        if (isRemoved(context, HUMAN_ID)) return null
+        return EngineAssets.ensureHumanModel(context).takeIf { it.exists() }
     }
 
     /** The model file new games and analyses should use. */
     fun resolveActiveFile(context: Context): File = resolveFile(context, activeId(context))
 
     fun rename(context: Context, id: String, newName: String) {
-        if (id == BUNDLED_ID || id == STRONG_ID) {
+        if (id == BUNDLED_ID || id == STRONG_ID || id == HUMAN_ID) {
             setNickname(context, id, newName)
             return
         }
@@ -159,8 +233,35 @@ object ModelStore {
         }
     }
 
-    fun delete(context: Context, id: String) {
-        if (id == BUNDLED_ID || id == STRONG_ID) return
+    /**
+     * Deletes a model. Bundled models are only flagged removed and
+     * their copied-out file deleted — they can be restored for free
+     * from the APK. The strong model deletes its downloaded file.
+     * Returns null on success, or a user-facing reason when the
+     * deletion is not allowed right now.
+     */
+    fun delete(context: Context, id: String): String? {
+        when (id) {
+            BUNDLED_ID -> {
+                if (!EngineAssets.strongFile(context).exists()) {
+                    return "轻量模型是目前唯一可用的对局模型，先下载强力模型，之后才能删除它。"
+                }
+                setRemoved(context, BUNDLED_ID, true)
+                EngineAssets.defaultFile(context).delete()
+                if (activeId(context) == BUNDLED_ID) setActive(context, STRONG_ID)
+                return null
+            }
+            STRONG_ID -> {
+                EngineAssets.strongFile(context).delete()
+                if (activeId(context) == STRONG_ID) setActive(context, BUNDLED_ID)
+                return null
+            }
+            HUMAN_ID -> {
+                setRemoved(context, HUMAN_ID, true)
+                EngineAssets.humanFile(context).delete()
+                return null
+            }
+        }
         val index = readIndex(context)
         val kept = JSONArray()
         for (i in 0 until index.length()) {
@@ -173,6 +274,13 @@ object ModelStore {
         }
         writeIndex(context, kept)
         if (activeId(context) == id) setActive(context, BUNDLED_ID)
+        return null
+    }
+
+    /** Brings back a deleted bundled model (free, no download: the
+     *  file is copied out of the APK again on next use). */
+    fun restore(context: Context, id: String) {
+        if (id == BUNDLED_ID || id == HUMAN_ID) setRemoved(context, id, false)
     }
 
     sealed class ImportResult {

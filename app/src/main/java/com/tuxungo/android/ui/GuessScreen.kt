@@ -167,7 +167,8 @@ fun GuessScreen(onBack: () -> Unit) {
                 eng = AnalysisEngine.start(
                     nativeLibDir = context.applicationInfo.nativeLibraryDir,
                     workDir = EngineAssets.engineWorkDir(context),
-                    modelFile = ModelStore.resolveActiveFile(context)
+                    modelFile = ModelStore.resolveActiveFile(context),
+                    humanModelFile = ModelStore.humanModelFile(context)
                 )
                 engine = eng
             }
@@ -467,6 +468,14 @@ fun GuessScreen(onBack: () -> Unit) {
             fontSize = 13.sp,
             color = if (phase == GuessPhase.REVEALED) Color(0xFF2F7CF6) else Color.Gray
         )
+        val humanVertex = result?.humanTopVertex ?: ""
+        if (phase == GuessPhase.REVEALED && humanVertex.isNotEmpty() && humanVertex != "pass") {
+            Text(
+                text = "参考：真人高手多半会下 $humanVertex（棋盘上的蓝圈）",
+                fontSize = 13.sp,
+                color = Color(0xFF2F7CF6)
+            )
+        }
         Spacer(modifier = Modifier.height(6.dp))
 
         BoardView(
@@ -476,6 +485,11 @@ fun GuessScreen(onBack: () -> Unit) {
             showCoordinates = settings.showCoordinates,
             candidates = candidates,
             pvGhost = pvGhost,
+            humanPoint = if (phase == GuessPhase.REVEALED) {
+                result?.humanTopMove?.let { it.x to it.y }
+            } else {
+                null
+            },
             preview = if (phase == GuessPhase.REVEALED) guessPoint else pending,
             onPointTap = { x, y ->
                 if (phase == GuessPhase.GUESSING && game.isLegal(x, y)) {

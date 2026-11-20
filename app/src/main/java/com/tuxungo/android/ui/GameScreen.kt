@@ -120,6 +120,7 @@ fun GameScreen(
     var showResignConfirm by remember { mutableStateOf(false) }
     var resultDismissed by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
+    var showStrongDownload by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
     var focusMode by remember { mutableStateOf(config.focusMode) }
     var showTrueColors by remember { mutableStateOf(false) }
@@ -335,7 +336,12 @@ fun GameScreen(
                 nativeLibDir = context.applicationInfo.nativeLibraryDir,
                 workDir = EngineAssets.engineWorkDir(context),
                 modelFile = model,
-                maxVisits = cfg.visits
+                maxVisits = cfg.visits,
+                humanModelFile = if (cfg.humanLike) {
+                    ModelStore.humanModelFile(context)
+                } else {
+                    null
+                }
             )
         }) { result ->
             if (stone == Stone.BLACK) startingBlack = false else startingWhite = false
@@ -558,7 +564,8 @@ fun GameScreen(
                 eng = AnalysisEngine.start(
                     nativeLibDir = context.applicationInfo.nativeLibraryDir,
                     workDir = EngineAssets.engineWorkDir(context),
-                    modelFile = model
+                    modelFile = model,
+                    humanModelFile = ModelStore.humanModelFile(context)
                 )
                 analysisEngine = eng
             }
@@ -619,7 +626,8 @@ fun GameScreen(
                 eng = AnalysisEngine.start(
                     nativeLibDir = context.applicationInfo.nativeLibraryDir,
                     workDir = EngineAssets.engineWorkDir(context),
-                    modelFile = model
+                    modelFile = model,
+                    humanModelFile = ModelStore.humanModelFile(context)
                 )
                 analysisEngine = eng
             }
@@ -686,7 +694,8 @@ fun GameScreen(
                 eng = AnalysisEngine.start(
                     nativeLibDir = context.applicationInfo.nativeLibraryDir,
                     workDir = EngineAssets.engineWorkDir(context),
-                    modelFile = model
+                    modelFile = model,
+                    humanModelFile = ModelStore.humanModelFile(context)
                 )
                 analysisEngine = eng
             }
@@ -748,7 +757,8 @@ fun GameScreen(
                 eng = AnalysisEngine.start(
                     nativeLibDir = context.applicationInfo.nativeLibraryDir,
                     workDir = EngineAssets.engineWorkDir(context),
-                    modelFile = model
+                    modelFile = model,
+                    humanModelFile = ModelStore.humanModelFile(context)
                 )
                 analysisEngine = eng
             }
@@ -1700,6 +1710,11 @@ fun GameScreen(
             } else emptyList(),
             ownership = if (focusMode) null else displayOwnership,
             pvGhost = if (!focusMode && !judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
+            humanPoint = if (!focusMode && !judgmentActive && !scoringMode) {
+                currentAnalysis?.humanTopMove?.let { it.x to it.y }
+            } else {
+                null
+            },
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
@@ -1779,22 +1794,99 @@ fun GameScreen(
                 if (stones[i] == Stone.WHITE) whiteDead++
                 if (stones[i] == Stone.BLACK) blackDead++
             }
-            Text(text = "形势判断", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Rose)
-            Spacer(modifier = Modifier.height(2.dp))
+            // Counted score, Chinese style: live stones + territory
+            // points (dead stones already count for the opponent in
+            // the territory numbers). The breakdown must add up to
+            // the verdict, like the score panels of the big Go apps.
+            var aliveBlack = 0
+            var aliveWhite = 0
+            for (i in stones.indices) {
+                if (i in deadJ) continue
+                if (stones[i] == Stone.BLACK) aliveBlack++
+                if (stones[i] == Stone.WHITE) aliveWhite++
+            }
+            val blackScore = aliveBlack + terr.blackTerritory
+            val whiteScore = aliveWhite + terr.whiteTerritory + game.komi
+            val diff = blackScore - whiteScore
+            androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(text = "形势判断", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Rose)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = when {
+                        diff > 0.25 -> "黑胜约 ${formatNum(diff)} 目"
+                        diff < -0.25 -> "白胜约 ${formatNum(-diff)} 目"
+                        else -> "局势接近"
+                    },
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            // Score share bar: black share vs white share.
+            val shareTotal = (blackScore + whiteScore).coerceAtLeast(1.0)
+            Row(modifier = Modifier.fillMaxWidth().height(12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .weight((blackScore / shareTotal).coerceIn(0.02, 0.98).toFloat())
+                        .height(12.dp)
+                        .background(Color(0xFF1A1A1A), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Box(
+                    modifier = Modifier
+                        .weight((whiteScore / shareTotal).coerceIn(0.02, 0.98).toFloat())
+                        .height(12.dp)
+                        .background(Color(0xFFE8E8E8), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "黑地约 ${terr.blackTerritory} · 白地约 ${terr.whiteTerritory}" +
-                    if (blackDead + whiteDead > 0) " · 死子：黑 $blackDead / 白 $whiteDead" else "",
-                fontSize = 13.sp, color = Color.Gray
+                text = "黑：活子 $aliveBlack + 空 ${terr.blackTerritory} = ${formatNum(blackScore.toDouble())}",
+                fontSize = 13.sp
             )
-            val lead = j.rootScoreLeadBlack
+            Text(
+                text = "白：活子 $aliveWhite + 空 ${terr.whiteTerritory} + 贴目 ${formatNum(game.komi)} = ${formatNum(whiteScore)}",
+                fontSize = 13.sp
+            )
+            if (blackDead + whiteDead > 0) {
+                Text(
+                    text = "判死子：黑 $blackDead 子 · 白 $whiteDead 子（已算进对方的地里）",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            if (terr.neutral > 0) {
+                Text(
+                    text = "未定区域约 ${terr.neutral} 点，下完官子后判断会更准",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            // Confidence from how decisive the ownership looks on the
+            // empty points: lots of pale (undecided) points means the
+            // verdict is still soft.
+            var emptyPoints = 0
+            var unclearPoints = 0
+            for (i in stones.indices) {
+                if (stones[i] != null) continue
+                emptyPoints++
+                val mag = kotlin.math.abs(j.ownershipBlack.getOrElse(i) { 0.0 })
+                if (mag < 0.5) unclearPoints++
+            }
+            val unclearShare = if (emptyPoints > 0) {
+                unclearPoints.toDouble() / emptyPoints
+            } else {
+                0.0
+            }
             Text(
                 text = when {
-                    lead > 0.5 -> "结论：黑领先约 ${formatNum(lead)} 目"
-                    lead < -0.5 -> "结论：白领先约 ${formatNum(-lead)} 目"
-                    else -> "结论：局势接近，难分高下"
-                } + "（引擎估算，仅供参考）",
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                    unclearShare > 0.35 -> "可信度：一般 — 不少区域还在争夺中（棋盘上颜色越深归属越确定）"
+                    unclearShare > 0.15 -> "可信度：较高 — 大部分区域已经定型"
+                    else -> "可信度：高 — 局面基本定型"
+                } + " · 引擎估算，仅供参考",
+                fontSize = 12.sp, color = Color.Gray
             )
+            }
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
 
@@ -1859,6 +1951,19 @@ fun GameScreen(
                     Text(
                         text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
                         fontSize = 13.sp, color = Color.Gray
+                    )
+                }
+                if (currentAnalysis.humanTopVertex.isNotEmpty()) {
+                    val hv = currentAnalysis.humanTopVertex
+                    Text(
+                        text = when {
+                            hv == "pass" -> "人类一选：停一手（真人高手多半会停）"
+                            hv == topCand?.vertex ->
+                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（和 AI 一选相同）"
+                            else ->
+                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（棋盘上的蓝圈）"
+                        },
+                        fontSize = 13.sp, color = Color(0xFF2F7CF6)
                     )
                 }
                 if (analysisExpanded) {
@@ -2115,7 +2220,10 @@ fun GameScreen(
     }
 
     if (showAiPanel) {
-        val models = remember { ModelStore.list(context) }
+        val allModels = remember { ModelStore.list(context) }
+        val models = allModels.filter { !it.isHumanOnly }
+        val humanInstalled =
+            allModels.firstOrNull { it.id == ModelStore.HUMAN_ID }?.installed == true
         AlertDialog(
             onDismissRequest = { showAiPanel = false },
             title = { Text("AI 托管设置") },
@@ -2124,6 +2232,11 @@ fun GameScreen(
                     AiSideSection(
                         stone = Stone.BLACK, cfg = sideBlack, takenOver = takeoverBlack,
                         models = models,
+                        humanInstalled = humanInstalled,
+                        onDownloadStrong = {
+                            showAiPanel = false
+                            showStrongDownload = true
+                        },
                         onToggle = { setTakeover(Stone.BLACK, it) },
                         onCfgChange = { setSideCfg(Stone.BLACK, it) }
                     )
@@ -2131,6 +2244,11 @@ fun GameScreen(
                     AiSideSection(
                         stone = Stone.WHITE, cfg = sideWhite, takenOver = takeoverWhite,
                         models = models,
+                        humanInstalled = humanInstalled,
+                        onDownloadStrong = {
+                            showAiPanel = false
+                            showStrongDownload = true
+                        },
                         onToggle = { setTakeover(Stone.WHITE, it) },
                         onCfgChange = { setSideCfg(Stone.WHITE, it) }
                     )
@@ -2147,6 +2265,12 @@ fun GameScreen(
         )
     }
 
+    if (showStrongDownload) {
+        StrongModelDialog(
+            onDismiss = { showStrongDownload = false },
+            onChanged = { }
+        )
+    }
 
     if (showExitConfirm) {
         AlertDialog(
@@ -2374,6 +2498,8 @@ private fun AiSideSection(
     cfg: SideAiConfig,
     takenOver: Boolean,
     models: List<ModelInfo>,
+    humanInstalled: Boolean = true,
+    onDownloadStrong: () -> Unit = {},
     onToggle: (Boolean) -> Unit,
     onCfgChange: (SideAiConfig) -> Unit
 ) {
@@ -2409,11 +2535,25 @@ private fun AiSideSection(
                         onDismissRequest = { expanded = false }
                     ) {
                         for (m in models) {
+                            val needsDownload =
+                                m.id == ModelStore.STRONG_ID && !m.installed
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(m.displayName) },
+                                text = {
+                                    Text(
+                                        if (needsDownload) {
+                                            "${m.displayName}（未下载 · 点此下载）"
+                                        } else {
+                                            m.displayName
+                                        }
+                                    )
+                                },
                                 onClick = {
-                                    onCfgChange(cfg.copy(modelId = m.id))
                                     expanded = false
+                                    if (needsDownload) {
+                                        onDownloadStrong()
+                                    } else {
+                                        onCfgChange(cfg.copy(modelId = m.id))
+                                    }
                                 }
                             )
                         }
@@ -2439,12 +2579,17 @@ private fun AiSideSection(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "模拟人类落子", fontSize = 14.sp)
                         Text(
-                            text = "选点风格像真人棋手，强搜索兜底，不故意下错招",
+                            text = if (humanInstalled) {
+                                "选点风格像真人棋手，强搜索兜底，不故意下错招"
+                            } else {
+                                "人类风格模型已删除，在模型库里可以免费恢复"
+                            },
                             fontSize = 12.sp, color = Color.Gray
                         )
                     }
                     Switch(
-                        checked = cfg.humanLike,
+                        checked = cfg.humanLike && humanInstalled,
+                        enabled = humanInstalled,
                         onCheckedChange = { onCfgChange(cfg.copy(humanLike = it)) }
                     )
                 }

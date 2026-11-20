@@ -52,6 +52,7 @@ fun ModelsScreen(onBack: () -> Unit) {
     var statusText by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<ModelInfo?>(null) }
     var deleteTarget by remember { mutableStateOf<ModelInfo?>(null) }
+    var showStrongDownload by remember { mutableStateOf(false) }
     val speedPrefs = remember {
         context.getSharedPreferences("model_speed", android.content.Context.MODE_PRIVATE)
     }
@@ -160,7 +161,13 @@ fun ModelsScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "可上传 KataGo 官方模型文件（.txt.gz 或 .bin.gz）。上传后会先校验文件完整性、" +
-                "解析模型结构，再用引擎实测加载，能通过才加入模型库。最多可添加 99 个模型。",
+                "解析模型结构，再用引擎实测加载，能通过才加入模型库。最多可添加 99 个模型。" +
+                "强力模型改为免费按需下载；所有模型（包括预装的）都能删除腾空间，预装的删除后可免费恢复。",
+            fontSize = 13.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "已装模型共占约 ${models.filter { it.installed }.sumOf { it.sizeBytes } / 1_000_000} MB",
             fontSize = 13.sp, color = Color.Gray
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -203,20 +210,38 @@ fun ModelsScreen(onBack: () -> Unit) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (model.id != activeId) {
-                            OutlinedButton(onClick = {
-                                ModelStore.setActive(context, model.id)
-                                refresh++
-                                Toast.makeText(context, "已切换为：${model.displayName}", Toast.LENGTH_SHORT).show()
-                            }) { Text("使用") }
-                        }
-                        OutlinedButton(
-                            onClick = { runSpeedTest(model) },
-                            enabled = testingId == null
-                        ) { Text(if (testingId == model.id) "测速中…" else "测速") }
-                        OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
-                        if (!model.isBundled) {
-                            OutlinedButton(onClick = { deleteTarget = model }) { Text("删除") }
+                        when {
+                            model.id == ModelStore.STRONG_ID && !model.installed -> {
+                                Button(onClick = { showStrongDownload = true }) {
+                                    Text("下载强力模型")
+                                }
+                                OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
+                            }
+                            !model.installed -> {
+                                OutlinedButton(onClick = {
+                                    ModelStore.restore(context, model.id)
+                                    refresh++
+                                    Toast.makeText(context, "已恢复：${model.displayName}", Toast.LENGTH_SHORT).show()
+                                }) { Text("恢复") }
+                                OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
+                            }
+                            else -> {
+                                if (model.id != activeId && !model.isHumanOnly) {
+                                    OutlinedButton(onClick = {
+                                        ModelStore.setActive(context, model.id)
+                                        refresh++
+                                        Toast.makeText(context, "已切换为：${model.displayName}", Toast.LENGTH_SHORT).show()
+                                    }) { Text("使用") }
+                                }
+                                if (!model.isHumanOnly) {
+                                    OutlinedButton(
+                                        onClick = { runSpeedTest(model) },
+                                        enabled = testingId == null
+                                    ) { Text(if (testingId == model.id) "测速中…" else "测速") }
+                                }
+                                OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
+                                OutlinedButton(onClick = { deleteTarget = model }) { Text("删除") }
+                            }
                         }
                     }
                 }
@@ -290,17 +315,39 @@ fun ModelsScreen(onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("删除模型？") },
-            text = { Text("「${target.displayName}」将被删除，文件不可恢复。") },
+            text = {
+                Text(
+                    when {
+                        target.id == ModelStore.STRONG_ID ->
+                            "「${target.displayName}」将被删除，腾出约 98 MB。要再用时需要重新下载。"
+                        target.isBundled ->
+                            "「${target.displayName}」将被删除腾出空间。预装模型随时可以在这里免费恢复，不用联网。"
+                        else ->
+                            "「${target.displayName}」将被删除，文件不可恢复。"
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    ModelStore.delete(context, target.id)
-                    refresh++
+                    val problem = ModelStore.delete(context, target.id)
+                    if (problem != null) {
+                        statusText = problem
+                    } else {
+                        refresh++
+                    }
                     deleteTarget = null
                 }) { Text("删除") }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) { Text("取消") }
             }
+        )
+    }
+
+    if (showStrongDownload) {
+        StrongModelDialog(
+            onDismiss = { showStrongDownload = false },
+            onChanged = { refresh++ }
         )
     }
 }
