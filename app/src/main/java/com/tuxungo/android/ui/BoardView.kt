@@ -610,6 +610,95 @@ fun BoardView(
                 style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
         }
+
+        // Placement magnifier: while a point is selected (tap-to-
+        // confirm preview), show an enlarged 5x5 neighbourhood in
+        // the corner farthest from the point, so on dense boards
+        // the exact spot and its surroundings are easy to verify.
+        if (preview != null) {
+            val (pvx, pvy) = preview
+            val magSize = minOf(size.width, size.height) * 0.38f
+            val mCell = magSize / 5f
+            val mLeft = if (pvx < w / 2) size.width - magSize - 8f else 8f
+            val mTop = if (pvy < h / 2) size.height - magSize - 8f else 8f
+            drawRoundRect(
+                color = Color(0xFFF3D9A4),
+                topLeft = Offset(mLeft, mTop),
+                size = Size(magSize, magSize),
+                cornerRadius = CornerRadius(10f, 10f)
+            )
+            val mcx = mLeft + magSize / 2f
+            val mcy = mTop + magSize / 2f
+            clipRect(
+                left = mLeft, top = mTop,
+                right = mLeft + magSize, bottom = mTop + magSize
+            ) {
+                for (i in -2..2) {
+                    if (pvx + i in 0 until w) {
+                        drawLine(
+                            Color(0xFF5A3C1E),
+                            Offset(mcx + i * mCell, mTop),
+                            Offset(mcx + i * mCell, mTop + magSize),
+                            strokeWidth = 1.4f
+                        )
+                    }
+                    if (pvy + i in 0 until h) {
+                        drawLine(
+                            Color(0xFF5A3C1E),
+                            Offset(mLeft, mcy + i * mCell),
+                            Offset(mLeft + magSize, mcy + i * mCell),
+                            strokeWidth = 1.4f
+                        )
+                    }
+                }
+                for (dy in -2..2) {
+                    for (dx in -2..2) {
+                        val bx = pvx + dx
+                        val by = pvy + dy
+                        if (bx !in 0 until w || by !in 0 until h) continue
+                        val st = game.stoneAt(bx, by) ?: continue
+                        val c = Offset(mcx + dx * mCell, mcy + dy * mCell)
+                        drawCircle(
+                            if (st == Stone.BLACK) {
+                                Color(0xFF1C1C1C)
+                            } else {
+                                Color(0xFFF6F6F6)
+                            },
+                            radius = mCell * 0.46f, center = c
+                        )
+                        if (st == Stone.WHITE) {
+                            drawCircle(
+                                Color(0xFF969696),
+                                radius = mCell * 0.46f, center = c,
+                                style = Stroke(width = 1.2f)
+                            )
+                        }
+                    }
+                }
+                if (game.stoneAt(pvx, pvy) == null) {
+                    drawCircle(
+                        if (game.current == Stone.BLACK) {
+                            Color.Black.copy(alpha = 0.55f)
+                        } else {
+                            Color.White.copy(alpha = 0.65f)
+                        },
+                        radius = mCell * 0.46f, center = Offset(mcx, mcy)
+                    )
+                }
+                drawCircle(
+                    AccentRose,
+                    radius = mCell * 0.56f, center = Offset(mcx, mcy),
+                    style = Stroke(width = 2.6f)
+                )
+            }
+            drawRoundRect(
+                color = Color(0xFF8A5A24),
+                topLeft = Offset(mLeft, mTop),
+                size = Size(magSize, magSize),
+                cornerRadius = CornerRadius(10f, 10f),
+                style = Stroke(width = 2.5f)
+            )
+        }
     }
 }
 

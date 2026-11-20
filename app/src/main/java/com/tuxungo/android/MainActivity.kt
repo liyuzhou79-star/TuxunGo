@@ -442,7 +442,9 @@ fun TuxunGoApp(
             isUpdate = guideIsUpdate,
             whatsNew = "· 双方停一手后自动进入数目：死子由引擎标好，确认即可，不再粗算\n" +
                 "· 形势判断会跟着对局走了：打开过一次，之后每手自动更新\n" +
-                "· 棋谱库有棋盘缩略图了：每局的终局局面一目了然，找棋谱更快",
+                "· 棋谱库有棋盘缩略图了，还能按黑胜/白胜筛选\n" +
+                "· 确认落子时有放大镜了：落子点周围放大显示，大棋盘不点错\n" +
+                "· AI 托管面板可以一键交换黑白双方的设置",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

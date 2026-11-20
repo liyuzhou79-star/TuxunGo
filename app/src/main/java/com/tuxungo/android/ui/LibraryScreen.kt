@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asImageBitmap
 import com.tuxungo.android.LibraryFolder
 import com.tuxungo.android.LibraryGame
 import com.tuxungo.android.LibraryStore
@@ -219,6 +220,7 @@ fun LibraryScreen(
 
     var searchText by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf("new") }
+    var resultFilter by remember { mutableStateOf("ALL") }
     val shown = games.filter { g ->
         val inFolder = when (selected) {
             "ALL" -> true
@@ -233,7 +235,12 @@ fun LibraryScreen(
             g.title.contains(q, ignoreCase = true) ||
             g.modeLabel.contains(q, ignoreCase = true) ||
             folderName.contains(q, ignoreCase = true)
-        inFolder && inSearch
+        val inResult = when (resultFilter) {
+            "B" -> g.resultText.startsWith("黑")
+            "W" -> g.resultText.startsWith("白")
+            else -> true
+        }
+        inFolder && inSearch && inResult
     }.let { list ->
         when (sortMode) {
             "old" -> list.sortedBy { it.createdAt }
@@ -306,6 +313,23 @@ fun LibraryScreen(
                 FilterChip(
                     selected = sortMode == id,
                     onClick = { sortMode = id },
+                    label = { Text(label) }
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("结果", fontSize = 13.sp, color = Color.Gray)
+            for ((id, label) in listOf(
+                "ALL" to "全部",
+                "B" to "黑胜",
+                "W" to "白胜"
+            )) {
+                FilterChip(
+                    selected = resultFilter == id,
+                    onClick = { resultFilter = id },
                     label = { Text(label) }
                 )
             }
@@ -702,7 +726,7 @@ private val thumbCache = HashMap<String, android.graphics.Bitmap>()
 private fun GameThumb(g: LibraryGame, modifier: Modifier = Modifier) {
     val bmp = remember(g.id) { thumbCache.getOrPut(g.id) { renderThumb(g) } }
     androidx.compose.foundation.Image(
-        bitmap = androidx.compose.ui.graphics.asImageBitmap(bmp),
+        bitmap = bmp.asImageBitmap(),
         contentDescription = null,
         modifier = modifier
     )

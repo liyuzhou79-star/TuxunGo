@@ -2748,6 +2748,16 @@ fun GameScreen(
                         onCfgChange = { setSideCfg(Stone.WHITE, it) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val oldBlack = sideBlack
+                            val oldWhite = sideWhite
+                            setSideCfg(Stone.BLACK, oldWhite)
+                            setSideCfg(Stone.WHITE, oldBlack)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("交换双方设置（模型 / 强度 / 定级）") }
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "黑白双方可以用不同模型对打。换模型会重启该方引擎（几秒），改强度立即生效。设置会自动保存。",
                         fontSize = 12.sp, color = Color.Gray
