@@ -21,7 +21,7 @@ object BackupStore {
     private val PREFS_FILES = listOf(
         "tuxungo_settings", "tuxungo_game", "tuxungo_sideai",
         "setup_prefs", "guess_prefs", "tsumego_prefs",
-        "model_speed", "series_store", "review_prefs"
+        "model_speed", "series_store", "review_prefs", "ranked_prefs"
     )
 
     fun exportJson(context: Context): String {

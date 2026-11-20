@@ -1485,6 +1485,35 @@ fun GameScreen(
         }
     }
 
+    // Ranked-game tally: a finished PVE game against a ranked AI
+    // is recorded once, for the career stats page. Same settle
+    // rules as the series effect: pass-finished games wait until
+    // scoring has settled.
+    var rankedRecorded by remember { mutableStateOf(false) }
+    LaunchedEffect(game.finished, game.scoringDead) {
+        if (!game.finished || finishedAtStart || rankedRecorded) {
+            return@LaunchedEffect
+        }
+        if (config.mode != GameMode.PVE) return@LaunchedEffect
+        val aiStone = config.humanStone.other()
+        val aiCfg = if (aiStone == Stone.BLACK) sideBlack else sideWhite
+        if (aiCfg.rank == "max") return@LaunchedEffect
+        val endedByPasses = game.resignedBy == null && game.timeoutBy == null
+        if (endedByPasses && game.scoringDead == null) {
+            return@LaunchedEffect
+        }
+        rankedRecorded = true
+        val summary = resultSummary()
+        val humanWon = summary.startsWith(
+            if (config.humanStone == Stone.BLACK) "黑方胜" else "白方胜"
+        )
+        val aiWon = summary.startsWith(
+            if (aiStone == Stone.BLACK) "黑方胜" else "白方胜"
+        )
+        if (!humanWon && !aiWon) return@LaunchedEffect
+        com.tuxungo.android.RankedStore.record(context, aiCfg.rank, humanWon)
+    }
+
     val finished = game.finished
     // If the engine failed to start, never soft-lock the game: the human
     // can keep playing both sides manually.

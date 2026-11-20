@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 棋谱库多了「类型」筛选：人机、双人、表演赛分开看\n" +
-                "· 死活题限时挑战结束可以直接「再来一轮」",
+            whatsNew = "· 定级战绩开始统计了：打完定级对局自动记账，生涯页（连点吉祥物五次）里按档位看胜负\n" +
+                "· 仓库说明页补齐了最近几版的新功能介绍",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

@@ -893,6 +893,9 @@ private fun EggStatsDialog(onDismiss: () -> Unit) {
         .split("|").count { it.isNotBlank() }
     val byMode = games.groupBy { it.modeLabel }
         .entries.sortedByDescending { it.value.size }
+    val rankedTallies = remember {
+        com.tuxungo.android.RankedStore.loadAll(context)
+    }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -921,6 +924,18 @@ private fun EggStatsDialog(onDismiss: () -> Unit) {
                 EggRow("黑方胜", "$blackWins 局 · ${pct(blackWins)}")
                 EggRow("白方胜", "$whiteWins 局 · ${pct(whiteWins)}")
                 EggRow("未分胜负", "$unfinished 局")
+                if (rankedTallies.isNotEmpty()) {
+                    EggSection("定级战绩（对 AI 定级）")
+                    val ordered = rankedTallies.entries.sortedBy { (rank, _) ->
+                        com.tuxungo.android.engine.SideAiStore.RANKS.indexOf(rank)
+                    }
+                    for ((rank, wl) in ordered) {
+                        EggRow(
+                            "对 ${com.tuxungo.android.engine.SideAiStore.rankLabel(rank)}",
+                            "${wl[0]} 胜 ${wl[1]} 负"
+                        )
+                    }
+                }
                 if (byMode.isNotEmpty()) {
                     EggSection("各模式")
                     for ((label, list) in byMode) {
