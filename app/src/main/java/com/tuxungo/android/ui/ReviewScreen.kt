@@ -936,7 +936,7 @@ fun ReviewScreen(
 }
 
 @Composable
-private fun WinrateChart(
+fun WinrateChart(
     turns: List<TurnStat>,
     perspective: Stone,
     ply: Int,

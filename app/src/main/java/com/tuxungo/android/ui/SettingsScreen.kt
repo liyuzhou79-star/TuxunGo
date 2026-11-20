@@ -233,6 +233,21 @@ fun SettingsScreen(
                 onCheckedChange = { update(settings.copy(refereeEnabled = it)) }
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "终局自动存图", fontSize = 15.sp)
+                Text(text = "对局结束时把终局局面图自动存到相册", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.autoSaveImage,
+                onCheckedChange = { update(settings.copy(autoSaveImage = it)) }
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "AI 对 AI 观战节奏", fontSize = 15.sp)
         Text(text = "两个 AI 对弈时每手之间的停顿", fontSize = 12.sp, color = Color.Gray)

@@ -101,6 +101,12 @@ fun GuessScreen(onBack: () -> Unit) {
     var mistakeMode by remember { mutableStateOf(false) }
     var mistakeIdx by remember { mutableIntStateOf(0) }
     var mistakeJustSolved by remember { mutableStateOf(false) }
+    // Question source: "self" (endless self-play) or "library"
+    // (positions pulled from the user's own saved games).
+    var sourceMode by remember { mutableStateOf("self") }
+    var baseStones by remember { mutableStateOf<List<Move>>(emptyList()) }
+    var basePlayer by remember { mutableStateOf(Stone.BLACK) }
+    var sourceNote by remember { mutableStateOf("") }
 
     fun saveMistakes() {
         guessPrefs.edit()
@@ -112,6 +118,9 @@ fun GuessScreen(onBack: () -> Unit) {
         val m = mistakes.getOrNull(i) ?: return
         mistakeIdx = i
         mistakeJustSolved = false
+        baseStones = emptyList()
+        basePlayer = Stone.BLACK
+        sourceNote = ""
         boardSize = m.size
         val g = GoGame(BoardSize(m.size, m.size), 7.5)
         for (mv in m.moves) {
@@ -136,8 +145,43 @@ fun GuessScreen(onBack: () -> Unit) {
         }
     }
 
+    fun loadLibraryQuestion(): Boolean {
+        val pool = LibraryStore.listGames(context).filter {
+            it.size.isSquare && it.moves.size >= 16
+        }
+        if (pool.isEmpty()) return false
+        val g = pool.random()
+        val ply = (8..(g.moves.size - 8)).random()
+        val ng = GoGame(g.size, g.komi)
+        if (g.customStones.isNotEmpty()) {
+            ng.loadPosition(g.customStones, g.startPlayer)
+            baseStones = g.customStones
+            basePlayer = g.startPlayer
+        } else {
+            baseStones = emptyList()
+            basePlayer = Stone.BLACK
+        }
+        for (mv in g.moves.take(ply)) {
+            if (mv.isPass) ng.pass() else ng.play(mv.x, mv.y)
+        }
+        boardSize = g.size.width
+        game = ng
+        version++
+        phase = GuessPhase.GUESSING
+        pending = null
+        result = null
+        guessPoint = null
+        sourceNote = "题目来自棋谱《${g.title}》 · 第 ${ply + 1} 手"
+        feedback = sourceNote
+        return true
+    }
+
     fun restart(size: Int) {
         mistakeMode = false
+        sourceMode = "self"
+        baseStones = emptyList()
+        basePlayer = Stone.BLACK
+        sourceNote = ""
         boardSize = size
         game = GoGame(BoardSize(size, size), 7.5)
         version++
@@ -175,8 +219,8 @@ fun GuessScreen(onBack: () -> Unit) {
             eng.analyze(
                 size = game.size,
                 komi = game.komi,
-                initialStones = emptyList(),
-                initialPlayer = Stone.BLACK,
+                initialStones = baseStones,
+                initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
                 maxVisits = visits
@@ -257,9 +301,11 @@ fun GuessScreen(onBack: () -> Unit) {
                             mistakeJustSolved = true
                             feedback += " 这道错题已攻克，已从错题本移除。"
                         }
-                    } else if (rankNow == 0) {
+                    } else if (rankNow == 0 && baseStones.isEmpty()) {
                         // A real miss in normal training: save the
                         // position so it can be reviewed later.
+                        // (Positions with setup stones are skipped:
+                        // the mistake format replays from empty.)
                         val topMv = res.candidates.firstOrNull()?.move
                         val raw = "${boardSize};" +
                             LibraryStore.encodeMoves(movesSnapshot) + ";" +
@@ -288,6 +334,14 @@ fun GuessScreen(onBack: () -> Unit) {
     }
 
     fun nextQuestion() {
+        if (sourceMode == "library" && !mistakeMode) {
+            if (!loadLibraryQuestion()) {
+                sourceMode = "self"
+                restart(boardSize)
+                feedback = "棋谱库里没有合适的对局了，回到随机对局"
+            }
+            return
+        }
         if (mistakeMode) {
             // After a solve, the next entry shifted into this index;
             // after a miss, move one forward.
@@ -457,11 +511,46 @@ fun GuessScreen(onBack: () -> Unit) {
                 }
             }
         }
+        if (!mistakeMode) {
+            Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text("题目来源", fontSize = 13.sp, color = Color.Gray)
+                androidx.compose.material3.FilterChip(
+                    selected = sourceMode == "self",
+                    onClick = {
+                        if (sourceMode != "self") restart(boardSize)
+                    },
+                    label = { Text("随机对局") },
+                    enabled = phase != GuessPhase.THINKING
+                )
+                androidx.compose.material3.FilterChip(
+                    selected = sourceMode == "library",
+                    onClick = {
+                        if (sourceMode != "library") {
+                            sourceMode = "library"
+                            if (!loadLibraryQuestion()) {
+                                sourceMode = "self"
+                                feedback = "棋谱库里还没有下满 16 手的方形棋盘对局，先去下一盘存下来吧"
+                            }
+                        }
+                    },
+                    label = { Text("我的棋谱") },
+                    enabled = phase != GuessPhase.THINKING
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = when (phase) {
                 GuessPhase.GUESSING ->
-                    "第 ${game.moves.size + 1} 手 · 轮到$sideName：点棋盘选点，再点一次确认猜测"
+                    "第 ${game.moves.size + 1} 手 · 轮到$sideName：点棋盘选点，再点一次确认猜测" +
+                        if (sourceMode == "library" && sourceNote.isNotEmpty()) {
+                            "\n$sourceNote"
+                        } else {
+                            ""
+                        }
                 GuessPhase.THINKING -> "AI 思考中…"
                 GuessPhase.REVEALED -> feedback
             },
@@ -526,7 +615,15 @@ fun GuessScreen(onBack: () -> Unit) {
                     Button(
                         onClick = { nextQuestion() },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (mistakeMode) "下一道错题" else "落下 AI 一选，下一题") }
+                    ) {
+                        Text(
+                            when {
+                                mistakeMode -> "下一道错题"
+                                sourceMode == "library" -> "下一题（换个局面）"
+                                else -> "落下 AI 一选，下一题"
+                            }
+                        )
+                    }
                 }
             }
         }

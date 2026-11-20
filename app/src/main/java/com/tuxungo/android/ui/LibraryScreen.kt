@@ -2,6 +2,7 @@ package com.tuxungo.android.ui
 
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -423,7 +424,11 @@ fun LibraryScreen(
                         }
                     } else {
                     Row {
-                        GameThumb(g, modifier = Modifier.size(62.dp))
+                        GameThumb(
+                            g,
+                            modifier = Modifier.size(62.dp)
+                                .clickable { onOpenGame(g) }
+                        )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(g.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

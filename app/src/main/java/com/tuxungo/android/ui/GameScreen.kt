@@ -124,6 +124,7 @@ fun GameScreen(
     var resultDismissed by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
     var showStrongDownload by remember { mutableStateOf(false) }
+    var showTrendDialog by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
     var focusMode by remember { mutableStateOf(config.focusMode) }
     var showTrueColors by remember { mutableStateOf(false) }
@@ -1410,6 +1411,27 @@ fun GameScreen(
         }
     }
 
+    // Optional souvenir: when a game ends, save the final
+    // position image to the gallery (opt-in in Settings). Waits
+    // for the judged count on pass-finished games so the caption
+    // carries the real result.
+    var imageSaved by remember { mutableStateOf(false) }
+    LaunchedEffect(game.finished, game.scoringDead) {
+        if (!game.finished || finishedAtStart || imageSaved) {
+            return@LaunchedEffect
+        }
+        if (!settings.autoSaveImage) return@LaunchedEffect
+        val endedByPasses = game.resignedBy == null && game.timeoutBy == null
+        if (endedByPasses && game.scoringDead == null) {
+            return@LaunchedEffect
+        }
+        imageSaved = true
+        val caption = "对局结束 · " + resultSummary()
+        Thread {
+            PositionShare.saveToGallery(context, game, caption)
+        }.start()
+    }
+
     // AI-vs-AI series (first to N wins, colours swap each game):
     // record the result once per game, show the tally in the
     // result dialog, and auto-start the next game until the
@@ -2081,6 +2103,7 @@ fun GameScreen(
             MiniTrend(
                 stats = liveStats.values.sortedBy { it.turn },
                 modifier = Modifier.fillMaxWidth()
+                    .clickable { showTrendDialog = true }
             )
             Spacer(modifier = Modifier.height(6.dp))
         }
@@ -2930,6 +2953,37 @@ fun GameScreen(
             onSaved = {
                 savedToLibrary = true
                 showSaveToLibrary = false
+            }
+        )
+    }
+
+    if (showTrendDialog) {
+        val turns = liveStats.values.sortedBy { it.turn }
+        AlertDialog(
+            onDismissRequest = { showTrendDialog = false },
+            title = { Text("局势走势") },
+            text = {
+                Column {
+                    WinrateChart(
+                        turns = turns,
+                        perspective = Stone.BLACK,
+                        ply = turns.lastOrNull()?.turn ?: 0,
+                        marks = com.tuxungo.android.engine.ReviewMath.marks(
+                            game.moves, turns
+                        ),
+                        showLead = true,
+                        onSeek = {}
+                    )
+                    Text(
+                        "红线是黑方胜率，黄线是目数差。完整的可拖动走势图在复盘页。",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTrendDialog = false }) {
+                    Text("关闭")
+                }
             }
         )
     }

@@ -23,6 +23,8 @@ data class AppSettings(
     val showMoveNumbers: Boolean = false,
     /** Smart referee: auto-score a fully settled game. */
     val refereeEnabled: Boolean = false,
+    /** Save the final position image to the gallery when a game ends. */
+    val autoSaveImage: Boolean = false,
     // ---- Position judgment (形势判断) tuning ----
     /** Visits for the in-game judgment / scoring analysis. */
     val judgeVisits: Int = 800,
@@ -122,6 +124,7 @@ object SettingsStore {
             keepScreenOn = p.getBoolean("keepScreenOn", false),
             showMoveNumbers = p.getBoolean("showMoveNumbers", false),
             refereeEnabled = p.getBoolean("refereeEnabled", false),
+            autoSaveImage = p.getBoolean("autoSaveImage", false),
             judgeVisits = p.getInt("judgeVisits", 800),
             territorySpread = p.getFloat("territorySpread", 0.30f),
             territoryIntensity = p.getFloat("territoryIntensity", 1.0f),
@@ -147,6 +150,7 @@ object SettingsStore {
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("showMoveNumbers", s.showMoveNumbers)
             .putBoolean("refereeEnabled", s.refereeEnabled)
+            .putBoolean("autoSaveImage", s.autoSaveImage)
             .putInt("judgeVisits", s.judgeVisits)
             .putFloat("territorySpread", s.territorySpread)
             .putFloat("territoryIntensity", s.territoryIntensity)

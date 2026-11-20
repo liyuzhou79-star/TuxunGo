@@ -440,11 +440,10 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 双方停一手后自动进入数目：死子由引擎标好，确认即可，不再粗算\n" +
-                "· 形势判断会跟着对局走了：打开过一次，之后每手自动更新\n" +
-                "· 棋谱库有棋盘缩略图了，还能按黑胜/白胜筛选\n" +
-                "· 确认落子时有放大镜了：落子点周围放大显示，大棋盘不点错\n" +
-                "· AI 托管面板可以一键交换黑白双方的设置",
+            whatsNew = "· 猜一选能用你自己的棋谱出题了：题目来源选「我的棋谱」\n" +
+                "· 点一下对局里的走势小图，能打开大图看胜率和目数差\n" +
+                "· 设置里可开「终局自动存图」：下完自动把终局局面存进相册\n" +
+                "· 棋谱库点缩略图就能直接进复盘",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
