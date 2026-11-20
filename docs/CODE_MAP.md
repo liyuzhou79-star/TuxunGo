@@ -37,7 +37,7 @@
 ## 界面（ui/）
 
 - `MainActivity.kt` — 导航总调度、主题、首次启动引导与「本版更新」、桌面长按快捷入口、空闲预热分析引擎
-- `ui/SetupScreen.kt` — 主页：开局设置、最近棋谱、每日一题卡；连点吉祥物五次打开生涯数据弹窗
+- `ui/SetupScreen.kt` — 主页：开局设置、最近棋谱、每日一题卡；连点吉祥物五次打开个人统计页
 - `ui/GameScreen.kt` — 对局页（全项目最大的文件）：对局驱动、AI 托管、分析/形势判断/数目、智能裁判、AI 认输、走势小图、表演赛解说流、系列赛、结果弹窗都在这里
 - `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选点、落子放大镜、手数、涟漪动画
 - `ui/ReviewScreen.kt` — 复盘：走势图、逐手回放、分支试下、领地归属图（按手数缓存）
@@ -48,6 +48,10 @@
 - `ui/SettingsScreen.kt` — 设置（分组二级页：对局与操作 / 外观 / 声音 / 形势判断 / 数据与更新）
 - `ui/OnboardingScreen.kt` — 新手指南七页
 - `ui/PhysicalClockScreen.kt` — 实体棋盘棋钟
+- `ui/EditScreen.kt` — 摆棋编辑器：自由摆放黑白子，产出自定义开局（`GameConfig.customStones`）直接开局
+- `ui/StatsScreen.kt` — 个人统计页：从棋谱库与训练进度汇总总对局、黑白胜负、定级战绩等（主页连点吉祥物五次打开）
+- `ui/GameConfig.kt` — 对局配置数据类（贴目、让子、AI 访问量、自定义开局等），各界面共用
+- `ui/MenuScreens.kt` — 二级页共用的屏幕骨架（返回键 + 标题 + 副标题），保证全 App 导航观感一致
 - `ui/Mascot.kt` — 吉祥物与全套自绘图标（`AppIconKind`）、空状态组件
 - `PositionShare.kt` — 局面图生成与分享/存相册
 
