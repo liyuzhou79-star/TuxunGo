@@ -137,6 +137,10 @@ fun GameScreen(
     var engineWhite by remember { mutableStateOf<KataEngine?>(null) }
     var failedBlack by remember { mutableStateOf(false) }
     var failedWhite by remember { mutableStateOf(false) }
+    // Move count whose AI engine already used its one automatic
+    // restart; a second failure on the same move falls back to
+    // manual play instead of looping forever.
+    var recoveryUsedForMove by remember { mutableIntStateOf(-1) }
     var startingBlack by remember { mutableStateOf(false) }
     var startingWhite by remember { mutableStateOf(false) }
     // The config each running engine was started with: a model change
@@ -406,11 +410,28 @@ fun GameScreen(
                     }
                 }
             }.onFailure { e ->
-                // Engine died mid-game: fall back to manual play instead
-                // of leaving the human locked out on the AI's turn.
-                if (moveStone == Stone.BLACK) failedBlack = true else failedWhite = true
-                eveRunning = false
-                engineStatus = "引擎出错：${e.message ?: "未知错误"}"
+                if (recoveryUsedForMove != game.moves.size) {
+                    // First failure on this move: the engine process
+                    // likely died. Drop it, let the driver effect
+                    // restart it and retry the move automatically.
+                    recoveryUsedForMove = game.moves.size
+                    runner.submit({ runCatching { eng.quit() } }) { }
+                    if (moveStone == Stone.BLACK) {
+                        engineBlack = null
+                        startedCfgBlack = null
+                    } else {
+                        engineWhite = null
+                        startedCfgWhite = null
+                    }
+                    engineStatus = "引擎异常，正在自动重启…"
+                } else {
+                    // Second failure on the same move: fall back to
+                    // manual play instead of leaving the human locked
+                    // out on the AI's turn.
+                    if (moveStone == Stone.BLACK) failedBlack = true else failedWhite = true
+                    eveRunning = false
+                    engineStatus = "引擎出错：${e.message ?: "未知错误"}"
+                }
             }
         }
     }
@@ -487,7 +508,11 @@ fun GameScreen(
             return
         }
         analyzing = true
-        analysisStatus = if (deep) "深度分析中…" else "分析中…"
+        analysisStatus = when {
+            deep -> "深度分析中…"
+            visitsOverride != null && visitsOverride <= 150 -> "快速分析中…"
+            else -> "分析中…"
+        }
         val movesSnapshot = game.moves.toList()
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
@@ -1589,6 +1614,25 @@ fun GameScreen(
                             enabled = !finished && humanTurn && !aiThinking
                         ) { Text("就下这步") }
                     }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = "换个深度重算", fontSize = 12.sp, color = Color.Gray)
+                    FilterChip(
+                        selected = false,
+                        onClick = { runAnalysis(deep = false, visitsOverride = 150) },
+                        enabled = !analyzing,
+                        label = { Text("快速") }
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { runAnalysis(deep = false, visitsOverride = 400) },
+                        enabled = !analyzing,
+                        label = { Text("标准") }
+                    )
                 }
                 if (analysisStatus.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))

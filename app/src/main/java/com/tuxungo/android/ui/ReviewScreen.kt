@@ -639,6 +639,11 @@ fun ReviewScreen(
                             onClick = { startAnalysis(100) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("精准分析（更慢，数字更准）") }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { startAnalysis(250) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("高精度分析（最慢，胜率和目差最可靠）") }
                     }
                 }
             }
