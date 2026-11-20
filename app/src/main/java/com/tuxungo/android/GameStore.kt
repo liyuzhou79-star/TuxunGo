@@ -63,6 +63,7 @@ object GameStore {
                 com.tuxungo.android.engine.ReviewMath.encodeSparse(turnStats)
             )
             .putInt("clockMinutes", config.clockMinutes)
+            .putInt("seriesTarget", config.seriesTarget)
             .putString("timeoutBy", timeoutBy?.name ?: "")
         if (clock != null) {
             editor
@@ -96,7 +97,8 @@ object GameStore {
             aiVisits = p.getInt("aiVisits", 200),
             customStones = decodeMoves(p.getString("customStones", "") ?: ""),
             startPlayer = startPlayer,
-            clockMinutes = clockMinutes
+            clockMinutes = clockMinutes,
+            seriesTarget = p.getInt("seriesTarget", 0)
         )
         val clock = if (clockMinutes > 0 && p.contains("clockBlackMain")) {
             ClockSnapshot(

@@ -970,6 +970,55 @@ fun GameScreen(
         }
     }
 
+    // AI-vs-AI series (first to N wins, colours swap each game):
+    // record the result once per game, show the tally in the
+    // result dialog, and auto-start the next game until the
+    // series is decided. Only on the in-session transition, like
+    // the auto-save above, so a restored finished game is never
+    // counted twice.
+    var seriesNote by remember { mutableStateOf("") }
+    var seriesRecorded by remember { mutableStateOf(false) }
+    LaunchedEffect(game.finished) {
+        if (!game.finished || finishedAtStart || seriesRecorded) {
+            return@LaunchedEffect
+        }
+        if (config.seriesTarget <= 0) return@LaunchedEffect
+        seriesRecorded = true
+        val summary = resultSummary()
+        val blackWon = summary.startsWith("黑方胜")
+        val whiteWon = summary.startsWith("白方胜")
+        if (!blackWon && !whiteWon) return@LaunchedEffect
+        val bName = ModelStore.list(context)
+            .firstOrNull { it.id == sideBlack.modelId }?.displayName
+            ?: "内置默认模型"
+        val wName = ModelStore.list(context)
+            .firstOrNull { it.id == sideWhite.modelId }?.displayName
+            ?: "内置默认模型"
+        val tally = com.tuxungo.android.SeriesStore.record(
+            context, bName, wName, blackWon
+        )
+        val scoreLine = "系列赛（先赢 ${config.seriesTarget} 局）：" +
+            "${tally.nameA} ${tally.winsA} : ${tally.winsB} ${tally.nameB}" +
+            " · 已赛 ${tally.games} 局"
+        if (tally.winsA >= config.seriesTarget ||
+            tally.winsB >= config.seriesTarget
+        ) {
+            val champ = if (tally.winsA >= config.seriesTarget) {
+                tally.nameA
+            } else {
+                tally.nameB
+            }
+            seriesNote = "$scoreLine\n系列赛结束，冠军：$champ"
+        } else {
+            seriesNote = "$scoreLine\n即将交换黑白，开始下一局…"
+            delay(2600)
+            val oldBlack = sideBlack
+            setSideCfg(Stone.BLACK, sideWhite)
+            setSideCfg(Stone.WHITE, oldBlack)
+            onRestart()
+        }
+    }
+
     val finished = game.finished
     // If the engine failed to start, never soft-lock the game: the human
     // can keep playing both sides manually.
@@ -1940,6 +1989,13 @@ fun GameScreen(
                                 onReviewAtPly(buildLibraryGame(), swing.first)
                             }
                         ) { Text("跳到转折手复盘") }
+                    }
+                    if (seriesNote.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            seriesNote,
+                            fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                        )
                     }
                     TextButton(onClick = { onRestart() }) { Text("再来一局（相同设置）") }
                     TextButton(

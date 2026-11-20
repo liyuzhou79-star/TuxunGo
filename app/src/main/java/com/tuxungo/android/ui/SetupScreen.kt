@@ -89,6 +89,7 @@ fun SetupScreen(
     }
     var aiVisits by remember { mutableIntStateOf(setupPrefs.getInt("aiVisits", 200)) }
     var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
+    var seriesTarget by remember { mutableIntStateOf(setupPrefs.getInt("seriesTarget", 0)) }
     var byoyomiPeriods by remember {
         mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
     }
@@ -106,7 +107,7 @@ fun SetupScreen(
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
-        clockMinutes, byoyomiPeriods
+        clockMinutes, byoyomiPeriods, seriesTarget
     ) {
         setupPrefs.edit()
             .putString("mode", mode.name)
@@ -118,6 +119,7 @@ fun SetupScreen(
             .putInt("aiVisits", aiVisits)
             .putInt("clockMinutes", clockMinutes)
             .putInt("byoyomiPeriods", byoyomiPeriods)
+            .putInt("seriesTarget", seriesTarget)
             .apply()
     }
 
@@ -273,6 +275,22 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(24.dp))
 
+        if (mode == GameMode.EVE) {
+            Text(text = "系列赛（表演赛）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = seriesTarget == 0, onClick = { seriesTarget = 0 }, label = { Text("不开启") })
+                FilterChip(selected = seriesTarget == 2, onClick = { seriesTarget = 2 }, label = { Text("三局两胜") })
+                FilterChip(selected = seriesTarget == 3, onClick = { seriesTarget = 3 }, label = { Text("五局三胜") })
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "开启后两个 AI 交换黑白连打多局，先赢满局数的一方夺冠，每局结束自动开下一局。双方用哪个模型、各自多强，在对局里的 AI 托管面板分别设置。",
+                fontSize = 12.sp, color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
         Text(text = "用时（棋钟）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -382,12 +400,16 @@ fun SetupScreen(
                 if (blocked) {
                     showUnsupportedDialog = true
                 } else {
+                    if (mode == GameMode.EVE && seriesTarget > 0) {
+                        com.tuxungo.android.SeriesStore.reset(context)
+                    }
                     onStart(
                         GameConfig(
                             mode, width, height, effectiveHandicap,
                             komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
                             clockMinutes = clockMinutes,
-                            byoyomiPeriods = byoyomiPeriods
+                            byoyomiPeriods = byoyomiPeriods,
+                            seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0
                         )
                     )
                 }

@@ -24,5 +24,8 @@ data class GameConfig(
      * runs out, byoyomi starts: 3 periods of 30 seconds each. */
     val clockMinutes: Int = 0,
     /** Byoyomi periods per side once the main time runs out. */
-    val byoyomiPeriods: Int = 3
+    val byoyomiPeriods: Int = 3,
+    /** EVE only: an AI-vs-AI series — first to this many wins takes
+     * the series, colours swap after every game. 0 = single game. */
+    val seriesTarget: Int = 0
 )
