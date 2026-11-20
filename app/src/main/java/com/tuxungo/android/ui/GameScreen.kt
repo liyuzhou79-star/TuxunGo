@@ -1921,6 +1921,11 @@ fun GameScreen(
                         ) { Text("跳到转折手复盘") }
                     }
                     TextButton(onClick = { onRestart() }) { Text("再来一局（相同设置）") }
+                    TextButton(
+                        onClick = {
+                            PositionShare.share(context, game, "对局结束 · $resultText")
+                        }
+                    ) { Text("分享结果图") }
                 }
             },
             confirmButton = {

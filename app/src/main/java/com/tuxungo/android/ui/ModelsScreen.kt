@@ -52,7 +52,16 @@ fun ModelsScreen(onBack: () -> Unit) {
     var statusText by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<ModelInfo?>(null) }
     var deleteTarget by remember { mutableStateOf<ModelInfo?>(null) }
-    var speedResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val speedPrefs = remember {
+        context.getSharedPreferences("model_speed", android.content.Context.MODE_PRIVATE)
+    }
+    var speedResults by remember {
+        mutableStateOf(
+            models.mapNotNull { m ->
+                speedPrefs.getString("speed_${m.id}", null)?.let { m.id to it }
+            }.toMap()
+        )
+    }
     var testingId by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<Uri?>(null) }
     var importName by remember { mutableStateOf("") }
@@ -130,6 +139,9 @@ fun ModelsScreen(onBack: () -> Unit) {
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 speedResults = speedResults + (model.id to text)
+                if (text.startsWith("思考速度")) {
+                    speedPrefs.edit().putString("speed_${model.id}", text).apply()
+                }
                 testingId = null
             }
         }

@@ -375,10 +375,21 @@ fun ReviewScreen(
                 }
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "试下中（从第 $branchBasePly 手分叉，已试 ${branch.moves.size - branchBasePly} 手）",
-                fontSize = 13.sp, color = Color.Gray
-            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    "试下中（从第 $branchBasePly 手分叉，已试 ${branch.moves.size - branchBasePly} 手）",
+                    fontSize = 13.sp, color = Color.Gray,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = {
+                        PositionShare.share(
+                            context, branch,
+                            "复盘试下 · 从第 $branchBasePly 手分叉"
+                        )
+                    }
+                ) { Text("分享局面") }
+            }
             if (branchInfo.isNotEmpty()) {
                 Text(branchInfo, fontSize = 13.sp, color = Color(0xFF2F7CF6))
             }
