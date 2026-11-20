@@ -3,8 +3,13 @@ package com.tuxungo.android.engine
 import android.content.Context
 import com.tuxungo.android.go.Stone
 
-/** Per-side AI configuration: which model plays a color and how hard it thinks. */
-data class SideAiConfig(val modelId: String, val visits: Int)
+/** Per-side AI configuration: which model plays a color, how hard it
+ *  thinks, and whether it imitates human move style. */
+data class SideAiConfig(
+    val modelId: String,
+    val visits: Int,
+    val humanLike: Boolean = false
+)
 
 /**
  * Persists the per-side AI settings so Black and White can run
@@ -23,7 +28,8 @@ object SideAiStore {
         val modelId = prefs.getString(key(stone, "model"), null)
             ?: ModelStore.activeId(context)
         val visits = prefs.getInt(key(stone, "visits"), defaultVisits)
-        return SideAiConfig(modelId, visits)
+        val humanLike = prefs.getBoolean(key(stone, "human"), false)
+        return SideAiConfig(modelId, visits, humanLike)
     }
 
     fun save(context: Context, stone: Stone, cfg: SideAiConfig) {
@@ -31,6 +37,7 @@ object SideAiStore {
             .edit()
             .putString(key(stone, "model"), cfg.modelId)
             .putInt(key(stone, "visits"), cfg.visits)
+            .putBoolean(key(stone, "human"), cfg.humanLike)
             .apply()
     }
 }

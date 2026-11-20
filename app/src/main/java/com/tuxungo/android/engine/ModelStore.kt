@@ -20,15 +20,19 @@ data class ModelInfo(
 )
 
 /**
- * The model library: one bundled default model plus user-uploaded KataGo
- * models. Uploads are validated in stages — gzip integrity, a header
- * parse for text models, and a real engine test-load — before they join
- * the library. Metadata lives in filesDir/models/index.json; the active
- * choice lives in SharedPreferences.
+ * The model library: two bundled models (a light one and a strong one)
+ * plus user-uploaded KataGo models. Uploads are validated in stages —
+ * gzip integrity, a header parse for text models, and a real engine
+ * test-load — before they join the library. Metadata lives in
+ * filesDir/models/index.json; the active choice lives in
+ * SharedPreferences. A third bundled file, the human-style model, is
+ * not a standalone library entry: engines load it alongside a normal
+ * model when a side enables human-like play.
  */
 object ModelStore {
 
     const val BUNDLED_ID = "bundled"
+    const val STRONG_ID = "bundled_strong"
     private const val PREFS = "model_store"
     private const val KEY_ACTIVE = "active_id"
 
@@ -54,21 +58,21 @@ object ModelStore {
 
     private fun bundledInfo(context: Context): ModelInfo {
         val file = EngineAssets.ensureDefaultModel(context)
-        // Parse the real header so the label stays honest if the bundled
-        // model is ever swapped.
-        val header = try {
-            GZIPInputStream(FileInputStream(file)).use { gz ->
-                val buf = ByteArray(8192)
-                val n = gz.read(buf)
-                if (n > 0) ModelHeaderParser.parse(String(buf, 0, n, Charsets.UTF_8)) else null
-            }
-        } catch (_: Exception) {
-            null
-        }
         return ModelInfo(
             id = BUNDLED_ID,
-            displayName = nickname(context, BUNDLED_ID) ?: "内置默认模型",
-            archText = (header?.describe() ?: "KataGo 官方网络") + " · 内置",
+            displayName = nickname(context, BUNDLED_ID) ?: "轻量模型",
+            archText = "速度快 · 日常对局和分析都够用 · 内置",
+            sizeBytes = file.length(),
+            isBundled = true
+        )
+    }
+
+    private fun strongInfo(context: Context): ModelInfo {
+        val file = EngineAssets.ensureStrongModel(context)
+        return ModelInfo(
+            id = STRONG_ID,
+            displayName = nickname(context, STRONG_ID) ?: "强力模型",
+            archText = "棋力更强 · 形势判断更准，思考稍慢 · 内置",
             sizeBytes = file.length(),
             isBundled = true
         )
@@ -85,7 +89,7 @@ object ModelStore {
     }
 
     fun list(context: Context): List<ModelInfo> {
-        val out = mutableListOf(bundledInfo(context))
+        val out = mutableListOf(bundledInfo(context), strongInfo(context))
         val index = readIndex(context)
         for (i in 0 until index.length()) {
             val o = index.optJSONObject(i) ?: continue
@@ -121,6 +125,7 @@ object ModelStore {
 
     /** The model file for any library id (falls back to the bundled model). */
     fun resolveFile(context: Context, id: String): File {
+        if (id == STRONG_ID) return EngineAssets.ensureStrongModel(context)
         if (id != BUNDLED_ID) {
             val index = readIndex(context)
             for (i in 0 until index.length()) {
@@ -138,7 +143,7 @@ object ModelStore {
     fun resolveActiveFile(context: Context): File = resolveFile(context, activeId(context))
 
     fun rename(context: Context, id: String, newName: String) {
-        if (id == BUNDLED_ID) {
+        if (id == BUNDLED_ID || id == STRONG_ID) {
             setNickname(context, id, newName)
             return
         }
@@ -155,7 +160,7 @@ object ModelStore {
     }
 
     fun delete(context: Context, id: String) {
-        if (id == BUNDLED_ID) return
+        if (id == BUNDLED_ID || id == STRONG_ID) return
         val index = readIndex(context)
         val kept = JSONArray()
         for (i in 0 until index.length()) {

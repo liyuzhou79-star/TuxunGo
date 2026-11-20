@@ -233,16 +233,45 @@ class KataEngine private constructor(
          * Starts KataGo. [nativeLibDir] is Context.nativeLibraryDir;
          * [workDir] must be app-private writable storage (config + logs live there).
          */
-        fun start(nativeLibDir: String, workDir: File, modelFile: File, maxVisits: Int): KataEngine {
+        fun start(
+            nativeLibDir: String, workDir: File, modelFile: File,
+            maxVisits: Int, humanModelFile: File? = null
+        ): KataEngine {
             val binary = File(nativeLibDir, "libkatago.so")
             check(binary.exists()) { "KataGo binary missing: ${binary.absolutePath}" }
             check(modelFile.exists()) { "KataGo model missing: ${modelFile.absolutePath}" }
+            if (humanModelFile != null) {
+                check(humanModelFile.exists()) {
+                    "KataGo human model missing: ${humanModelFile.absolutePath}"
+                }
+            }
             val configFile = File(workDir, "gtp.cfg")
             // This key set is verified against KataGo v1.15.3 by running it
             // locally: KataGo aborts at startup when logFile and logDir are
             // both present, and when any of logAllGTPCommunication,
             // logSearchInfo, koRule, scoringRule or multiStoneSuicideLegal
             // is missing. Do not trim keys casually.
+            val humanKeys = if (humanModelFile == null) "" else """
+                humanSLProfile = rank_9d
+                humanSLChosenMoveProp = 1.0
+                humanSLChosenMoveIgnorePass = true
+                humanSLChosenMovePiklLambda = 0.08
+                humanSLRootExploreProbWeightless = 0.8
+                humanSLCpuctExploration = 0.50
+                humanSLCpuctPermanent = 2.0
+                chosenMoveTemperatureEarly = 0.70
+                chosenMoveTemperature = 0.25
+                chosenMoveTemperatureHalflife = 30
+                chosenMoveTemperatureOnlyBelowProb = 1.0
+                useLcbForSelection = false
+                useUncertainty = false
+                subtreeValueBiasFactor = 0.0
+                winLossUtilityFactor = 1.0
+                staticScoreUtilityFactor = 0.30
+                dynamicScoreUtilityFactor = 0.00
+                ignorePreRootHistory = false
+                rootNumSymmetriesToSample = 2
+                """.trimIndent() + "\n"
             configFile.writeText(
                 """
                 logFile = gtp.log
@@ -255,13 +284,18 @@ class KataEngine private constructor(
                 numSearchThreads = 4
                 nnMaxBatchSize = 16
                 ponderingEnabled = false
-                """.trimIndent() + "\n"
+                """.trimIndent() + "\n" + humanKeys
             )
-            val process = ProcessBuilder(
+            val args = mutableListOf(
                 binary.absolutePath, "gtp",
                 "-model", modelFile.absolutePath,
                 "-config", configFile.absolutePath
-            ).directory(workDir).start()
+            )
+            if (humanModelFile != null) {
+                args += "-human-model"
+                args += humanModelFile.absolutePath
+            }
+            val process = ProcessBuilder(args).directory(workDir).start()
             val writer = BufferedWriter(OutputStreamWriter(process.outputStream))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val engine = KataEngine(process, writer, reader)

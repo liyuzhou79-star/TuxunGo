@@ -303,7 +303,8 @@ fun GameScreen(
         val startedCfg = if (stone == Stone.BLACK) startedCfgBlack else startedCfgWhite
         if (current != null && current.isAlive) {
             when {
-                startedCfg?.modelId != cfg.modelId -> {
+                startedCfg?.modelId != cfg.modelId ||
+                    startedCfg?.humanLike != cfg.humanLike -> {
                     // Model changed: retire this process, start fresh below.
                     if (stone == Stone.BLACK) {
                         engineBlack = null; startedCfgBlack = null
@@ -1098,10 +1099,10 @@ fun GameScreen(
         if (!blackWon && !whiteWon) return@LaunchedEffect
         val bName = ModelStore.list(context)
             .firstOrNull { it.id == sideBlack.modelId }?.displayName
-            ?: "内置默认模型"
+            ?: "轻量模型"
         val wName = ModelStore.list(context)
             .firstOrNull { it.id == sideWhite.modelId }?.displayName
-            ?: "内置默认模型"
+            ?: "轻量模型"
         val tally = com.tuxungo.android.SeriesStore.record(
             context, bName, wName, blackWon
         )
@@ -1269,6 +1270,9 @@ fun GameScreen(
                 if (scoringMode) {
                     val group = game.groupAt(x, y)
                     if (group.isNotEmpty()) {
+                        deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
+                    }
+                } else if (!settings.confirmMovpty()) {
                         deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
                     }
                 } else if (!settings.confirmMove) {
@@ -1455,11 +1459,11 @@ fun GameScreen(
             }
         val blackModelName = remember(sideBlack.modelId) {
             ModelStore.list(context).firstOrNull { it.id == sideBlack.modelId }
-                ?.displayName ?: "内置默认模型"
+                ?.displayName ?: "轻量模型"
         }
         val whiteModelName = remember(sideWhite.modelId) {
             ModelStore.list(context).firstOrNull { it.id == sideWhite.modelId }
-                ?.displayName ?: "内置默认模型"
+                ?.displayName ?: "轻量模型"
         }
         fun sideTitle(stone: Stone): String = when {
             isEve -> if (stone == Stone.BLACK) blackModelName else whiteModelName
@@ -2377,7 +2381,7 @@ private fun AiSideSection(
     onCfgChange: (SideAiConfig) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val currentName = models.firstOrNull { it.id == cfg.modelId }?.displayName ?: "内置默认模型"
+    val currentName = models.firstOrNull { it.id == cfg.modelId }?.displayName ?: "轻量模型"
     androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -2433,6 +2437,20 @@ private fun AiSideSection(
                     text = "思考量：${cfg.visits}（越大越强、越慢）",
                     fontSize = 12.sp, color = Color.Gray
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "模拟人类落子", fontSize = 14.sp)
+                        Text(
+                            text = "选点风格像真人棋手，强搜索兜底，不故意下错招",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = cfg.humanLike,
+                        onCheckedChange = { onCfgChange(cfg.copy(humanLike = it)) }
+                    )
+                }
             }
         }
     }

@@ -54,7 +54,7 @@ fun SetupScreen(
     val activeModelName = remember {
         val models = com.tuxungo.android.engine.ModelStore.list(context)
         val activeId = com.tuxungo.android.engine.ModelStore.activeId(context)
-        models.firstOrNull { it.id == activeId }?.displayName ?: "内置默认模型"
+        models.firstOrNull { it.id == activeId }?.displayName ?: "轻量模型"
     }
     val recentGames = remember {
         com.tuxungo.android.LibraryStore.listGames(context).take(3)

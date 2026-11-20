@@ -15,6 +15,8 @@ English | [简体中文](README.md)
 No accounts, no ads, no network needed: play against the AI, watch AI
 vs AI games, or play a friend on the same phone.
 
+**[Download the latest release](https://github.com/liyuzhou79-star/TuxunGo/releases/latest)** (Android 10+, arm64)
+
 </div>
 
 ## Features
@@ -22,7 +24,8 @@ vs AI games, or play a friend on the same phone.
 ### Play
 
 - **Three modes**: human vs AI, AI vs AI, human vs human (same device)
-- **AI hosting**: hand either color — or both — to the AI at any moment, each side with its **own model and strength** (e.g. the built-in net on one side, a big imported net on the other), switchable mid-game
+- **AI hosting**: hand either color — or both — to the AI at any moment, each side with its **own model and strength** (e.g. the light model on one side, the strong model on the other), switchable mid-game
+- **Human-like play**: a per-side switch in the AI hosting panel. Move choices come from a model trained on human game records, in the style of a top human player, while the strong search vetoes outright blunders — it plays like a human, but never deliberately plays a bad move, and its thinking strength is not reduced
 - **Free-form boards**: 5–25 points per side, rectangular boards included; handicap and komi are free numeric inputs
 - **Position editor**: set up any position by hand, then start from it with either color
 - **Fullscreen mode**: board at maximum size with just analysis controls — ideal for spectating AI games
@@ -58,7 +61,7 @@ vs AI games, or play a friend on the same phone.
 
 ### Model library
 
-- Ships with a 10-block KataGo net, ready out of the box
+- Ships with two models, ready out of the box: a **light model** (fast, plenty for everyday games and analysis) and a **strong model** (stronger play and more reliable position judgment, a little slower to think), switchable any time in the library; a third bundled file, the human-style model, powers Human-like play
 - Import your own KataGo models (`.txt.gz` / `.bin.gz`, up to 99): integrity check, header parse and a real engine test-load — a broken file never enters the library
 - Every model, including the built-in one, can be given a nickname
 - Every model can be speed-tested (visits per second) right in the library; results are kept, so they are still there next visit
@@ -74,17 +77,16 @@ vs AI games, or play a friend on the same phone.
 
 ## Download
 
-Grab the APK from [Releases](https://github.com/liyuzhou79-star/TuxunGo/releases) (Android 10+, arm64).
+Grab the latest release APK from [Releases](https://github.com/liyuzhou79-star/TuxunGo/releases) (Android 10+, arm64).
 
-> Upgrading from the 0.1.0 test build to 1.0.0 requires one uninstall first (the signing key changed); every release after 1.0.0 upgrades in place.
+> Upgrading from an early test build (test signing) to a formal release requires one uninstall first (the signing key differs); export a backup in Settings first and restore it afterwards. Every formal release after that upgrades in place.
 
 ## Stronger models (optional)
 
-The built-in net is already capable. For more strength, download a net from the [official KataGo model library](https://katagotraining.org/networks/):
+The bundled strong model is already very capable. For even more strength, download a net from the [official KataGo model library](https://katagotraining.org/networks/):
 
 | Model | Size | Notes |
 | --- | --- | --- |
-| kata1-b18c384nbt | ~93 MB | Strong and comparatively light; best speed/strength balance on a phone |
 | kata1-b28c512nbt | ~259 MB | Among the strongest mainstream nets; slower thinking on a phone |
 
 Import the `.bin.gz` file in the app's model library, give it a name, then assign it to a side in the AI hosting panel and raise its strength.
@@ -94,7 +96,7 @@ Import the `.bin.gz` file in the app's model library, give it a name, then assig
 ## Design principles
 
 - Simple pages, no decorative clutter
-- A small APK: one small built-in net; big nets are user-added and live in device storage
+- Ready out of the box: light, strong and human-style models are all bundled, nothing to download first; even bigger nets are user-added
 - Offline first, always
 
 ## Tech

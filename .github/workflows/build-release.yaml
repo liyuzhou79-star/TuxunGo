@@ -74,15 +74,25 @@ jobs:
           cp engine-cache/libkatago.so app/src/main/jniLibs/arm64-v8a/libkatago.so
           ls -la app/src/main/jniLibs/arm64-v8a/
 
-      - name: Fetch bundled default model (kata1 b10c128, strongest 10-block net)
+      - name: Fetch bundled models (light b10c128, strong b18c384, human SL)
         run: |
           cd "$RUNNER_TEMP"
           curl -sL -o default.txt.gz "https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b10c128-s1141046784-d204142634.txt.gz"
           ls -la default.txt.gz
           file default.txt.gz
           gzip -t default.txt.gz
+          curl -sL -o strong.bin.gz "https://media.katagotraining.org/uploaded/networks/models/kata1/kata1-b18c384nbt-s9996604416-d4316597426.bin.gz"
+          ls -la strong.bin.gz
+          gzip -t strong.bin.gz
+          test "$(stat -c%s strong.bin.gz)" = "97898094"
+          curl -sL -o human.bin.gz "https://github.com/lightvector/KataGo/releases/download/v1.15.0/b18c384nbt-humanv0.bin.gz"
+          ls -la human.bin.gz
+          gzip -t human.bin.gz
+          test "$(stat -c%s human.bin.gz)" = "99066230"
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets/models"
           cp default.txt.gz "$GITHUB_WORKSPACE/app/src/main/assets/models/default.model"
+          cp strong.bin.gz "$GITHUB_WORKSPACE/app/src/main/assets/models/strong.model"
+          cp human.bin.gz "$GITHUB_WORKSPACE/app/src/main/assets/models/human.model"
 
       - name: Restore signing keystore from secrets
         env:
