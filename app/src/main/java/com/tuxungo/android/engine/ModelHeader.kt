@@ -54,41 +54,148 @@ object ModelHeaderParser {
     }
 }
 
-/** Rough territory estimate from KataGo ownership values. */
+/** Territory estimate from KataGo ownership values. */
 object TerritoryEstimate {
 
     data class Result(val blackTerritory: Int, val whiteTerritory: Int, val neutral: Int)
 
+    /** A whole empty region whose mean ownership passes this counts entirely for that side. */
+    private const val REGION_MEAN = 0.55
+
+    /** A stone group whose mean ownership passes this (against its owner) is dead. */
+    private const val GROUP_MEAN = 0.35
+
+    /** A single stone owned this strongly by the opponent is dead even inside a live group. */
+    private const val STONE_CERTAIN = 0.9
+
+    private fun neighbors(i: Int, width: Int, height: Int): List<Int> {
+        val x = i % width
+        val y = i / width
+        val out = ArrayList<Int>(4)
+        if (x > 0) out.add(i - 1)
+        if (x < width - 1) out.add(i + 1)
+        if (y > 0) out.add(i - width)
+        if (y < height - 1) out.add(i + width)
+        return out
+    }
+
     /**
-     * [ownership] has one value per board point in row-major order from
-     * the top-left (index = y * width + x), in BLACK's perspective
-     * (positive = Black owns it). Note KataGo itself reports ownership
-     * from the side-to-move perspective; [AnalysisEngine] converts it
-     * to Black's perspective before it reaches this function.
-     * [stones] is the board content in the same order (null = empty).
+     * Which stones are dead, judged GROUP by group. Per-point
+     * ownership is noisy — one point of a live group often leans the
+     * wrong way — so a connected group is judged by the MEAN
+     * ownership of its stones' points: a group whose points on
+     * average belong to the opponent is dead. A single stone owned
+     * overwhelmingly by the opponent ([STONE_CERTAIN]) is dead even
+     * when its group lives (a cut-off tail, a lone invader).
      *
-     * Counting follows Chinese scoring intuition: an empty point owned
-     * above [threshold] counts for its owner, and a stone the engine
-     * judges dead (its point is owned by the opponent above
-     * [threshold]) also counts for the opponent — the point becomes
-     * the opponent's territory once the dead stone is removed.
+     * [ownership] is row-major from the top-left, in BLACK's
+     * perspective (positive = Black owns the point); [stones] is the
+     * board content in the same order (null = empty).
      */
-    fun estimate(ownership: DoubleArray, stones: Array<Stone?>, threshold: Double = 0.5): Result {
-        var b = 0
-        var w = 0
-        var n = 0
-        val count = minOf(ownership.size, stones.size)
-        for (i in 0 until count) {
+    fun deadStones(
+        ownership: DoubleArray,
+        stones: Array<Stone?>,
+        width: Int,
+        height: Int
+    ): Set<Int> {
+        val n = minOf(ownership.size, stones.size, width * height)
+        val dead = mutableSetOf<Int>()
+        val visited = BooleanArray(n)
+        for (i in 0 until n) {
+            val s = stones[i] ?: continue
             val v = ownership[i]
-            val stone = stones[i]
-            when {
-                stone == null && v > threshold -> b++
-                stone == null && v < -threshold -> w++
-                stone == Stone.WHITE && v > threshold -> b++ // dead white stone
-                stone == Stone.BLACK && v < -threshold -> w++ // dead black stone
-                stone == null -> n++
+            if ((s == Stone.BLACK && v <= -STONE_CERTAIN) ||
+                (s == Stone.WHITE && v >= STONE_CERTAIN)
+            ) {
+                dead.add(i)
+            }
+            if (visited[i]) continue
+            val group = mutableListOf<Int>()
+            val stack = ArrayDeque<Int>()
+            stack.add(i)
+            visited[i] = true
+            var sum = 0.0
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                group.add(cur)
+                sum += ownership[cur]
+                for (nb in neighbors(cur, width, height)) {
+                    if (!visited[nb] && stones[nb] == s) {
+                        visited[nb] = true
+                        stack.add(nb)
+                    }
+                }
+            }
+            val mean = sum / group.size
+            if ((s == Stone.BLACK && mean < -GROUP_MEAN) ||
+                (s == Stone.WHITE && mean > GROUP_MEAN)
+            ) {
+                dead.addAll(group)
             }
         }
-        return Result(b, w, n)
+        return dead
+    }
+
+    /**
+     * Counts territory (empty points plus dead stones' points),
+     * Chinese-scoring style. Dead groups come from [deadStones];
+     * their points are then treated as empty. Each connected empty
+     * region is judged by its mean ownership first — a solid region
+     * counts in full even if a point or two inside reads weakly —
+     * and only genuinely mixed regions fall back to per-point
+     * counting at [threshold].
+     */
+    fun estimate(
+        ownership: DoubleArray,
+        stones: Array<Stone?>,
+        width: Int,
+        height: Int,
+        threshold: Double = 0.5
+    ): Result {
+        val n = minOf(ownership.size, stones.size, width * height)
+        val dead = deadStones(ownership, stones, width, height)
+        var b = 0
+        var w = 0
+        var neutral = 0
+        val visited = BooleanArray(n)
+        for (i in 0 until n) {
+            val s = stones[i]
+            if (s != null && i !in dead) continue // a live stone is not territory
+            if (visited[i]) continue
+            val region = mutableListOf<Int>()
+            val stack = ArrayDeque<Int>()
+            stack.add(i)
+            visited[i] = true
+            var sum = 0.0
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                region.add(cur)
+                sum += ownership[cur]
+                for (nb in neighbors(cur, width, height)) {
+                    if (visited[nb]) continue
+                    val ns = stones[nb]
+                    if (ns == null || nb in dead) {
+                        visited[nb] = true
+                        stack.add(nb)
+                    }
+                }
+            }
+            val mean = sum / region.size
+            when {
+                mean > REGION_MEAN -> b += region.size
+                mean < -REGION_MEAN -> w += region.size
+                else -> for (p in region) {
+                    val pst = stones[p]
+                    when {
+                        p in dead && pst == Stone.WHITE -> b++
+                        p in dead && pst == Stone.BLACK -> w++
+                        ownership[p] > threshold -> b++
+                        ownership[p] < -threshold -> w++
+                        else -> neutral++
+                    }
+                }
+            }
+        }
+        return Result(b, w, neutral)
     }
 }

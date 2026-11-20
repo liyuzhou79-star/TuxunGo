@@ -4,7 +4,7 @@
 
 # TuxunGo
 
-**A free, open-source, fully offline Android Go app powered by KataGo**
+**A free, open-source Android Go app powered by KataGo — games and analysis run fully offline**
 
 English | [简体中文](README.md)
 
@@ -57,7 +57,7 @@ vs AI games, or play a friend on the same phone.
 
 - Real recorded stone sounds (synthesized alternatives included), placement vibration, four board skins, and three theme accents (sakura pink / matcha green / indigo) switchable instantly
 - Games survive backgrounding and process death — pick up right where you left off
-- **Fully offline**: engine and models live on the device; there is no server, no account, and nothing that needs a network
+- **Offline by design**: engine and models live on the device; no server, no account. The only network feature is the manual "Check for updates" button in Settings — nothing connects unless you tap it
 
 ## Download
 

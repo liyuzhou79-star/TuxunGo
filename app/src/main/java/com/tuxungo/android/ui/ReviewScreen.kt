@@ -696,7 +696,7 @@ fun ReviewScreen(
                 }
             }
             Text(
-                "判定：胜率掉 15% 以上为恶手；下出 AI 一选且不亏为妙手；全场胜率波动最大的一手为关键手。",
+                "判定：胜率掉 15% 以上为恶手；下出 AI 一选、不亏，且这一选明显甩开其他候选（胜率拉开 5% 以上）才算妙手；全场胜率波动最大的一手为关键手。",
                 fontSize = 11.sp, color = Color.Gray
             )
             Spacer(modifier = Modifier.height(8.dp))

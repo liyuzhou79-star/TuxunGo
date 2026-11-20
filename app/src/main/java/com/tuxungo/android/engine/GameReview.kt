@@ -9,7 +9,13 @@ data class TurnStat(
     val winrateBlack: Double,
     val scoreLeadBlack: Double,
     val bestMove: Move?,
-    val bestIsPass: Boolean
+    val bestIsPass: Boolean,
+    /**
+     * Win-rate gap between the engine's top choice and its second
+     * choice at this turn (0..1): how much the best move stood out.
+     * 0 when unknown (stats recorded before this was tracked).
+     */
+    val bestGap: Double = 0.0
 )
 
 enum class MarkKind { BLUNDER, BRILLIANT, KEY }
@@ -26,14 +32,23 @@ object ReviewMath {
 
     const val BLUNDER_DROP = 15.0
 
+    /**
+     * A top-choice move only counts as brilliant when it clearly
+     * stood out from the alternatives (top-vs-second win-rate gap).
+     * Without this, every quiet position floods the list with
+     * "brilliant" moves that were simply the obvious play.
+     */
+    const val BRILLIANT_GAP = 0.05
+
     fun winrateFor(stat: TurnStat, side: Stone): Double =
         if (side == Stone.BLACK) stat.winrateBlack else 1.0 - stat.winrateBlack
 
     /**
      * Classifies every move. A move is a blunder when the mover's win
      * rate drops by [BLUNDER_DROP]+ points; brilliant when it matches
-     * the engine's top choice without giving anything back; the key
-     * move is the single biggest swing of the game.
+     * the engine's top choice without giving anything back AND that
+     * choice clearly stood out from the alternatives ([BRILLIANT_GAP]);
+     * the key move is the single biggest swing of the game.
      */
     fun marks(moves: List<Move>, turns: List<TurnStat>): List<MoveMark> {
         if (turns.size < 2 || moves.isEmpty()) return emptyList()
@@ -59,7 +74,8 @@ object ReviewMath {
             }
             when {
                 delta <= -BLUNDER_DROP -> out.add(MoveMark(i + 1, MarkKind.BLUNDER, delta))
-                matchesTop && delta >= -2.0 -> out.add(MoveMark(i + 1, MarkKind.BRILLIANT, delta))
+                matchesTop && delta >= -2.0 && turns[i].bestGap >= BRILLIANT_GAP ->
+                    out.add(MoveMark(i + 1, MarkKind.BRILLIANT, delta))
             }
         }
         if (keyMove > 0) {
@@ -75,12 +91,12 @@ object ReviewMath {
         return out.sortedBy { it.moveNumber }
     }
 
-    /** "wr,lead,bestX,bestY;..." — best is -1,-1 for pass / unknown. */
+    /** "wr,lead,bestX,bestY,gap;..." — best is -1,-1 for pass / unknown. */
     fun encodeTurns(turns: List<TurnStat>): String =
         turns.joinToString(";") { t ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by"
+            "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)}"
         }
 
     fun decodeTurns(text: String): List<TurnStat> {
@@ -94,7 +110,8 @@ object ReviewMath {
                 winrateBlack = f.getOrNull(0)?.toDoubleOrNull() ?: 0.5,
                 scoreLeadBlack = f.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
                 bestMove = null,
-                bestIsPass = bx < 0
+                bestIsPass = bx < 0,
+                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0
             ).let { base ->
                 // bestMove's stone is not stored; marks() only needs its
                 // coordinates, so park them on a throwaway Move.
@@ -118,7 +135,7 @@ object ReviewMath {
         stats.entries.sortedBy { it.key }.joinToString(";") { (turn, t) ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by"
+            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)}"
         }
 
     /** Parses the sparse form; also tolerates the dense form. */
@@ -146,7 +163,8 @@ object ReviewMath {
                 winrateBlack = f.getOrNull(0)?.toDoubleOrNull() ?: 0.5,
                 scoreLeadBlack = f.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
                 bestMove = if (bx >= 0 && by >= 0) Move(Stone.BLACK, bx, by) else null,
-                bestIsPass = bx < 0
+                bestIsPass = bx < 0,
+                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0
             )
         }
         return out

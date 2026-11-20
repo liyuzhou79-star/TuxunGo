@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS }
 
 @Composable
 fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
@@ -166,6 +166,7 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
             onOpenLibrary = { screen = Screen.LIBRARY },
             onOpenGuess = { screen = Screen.GUESS },
             onOpenTsumego = { screen = Screen.TSUMEGO },
+            onOpenStats = { screen = Screen.STATS },
             onOpenGame = {
                 reviewGame = it
                 reviewInitialPly = null
@@ -225,6 +226,9 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
             onBack = { screen = Screen.SETUP }
         )
         Screen.TSUMEGO -> com.tuxungo.android.ui.TsumegoScreen(
+            onBack = { screen = Screen.SETUP }
+        )
+        Screen.STATS -> com.tuxungo.android.ui.StatsScreen(
             onBack = { screen = Screen.SETUP }
         )
         Screen.EDIT -> EditScreen(

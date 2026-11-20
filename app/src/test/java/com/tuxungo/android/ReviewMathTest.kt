@@ -11,8 +11,13 @@ import org.junit.Test
 
 class ReviewMathTest {
 
-    private fun stat(turn: Int, wrBlack: Double, best: Move? = null, bestPass: Boolean = false) =
-        TurnStat(turn, wrBlack, 0.0, best, bestPass)
+    private fun stat(
+        turn: Int,
+        wrBlack: Double,
+        best: Move? = null,
+        bestPass: Boolean = false,
+        gap: Double = 0.0
+    ) = TurnStat(turn, wrBlack, 0.0, best, bestPass, gap)
 
     @Test
     fun bigWinrateDropIsBlunderAndKey() {
@@ -36,11 +41,25 @@ class ReviewMathTest {
     fun playingTopChoiceIsBrilliant() {
         val moves = listOf(Move(Stone.BLACK, 3, 3))
         val turns = listOf(
-            stat(0, 0.50, best = Move(Stone.BLACK, 3, 3)),
+            stat(0, 0.50, best = Move(Stone.BLACK, 3, 3), gap = 0.12),
             stat(1, 0.55)
         )
         val marks = ReviewMath.marks(moves, turns)
         assertTrue(marks.any { it.moveNumber == 1 && it.kind == MarkKind.BRILLIANT })
+    }
+
+    @Test
+    fun topChoiceWithTinyGapIsNotBrilliant() {
+        // The obvious move in a quiet position: it matches the top
+        // choice, but the alternatives were just as good, so calling
+        // it brilliant would flood the list with noise.
+        val moves = listOf(Move(Stone.BLACK, 3, 3))
+        val turns = listOf(
+            stat(0, 0.50, best = Move(Stone.BLACK, 3, 3), gap = 0.01),
+            stat(1, 0.50)
+        )
+        val marks = ReviewMath.marks(moves, turns)
+        assertTrue(marks.none { it.kind == MarkKind.BRILLIANT })
     }
 
     @Test
@@ -55,11 +74,12 @@ class ReviewMathTest {
     @Test
     fun turnsRoundTrip() {
         val turns = listOf(
-            TurnStat(0, 0.5, 1.25, Move(Stone.BLACK, 3, 3), false),
+            TurnStat(0, 0.5, 1.25, Move(Stone.BLACK, 3, 3), false, bestGap = 0.083),
             TurnStat(1, 0.623, -2.5, null, true)
         )
         val back = ReviewMath.decodeTurns(ReviewMath.encodeTurns(turns))
         assertEquals(2, back.size)
+        assertEquals(0.083, back[0].bestGap, 0.001)
         assertEquals(0.623, back[1].winrateBlack, 0.001)
         assertEquals(-2.5, back[1].scoreLeadBlack, 0.001)
         assertEquals(3, back[0].bestMove?.x)

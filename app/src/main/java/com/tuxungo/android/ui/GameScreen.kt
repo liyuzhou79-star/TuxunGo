@@ -452,12 +452,18 @@ fun GameScreen(
 
     fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
         val first = res.candidates.firstOrNull()
+        val second = res.candidates.getOrNull(1)
         val stat = com.tuxungo.android.engine.TurnStat(
             turn = moveCount,
             winrateBlack = res.rootWinrateBlack,
             scoreLeadBlack = res.rootScoreLeadBlack,
             bestMove = first?.move,
-            bestIsPass = first != null && first.move == null
+            bestIsPass = first != null && first.move == null,
+            bestGap = if (first != null && second != null) {
+                kotlin.math.abs(first.winrateBlack - second.winrateBlack)
+            } else {
+                0.0
+            }
         )
         if (overwrite || !liveStats.containsKey(moveCount)) {
             liveStats[moveCount] = stat
@@ -652,15 +658,17 @@ fun GameScreen(
             val suggested = mutableSetOf<Int>()
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
-                    for (y in 0 until game.size.height) {
-                        for (x in 0 until game.size.width) {
-                            val st = game.stoneAt(x, y) ?: continue
-                            val v = res.ownershipBlack.getOrNull(game.index(x, y)) ?: continue
-                            if ((st == Stone.BLACK && v < -0.5) || (st == Stone.WHITE && v > 0.5)) {
-                                suggested.add(game.index(x, y))
-                            }
-                        }
+                    // Group-aware suggestion: whole dead groups are
+                    // marked together instead of noisy per-point picks.
+                    val stonesNow = Array(game.size.area) { i ->
+                        game.stoneAt(i % game.size.width, i / game.size.width)
                     }
+                    suggested.addAll(
+                        TerritoryEstimate.deadStones(
+                            res.ownershipBlack, stonesNow,
+                            game.size.width, game.size.height
+                        )
+                    )
                 }
             }
             deadSet = suggested
@@ -1234,14 +1242,17 @@ fun GameScreen(
                 val stonesArr = Array(game.size.area) { i ->
                     game.stoneAt(i % game.size.width, i / game.size.width)
                 }
-                val est = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr, 0.5)
+                val est = TerritoryEstimate.estimate(
+                    liveRes.ownershipBlack, stonesArr, game.size.width, game.size.height, 0.5
+                )
+                val deadLive = TerritoryEstimate.deadStones(
+                    liveRes.ownershipBlack, stonesArr, game.size.width, game.size.height
+                )
                 var aliveB = 0
                 var aliveW = 0
                 for (i in stonesArr.indices) {
                     val s = stonesArr[i] ?: continue
-                    val v = if (i < liveRes.ownershipBlack.size) liveRes.ownershipBlack[i] else 0.0
-                    val dead = (s == Stone.BLACK && v < -0.5) || (s == Stone.WHITE && v > 0.5)
-                    if (!dead) {
+                    if (i !in deadLive) {
                         if (s == Stone.BLACK) aliveB++ else aliveW++
                     }
                 }
@@ -1263,21 +1274,19 @@ fun GameScreen(
             val stonesArr2 = Array(game.size.area) { i ->
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
-            val est2 = TerritoryEstimate.estimate(liveRes.ownershipBlack, stonesArr2, 0.5)
+            val est2 = TerritoryEstimate.estimate(
+                liveRes.ownershipBlack, stonesArr2, game.size.width, game.size.height, 0.5
+            )
+            val deadLive2 = TerritoryEstimate.deadStones(
+                liveRes.ownershipBlack, stonesArr2, game.size.width, game.size.height
+            )
             var aliveB2 = 0
             var aliveW2 = 0
             var deadB2 = 0
             var deadW2 = 0
             for (i in stonesArr2.indices) {
                 val s = stonesArr2[i] ?: continue
-                val v = if (i < liveRes.ownershipBlack.size) {
-                    liveRes.ownershipBlack[i]
-                } else {
-                    0.0
-                }
-                val dead = (s == Stone.BLACK && v < -0.5) ||
-                    (s == Stone.WHITE && v > 0.5)
-                if (dead) {
+                if (i in deadLive2) {
                     if (s == Stone.BLACK) deadB2++ else deadW2++
                 } else if (s == Stone.BLACK) {
                     aliveB2++
@@ -1437,14 +1446,17 @@ fun GameScreen(
             val stones = Array(game.size.area) { i ->
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
-            val terr = TerritoryEstimate.estimate(j.ownershipBlack, stones, 0.5)
+            val terr = TerritoryEstimate.estimate(
+                j.ownershipBlack, stones, game.size.width, game.size.height, 0.5
+            )
+            val deadJ = TerritoryEstimate.deadStones(
+                j.ownershipBlack, stones, game.size.width, game.size.height
+            )
             var blackDead = 0
             var whiteDead = 0
-            for (i in stones.indices) {
-                val st = stones[i] ?: continue
-                val v = j.ownershipBlack.getOrNull(i) ?: continue
-                if (st == Stone.WHITE && v > 0.5) whiteDead++
-                if (st == Stone.BLACK && v < -0.5) blackDead++
+            for (i in deadJ) {
+                if (stones[i] == Stone.WHITE) whiteDead++
+                if (stones[i] == Stone.BLACK) blackDead++
             }
             Text(text = "形势判断", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Rose)
             Spacer(modifier = Modifier.height(2.dp))
@@ -1497,7 +1509,10 @@ fun GameScreen(
                 val stones = Array(game.size.area) { i ->
                     game.stoneAt(i % game.size.width, i / game.size.width)
                 }
-                val terr = TerritoryEstimate.estimate(currentAnalysis.ownershipBlack, stones, 0.5)
+                val terr = TerritoryEstimate.estimate(
+                    currentAnalysis.ownershipBlack, stones,
+                    game.size.width, game.size.height, 0.5
+                )
                 Text(
                     text = "地盘估算（含死子）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
                     fontSize = 13.sp, color = Color.Gray

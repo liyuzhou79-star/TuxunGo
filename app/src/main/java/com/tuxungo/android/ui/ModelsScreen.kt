@@ -33,8 +33,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tuxungo.android.engine.EngineAssets
+import com.tuxungo.android.engine.KataEngine
 import com.tuxungo.android.engine.ModelInfo
 import com.tuxungo.android.engine.ModelStore
+import com.tuxungo.android.go.BoardSize
+import com.tuxungo.android.go.Stone
 import java.util.concurrent.Executors
 
 @Composable
@@ -48,6 +52,8 @@ fun ModelsScreen(onBack: () -> Unit) {
     var statusText by remember { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<ModelInfo?>(null) }
     var deleteTarget by remember { mutableStateOf<ModelInfo?>(null) }
+    var speedResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var testingId by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<Uri?>(null) }
     var importName by remember { mutableStateOf("") }
     val importExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -84,6 +90,47 @@ fun ModelsScreen(onBack: () -> Unit) {
                         statusText = result.reason
                     }
                 }
+            }
+        }
+    }
+
+    // Speed test, node-test style: spin up a throwaway engine on
+    // this model, warm it up with one move, then time a full
+    // 200-visit move on an empty 19x19 board and report visits/sec.
+    fun runSpeedTest(model: ModelInfo) {
+        if (testingId != null) return
+        testingId = model.id
+        importExecutor.execute {
+            val text = try {
+                val file = ModelStore.resolveFile(context, model.id)
+                val dir = java.io.File(
+                    EngineAssets.engineWorkDir(context), "speedtest"
+                ).apply { mkdirs() }
+                val visits = 200
+                val eng = KataEngine.start(
+                    context.applicationInfo.nativeLibraryDir, dir, file, visits
+                )
+                try {
+                    val size = BoardSize(19, 19)
+                    eng.setBoardSize(size)
+                    eng.setKomi(7.5)
+                    eng.clearBoard()
+                    val first = eng.genmove(Stone.BLACK, size)
+                    if (first != null) eng.play(first, size)
+                    val t0 = System.nanoTime()
+                    eng.genmove(Stone.WHITE, size)
+                    val secs = (System.nanoTime() - t0) / 1e9
+                    val vps = (visits / secs).toInt()
+                    "思考速度约 $vps 访问/秒（19 路空盘 · 200 访问/手）"
+                } finally {
+                    eng.quit()
+                }
+            } catch (e: Exception) {
+                "测速失败：${e.message ?: "引擎没能启动"}"
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                speedResults = speedResults + (model.id to text)
+                testingId = null
             }
         }
     }
@@ -138,6 +185,10 @@ fun ModelsScreen(onBack: () -> Unit) {
                         text = "${model.archText} · ${formatSize(model.sizeBytes)}",
                         fontSize = 13.sp, color = Color.Gray
                     )
+                    speedResults[model.id]?.let { speed ->
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(text = speed, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (model.id != activeId) {
@@ -147,6 +198,10 @@ fun ModelsScreen(onBack: () -> Unit) {
                                 Toast.makeText(context, "已切换为：${model.displayName}", Toast.LENGTH_SHORT).show()
                             }) { Text("使用") }
                         }
+                        OutlinedButton(
+                            onClick = { runSpeedTest(model) },
+                            enabled = testingId == null
+                        ) { Text(if (testingId == model.id) "测速中…" else "测速") }
                         OutlinedButton(onClick = { renameTarget = model }) { Text("改名") }
                         if (!model.isBundled) {
                             OutlinedButton(onClick = { deleteTarget = model }) { Text("删除") }

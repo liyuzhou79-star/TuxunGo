@@ -149,9 +149,20 @@ fun BoardView(
         fun px(x: Int) = originX + (if (flipped) w - 1 - x else x) * cellX
         fun py(y: Int) = originY + (if (flipped) h - 1 - y else y) * cellY
 
-        val faceLeft = originX - cellX * 0.64f
-        val faceTop = originY - cellY * 0.64f
-        val faceSize = Size(px(w - 1) - faceLeft + cellX * 0.64f, py(h - 1) - faceTop + cellY * 0.64f)
+        // The board's outer corners in screen space. When flipped,
+        // px(0) is the RIGHT edge and py(0) the BOTTOM one, so the face
+        // geometry must come from min/max — computing it from px(w-1)
+        // directly collapsed the face to a sliver in flipped view.
+        val gridLeft = minOf(px(0), px(w - 1))
+        val gridRight = maxOf(px(0), px(w - 1))
+        val gridTop = minOf(py(0), py(h - 1))
+        val gridBottom = maxOf(py(0), py(h - 1))
+        val faceLeft = gridLeft - cellX * 0.64f
+        val faceTop = gridTop - cellY * 0.64f
+        val faceSize = Size(
+            gridRight - gridLeft + cellX * 1.28f,
+            gridBottom - gridTop + cellY * 1.28f
+        )
         val corner = CornerRadius(s * 0.014f, s * 0.014f)
         val edgeColor = when (skin) {
             BoardSkin.WOOD_LIGHT -> Color(0xFFB0823F)
@@ -229,8 +240,8 @@ fun BoardView(
         }
         drawRect(
             color = ink,
-            topLeft = Offset(px(0), py(0)),
-            size = Size(px(w - 1) - px(0), py(h - 1) - py(0)),
+            topLeft = Offset(gridLeft, gridTop),
+            size = Size(gridRight - gridLeft, gridBottom - gridTop),
             style = Stroke(width = maxOf(1.8f, s * 0.0032f))
         )
 

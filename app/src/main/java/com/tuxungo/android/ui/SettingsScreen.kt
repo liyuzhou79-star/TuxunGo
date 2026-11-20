@@ -22,7 +22,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.tuxungo.android.UpdateChecker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -309,6 +314,33 @@ fun SettingsScreen(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "版本更新", fontSize = 15.sp)
+        Text(
+            text = "手动检查 GitHub 上有没有新版本；只有点这个按钮时才会联网一次。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        var checkingUpdate by remember { mutableStateOf(false) }
+        var updateText by remember { mutableStateOf("") }
+        val updateScope = rememberCoroutineScope()
+        androidx.compose.material3.OutlinedButton(
+            onClick = {
+                if (checkingUpdate) return@OutlinedButton
+                checkingUpdate = true
+                updateText = "正在检查…"
+                updateScope.launch {
+                    val msg = withContext(Dispatchers.IO) { UpdateChecker.check(context) }
+                    updateText = msg
+                    checkingUpdate = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("检查更新") }
+        if (updateText.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = updateText, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "设置修改后，对正在进行的对局将在下一局生效。",
             fontSize = 12.sp, color = Color.Gray
@@ -320,7 +352,7 @@ fun SettingsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "引擎：KataGo 1.15.3（GTP / 分析协议）· 内置模型：kata1-b10c128（10 层）· 完全离线运行，不联网。",
+            text = "引擎：KataGo 1.15.3（GTP / 分析协议）· 内置模型：kata1-b10c128（10 层）· 对局与分析完全离线；只有手动检查更新时才联网一次。",
             fontSize = 12.sp, color = Color.Gray
         )
     }

@@ -37,7 +37,8 @@ fun SetupScreen(
     onOpenEditor: (Int, Int) -> Unit,
     onOpenGuess: () -> Unit = {},
     onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
-    onOpenTsumego: () -> Unit = {}
+    onOpenTsumego: () -> Unit = {},
+    onOpenStats: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
@@ -412,6 +413,19 @@ fun SetupScreen(
         ) { Text("打开棋谱库") }
         }
         }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "我的数据", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "对局总览、黑白胜负分布、最近对局手数和训练进度，都在本机统计。", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenStats,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("查看我的数据") }
+        }
+        }
         if (recentGames.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -436,7 +450,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.13.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.14.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

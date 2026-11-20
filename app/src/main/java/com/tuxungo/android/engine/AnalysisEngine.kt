@@ -291,12 +291,15 @@ class AnalysisEngine private constructor(
             val (wrB, leadB) = AnalysisMath.toBlackPerspective(rootWr, rootLead, mover)
             var best: Move? = null
             var bestIsPass = false
+            var bestGap = 0.0
             val infos = resp.optJSONArray("moveInfos")
             if (infos != null && infos.length() > 0) {
                 var bestOrder = Int.MAX_VALUE
+                val byOrder = mutableListOf<Pair<Int, Double>>()
                 for (i in 0 until infos.length()) {
                     val info = infos.optJSONObject(i) ?: continue
                     val order = info.optInt("order", Int.MAX_VALUE)
+                    byOrder.add(order to info.optDouble("winrate", 0.5))
                     if (order < bestOrder) {
                         bestOrder = order
                         val vertex = info.optString("move", "pass")
@@ -309,8 +312,16 @@ class AnalysisEngine private constructor(
                         }
                     }
                 }
+                // How much the top choice stood out from the runner-up
+                // (both win rates share the side-to-move perspective,
+                // so the gap is perspective-free). The review uses it
+                // to keep "brilliant" marks meaningful.
+                val sorted = byOrder.sortedBy { it.first }
+                if (sorted.size >= 2) {
+                    bestGap = (sorted[0].second - sorted[1].second).coerceAtLeast(0.0)
+                }
             }
-            byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass)
+            byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass, bestGap)
             onProgress(byTurn.size, total)
         }
         return wantedTurns.map { byTurn[it] ?: TurnStat(it, 0.5, 0.0, null, false) }
