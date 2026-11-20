@@ -35,7 +35,7 @@ data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
 /** Board face designs, selectable in settings. */
 enum class BoardSkin {
-    WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON;
+    WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
 
     companion object {
         fun fromId(id: String): BoardSkin = when (id) {
@@ -43,6 +43,7 @@ enum class BoardSkin {
             "bamboo" -> BAMBOO
             "sakura" -> SAKURA
             "moon" -> MOON
+            "obsidian" -> OBSIDIAN
             else -> WOOD_LIGHT
         }
     }
@@ -105,7 +106,7 @@ fun BoardView(
             }
         }
     }
-    val darkSkin = skin == BoardSkin.WOOD_DARK
+    val darkSkin = skin == BoardSkin.WOOD_DARK || skin == BoardSkin.OBSIDIAN
     val ink = if (darkSkin) GridInkOnDark else GridInk
     val coordInk = if (darkSkin) CoordInkOnDark else CoordInk
     Canvas(
@@ -171,10 +172,12 @@ fun BoardView(
             BoardSkin.BAMBOO -> Color(0xFF9A6B2F)
             BoardSkin.SAKURA -> Color(0xFFD98CA6)
             BoardSkin.MOON -> Color(0xFFB4AB9C)
+            BoardSkin.OBSIDIAN -> Color(0xFF171B21)
         }
         val grainInk = when (skin) {
             BoardSkin.SAKURA -> Color(0xFFC48AA0)
             BoardSkin.MOON -> Color(0xFF8F887B)
+            BoardSkin.OBSIDIAN -> Color(0xFF7C8694)
             else -> Color(0xFF8A5A24)
         }
 
@@ -210,6 +213,7 @@ fun BoardView(
             val (light, deep) = when (skin) {
                 BoardSkin.SAKURA -> Color(0xFFFCE9F1) to Color(0xFFF7CFDE)
                 BoardSkin.MOON -> Color(0xFFF5F2EC) to Color(0xFFE7E1D3)
+                BoardSkin.OBSIDIAN -> Color(0xFF3B434E) to Color(0xFF272C34)
                 else -> Color(0xFFEECC95) to Color(0xFFDDB26E)
             }
             drawRoundRect(

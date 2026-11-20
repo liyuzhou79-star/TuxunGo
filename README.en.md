@@ -26,41 +26,44 @@ vs AI games, or play a friend on the same phone.
 - **Free-form boards**: 5–25 points per side, rectangular boards included; handicap and komi are free numeric inputs
 - **Position editor**: set up any position by hand, then start from it with either color
 - **Fullscreen mode**: board at maximum size with just analysis controls — ideal for spectating AI games
+- **Game clock & move times**: five clock options (5/10/20/30/60 minutes) plus byoyomi, pausable, timeout loses; the status line shows how long the AI thought about each move, so model and strength changes are easy to compare
 - **Endgame scoring**: the engine proposes dead stones (marked with red crosses), tap whole groups to flip them, then confirm the score
 
 ### Analysis & review
 
 - **AI analysis**: candidate moves ranked on the board with the top choice unmistakable; win-rate bar, score lead, territory estimate, principal-variation ghosts; switchable depth (quick / standard / deep)
 - **Position judgment**: one tap for territory, dead stones and a verdict
-- **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically (a brilliant move must clearly outrun the runner-up — no spam); stretches above 75% win rate are shaded green; black/white perspective switch; continue the game from any move; quick / precise / high-precision fill options
+- **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically (a brilliant move must clearly outrun the runner-up — no spam); stretches above 75% win rate are shaded green; black/white perspective switch; at any move the board also draws the top choice's continuation as ghost stones; continue the game from any move; quick / precise / high-precision fill options
 - **Background pre-computation**: while you play, every position's stats are quietly recorded — the post-game review opens (nearly) instantly
 - **Annotated SGF export**: copy a review as SGF with per-move win-rate comments
-- **Position image sharing**: turn the current board in a game or review into a picture and share it in one tap
+- **Position image sharing**: turn the current board — in a game, in review, in a branch, even at the result dialog — into a picture and share it in one tap
 
 ### Training
 
-- **Tsumego training**: eight problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, the classic under-the-stones, and the vital-point kill) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules; the home screen recommends a daily problem from the unsolved ones
-- **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty; outright misses are saved to a **mistake book** you can review position by position until you nail them
+- **Tsumego training**: eight problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, the classic under-the-stones, and the vital-point kill) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; stuck? Watch the **solution demo** (watching never counts as solving — you still have to play it yourself); a picker list jumps straight to any problem; every solution is verified move by move against the rules; the home screen recommends a daily problem from the unsolved ones
+- **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty; the reveal also draws the top choice's continuation on the board; outright misses are saved to a **mistake book** you can review position by position until you nail them
 
 ### Game library
 
 - Folders for your saved games: AI games, human games and custom-setup games alike, searchable by title
 - Finished games are auto-saved to an "Auto-saved" folder, so a game is never lost for forgetting to collect it
 - Tap any record to review it; analysis results are cached; in review you can branch off and try alternative lines, analyse the branch, or save it as a new record
+- Export the whole library as a single SGF file in one tap — handy for backups, a new phone, or sharing with a friend
 
 ### Model library
 
 - Ships with a 10-block KataGo net, ready out of the box
 - Import your own KataGo models (`.txt.gz` / `.bin.gz`, up to 99): integrity check, header parse and a real engine test-load — a broken file never enters the library
 - Every model, including the built-in one, can be given a nickname
-- Every model can be speed-tested (visits per second) right in the library
+- Every model can be speed-tested (visits per second) right in the library; results are kept, so they are still there next visit
 
 ### Experience
 
-- Real recorded stone sounds (synthesized alternatives included), placement vibration, five board skins (including the pale Moon stone), and three theme accents (sakura pink / matcha green / indigo) switchable instantly
+- Real recorded stone sounds (synthesized alternatives included), placement vibration, six board skins (including the pale Moon stone and the dark Obsidian slate), and three theme accents (sakura pink / matcha green / indigo) switchable instantly
 - A "My data" page: game totals, black/white win split, recent game lengths and training progress, all computed on-device
 - Player cards above the board show who plays each side, captures and each side's clock; the side to move is highlighted
 - Games survive backgrounding and process death — pick up right where you left off; if the engine process dies mid-game it restarts and retries the move automatically
+- A three-page first-launch guide (reopenable any time from the home footer); long-pressing the launcher icon offers Quick game, Guess the move and Daily problem shortcuts
 - **Offline by design**: engine and models live on the device; no server, no account. The only network feature is the manual "Check for updates" button in Settings — nothing connects unless you tap it
 
 ## Download
