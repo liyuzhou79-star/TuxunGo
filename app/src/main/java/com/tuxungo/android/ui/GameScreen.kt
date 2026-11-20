@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -1991,6 +1994,14 @@ fun GameScreen(
         }
         Spacer(modifier = Modifier.height(4.dp))
 
+        if (!focusMode && liveStats.size >= 4) {
+            MiniTrend(
+                stats = liveStats.values.sortedBy { it.turn },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
         val currentAnalysis = analysis
         val selected = currentAnalysis?.candidates?.getOrNull(selectedCandidate)
         val displayOwnership = when {
@@ -2504,6 +2515,35 @@ fun GameScreen(
                 fontSize = 13.sp, color = Color.Gray
             )
         }
+        if (bothAi && !focusMode) {
+            val feedLines = remember(liveStats.size, game.moves.size) {
+                buildFeedLines(game.moves, liveStats, game.size)
+            }
+            if (feedLines.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            "解说", fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C)
+                        )
+                        val feedScroll = rememberScrollState()
+                        LaunchedEffect(feedLines.size) {
+                            feedScroll.animateScrollTo(feedScroll.maxValue)
+                        }
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 128.dp)
+                                .verticalScroll(feedScroll)
+                        ) {
+                            feedLines.takeLast(40).forEach { line ->
+                                Text(line, fontSize = 12.5.sp, color = Color(0xFF444444))
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (bothAi) {
@@ -2847,6 +2887,42 @@ fun GameScreen(
                             fontSize = 13.sp, color = Color(0xFF2F7CF6)
                         )
                     }
+                    if (config.mode == GameMode.PVE) {
+                        val aiStone = config.humanStone.other()
+                        val aiCfg =
+                            if (aiStone == Stone.BLACK) sideBlack else sideWhite
+                        if (aiCfg.rank != "max") {
+                            val humanWon = resultText.startsWith(
+                                if (config.humanStone == Stone.BLACK) "黑" else "白"
+                            )
+                            val lastStat = liveStats.maxByOrNull { it.key }?.value
+                            val humanWr = lastStat?.let {
+                                if (config.humanStone == Stone.BLACK) {
+                                    it.winrateBlack
+                                } else {
+                                    1.0 - it.winrateBlack
+                                }
+                            } ?: 0.5
+                            val verdict = when {
+                                humanWon ->
+                                    "能赢下这一档，你的实战水平大致在" +
+                                        "${SideAiStore.rankLabel(aiCfg.rank)}或更高。"
+                                humanWr >= 0.30 ->
+                                    "和${SideAiStore.rankLabel(aiCfg.rank)}下得很接近，" +
+                                        "差距不大，再练练就能过。"
+                                else ->
+                                    "离${SideAiStore.rankLabel(aiCfg.rank)}还差一截，" +
+                                        "可以先降一档陪练。"
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "定级战报：对手 ${SideAiStore.rankLabel(aiCfg.rank)} · " +
+                                    (if (humanWon) "你赢了" else "你输了"),
+                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                            )
+                            Text(verdict, fontSize = 13.sp, color = Color.Gray)
+                        }
+                    }
                     TextButton(onClick = { onRestart() }) { Text("再来一局（相同设置）") }
                     TextButton(
                         onClick = {
@@ -2881,6 +2957,84 @@ fun GameScreen(
             }
         )
     }
+}
+
+/** Small in-game win-rate trend, drawn from the live-recorded stats. */
+@Composable
+private fun MiniTrend(
+    stats: List<com.tuxungo.android.engine.TurnStat>,
+    modifier: Modifier = Modifier
+) {
+    if (stats.size < 2) return
+    val last = stats.last()
+    Column(modifier = modifier) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "走势", fontSize = 12.sp,
+                fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                "黑胜率 ${formatPercent(last.winrateBlack)}",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
+        Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+            val maxTurn = stats.maxOf { it.turn }.coerceAtLeast(1)
+            val midY = size.height / 2f
+            drawLine(
+                Color.Gray.copy(alpha = 0.35f),
+                Offset(0f, midY), Offset(size.width, midY), strokeWidth = 1f
+            )
+            var prev: Offset? = null
+            for (st in stats) {
+                val p = Offset(
+                    size.width * st.turn.toFloat() / maxTurn.toFloat(),
+                    size.height * (1f - st.winrateBlack.toFloat())
+                )
+                prev?.let {
+                    drawLine(Color(0xFFD64F7C), it, p, strokeWidth = 2.5f)
+                }
+                prev = p
+            }
+            prev?.let { drawCircle(Color(0xFFD64F7C), radius = 4f, center = it) }
+        }
+    }
+}
+
+/** One commentary line per recorded turn for AI-vs-AI spectating,
+ * derived entirely from the already-computed live stats. */
+private fun buildFeedLines(
+    moves: List<Move>,
+    stats: Map<Int, com.tuxungo.android.engine.TurnStat>,
+    size: BoardSize
+): List<String> {
+    val lines = ArrayList<String>()
+    var prevWr: Double? = null
+    for (t in stats.keys.sorted()) {
+        val st = stats[t] ?: continue
+        val mv = moves.getOrNull(t - 1)
+        val who = if (mv?.stone == Stone.WHITE) "白" else "黑"
+        val vertex = when {
+            mv == null -> ""
+            mv.isPass -> "停一手"
+            else -> KataEngine.toVertex(mv, size)
+        }
+        val delta = prevWr?.let { st.winrateBlack - it }
+        val tag = when {
+            delta == null -> ""
+            kotlin.math.abs(delta) >= 0.10 -> " · 转折手！"
+            delta >= 0.04 -> " · 黑渐占优"
+            delta <= -0.04 -> " · 白渐占优"
+            else -> ""
+        }
+        lines.add(
+            "第 $t 手 $who$vertex · 黑胜率 " +
+                formatPercent(st.winrateBlack) + tag
+        )
+        prevWr = st.winrateBlack
+    }
+    return lines
 }
 
 private fun formatPercent(v: Double): String = String.format("%.1f%%", v * 100)

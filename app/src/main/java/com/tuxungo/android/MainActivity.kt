@@ -440,12 +440,10 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 形势判断大修：复用后台计算、结果流式出现，强力模型下也不再迟迟不出\n" +
-                "· 智能裁判：在「更多」里开启，局面收官后自动判定胜负\n" +
-                "· AI 可以认输了：要先征得你同意，拒绝后 15 手内不会再提\n" +
-                "· 解说会讲具体棋了：一选逼住哪块棋、哪块棋气紧，都会说明\n" +
-                "· 全新榧木实纹棋盘（默认）；棋盘更铺满，全屏里也能悔棋\n" +
-                "· 打开 App 就预热引擎，第一次分析更快；对局按钮配上了图标",
+            whatsNew = "· 对局里有走势小图了：胜率变化一眼看清，不用等复盘\n" +
+                "· AI 表演赛有解说流了：每手一句话，像看直播一样观战\n" +
+                "· 定级战报：和定级 AI 下完，结果弹窗里会评估你的大致水平\n" +
+                "· 全部数据都复用后台已算好的结果，不重复计算，更快也更省电",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
