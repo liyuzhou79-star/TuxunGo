@@ -374,6 +374,7 @@ fun GameScreen(
         val myToken = aiToken
         aiThinking = true
         engineStatus = "AI 思考中…"
+        var genMs = 0L
         runner.submit({
             eng.clearBoard()
             eng.setBoardSize(game.size)
@@ -389,13 +390,24 @@ fun GameScreen(
                 }
                 else -> for (move in game.moves) eng.play(move, game.size)
             }
-            eng.genmove(game.current, game.size)
+            val t0 = System.nanoTime()
+            val mv = eng.genmove(game.current, game.size)
+            genMs = (System.nanoTime() - t0) / 1_000_000
+            mv
         }) { result ->
             // A cancelled move (undo / pause / takeover change) is dropped.
             if (myToken != aiToken) return@submit
             aiThinking = false
             result.onSuccess { aiMove ->
-                engineStatus = ""
+                engineStatus = if (genMs > 0) {
+                    "AI 用时 " + if (genMs < 1000) {
+                        "$genMs 毫秒"
+                    } else {
+                        String.format("%.1f 秒", genMs / 1000.0)
+                    }
+                } else {
+                    ""
+                }
                 if (!game.finished) {
                     val capsBefore = totalCaptures()
                     val applied = when {

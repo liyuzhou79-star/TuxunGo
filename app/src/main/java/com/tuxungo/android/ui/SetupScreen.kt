@@ -277,9 +277,11 @@ fun SetupScreen(
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = clockMinutes == 0, onClick = { clockMinutes = 0 }, label = { Text("不限时") })
+            FilterChip(selected = clockMinutes == 5, onClick = { clockMinutes = 5 }, label = { Text("5 分钟") })
             FilterChip(selected = clockMinutes == 10, onClick = { clockMinutes = 10 }, label = { Text("10 分钟") })
             FilterChip(selected = clockMinutes == 20, onClick = { clockMinutes = 20 }, label = { Text("20 分钟") })
             FilterChip(selected = clockMinutes == 30, onClick = { clockMinutes = 30 }, label = { Text("30 分钟") })
+            FilterChip(selected = clockMinutes == 60, onClick = { clockMinutes = 60 }, label = { Text("60 分钟") })
         }
         if (clockMinutes > 0) {
             Spacer(modifier = Modifier.height(6.dp))
