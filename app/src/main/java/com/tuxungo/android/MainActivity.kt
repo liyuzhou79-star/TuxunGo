@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 性能优化：棋谱缩略图改成后台生成，列表滑动更顺\n" +
-                "· 复盘看领地会记住看过的位置，再看同一手秒出，不重复算",
+            whatsNew = "· 棋谱库多了「类型」筛选：人机、双人、表演赛分开看\n" +
+                "· 死活题限时挑战结束可以直接「再来一轮」",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

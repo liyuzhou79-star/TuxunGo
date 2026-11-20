@@ -415,10 +415,14 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 )
                 TextButton(
                     onClick = {
-                        challengeMode = false
-                        challengeOver = false
+                        if (challengeOver) {
+                            startChallenge()
+                        } else {
+                            challengeMode = false
+                            challengeOver = false
+                        }
                     }
-                ) { Text("退出挑战") }
+                ) { Text(if (challengeOver) "再来一轮" else "退出挑战") }
             }
             if (!challengeOver) {
                 Box(

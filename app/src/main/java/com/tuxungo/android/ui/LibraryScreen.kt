@@ -224,6 +224,7 @@ fun LibraryScreen(
     var searchText by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf("new") }
     var resultFilter by remember { mutableStateOf("ALL") }
+    var modeFilter by remember { mutableStateOf("ALL") }
     val shown = games.filter { g ->
         val inFolder = when (selected) {
             "ALL" -> true
@@ -243,7 +244,8 @@ fun LibraryScreen(
             "W" -> g.resultText.startsWith("白")
             else -> true
         }
-        inFolder && inSearch && inResult
+        val inMode = modeFilter == "ALL" || g.modeLabel == modeFilter
+        inFolder && inSearch && inResult && inMode
     }.let { list ->
         when (sortMode) {
             "old" -> list.sortedBy { it.createdAt }
@@ -335,6 +337,28 @@ fun LibraryScreen(
                     onClick = { resultFilter = id },
                     label = { Text(label) }
                 )
+            }
+        }
+        val modeLabels = games.map { it.modeLabel }.distinct()
+        if (modeLabels.size > 1) {
+            Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
+                Text("类型", fontSize = 13.sp, color = Color.Gray)
+                FilterChip(
+                    selected = modeFilter == "ALL",
+                    onClick = { modeFilter = "ALL" },
+                    label = { Text("全部") }
+                )
+                for (label in modeLabels) {
+                    FilterChip(
+                        selected = modeFilter == label,
+                        onClick = { modeFilter = label },
+                        label = { Text(label) }
+                    )
+                }
             }
         }
         val selectedFolder = folders.firstOrNull { it.id == selected }
