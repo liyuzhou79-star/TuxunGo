@@ -3123,6 +3123,11 @@ fun GameScreen(
             text = {
                 Column {
                     Text(resultText)
+                    Text(
+                        "共 ${game.moves.size} 手 · 黑提 ${game.capturesByBlack} 子" +
+                            " · 白提 ${game.capturesByWhite} 子",
+                        fontSize = 13.sp, color = Color.Gray
+                    )
                     if (swing != null && swing.second >= 0.05) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(

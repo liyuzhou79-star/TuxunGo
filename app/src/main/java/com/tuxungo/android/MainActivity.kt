@@ -440,7 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 这一版主要是仓库文档维护：英文版 README 已与中文版全面同步（之前漏了限时挑战、复盘领地、定级战绩等好几项）",
+            whatsNew = "· 对局结果弹窗补了一行小字：总手数和双方各自提了多少子\n" +
+                "· 复盘页顶部会显示这盘棋的对局日期了",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

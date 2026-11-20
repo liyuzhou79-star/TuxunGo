@@ -481,7 +481,9 @@ fun ReviewScreen(
         }
         Text(current.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Text(
-            "${current.modeLabel} · ${current.resultText.ifBlank { "无结果记录" }} · 共 $totalMoves 手",
+            "${current.modeLabel} · ${current.resultText.ifBlank { "无结果记录" }} · 共 $totalMoves 手 · " +
+                java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    .format(java.util.Date(current.createdAt)),
             fontSize = 13.sp, color = Color.Gray
         )
         Spacer(modifier = Modifier.height(8.dp))
