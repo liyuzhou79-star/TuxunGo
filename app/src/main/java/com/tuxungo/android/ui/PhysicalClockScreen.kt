@@ -108,6 +108,8 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
     var running by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var winner by remember { mutableStateOf<Stone?>(null) }
+    var flashSide by remember { mutableStateOf<Stone?>(null) }
+    var lastTickSecond by remember { mutableIntStateOf(-1) }
     var showWinnerDialog by remember { mutableStateOf(false) }
     var warnedBlack by remember { mutableStateOf(false) }
     var warnedWhite by remember { mutableStateOf(false) }
@@ -157,8 +159,16 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
             }
         }
         active = stone.other()
+        flashSide = stone
         beep()
         buzz()
+    }
+
+    LaunchedEffect(flashSide) {
+        if (flashSide != null) {
+            delay(200)
+            flashSide = null
+        }
     }
 
     // ---- Tick: same drain rules as the in-app game clock ----
@@ -239,6 +249,30 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
                 }
                 null -> {}
             }
+            // Byoyomi countdown: one tick per second through the
+            // last 10 seconds of the active side's period.
+            val cc = clock
+            if (cc != null && winner == null) {
+                val main = if (active == Stone.BLACK) {
+                    cc.blackMainMs
+                } else {
+                    cc.whiteMainMs
+                }
+                val period = if (active == Stone.BLACK) {
+                    cc.blackPeriodMs
+                } else {
+                    cc.whitePeriodMs
+                }
+                if (main <= 0L && period in 1L..10_500L) {
+                    val sec = (period / 1000L).toInt()
+                    if (sec != lastTickSecond) {
+                        lastTickSecond = sec
+                        beep()
+                    }
+                } else if (period > 10_500L) {
+                    lastTickSecond = -1
+                }
+            }
         }
     }
 
@@ -255,7 +289,7 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onBack) { Text("返回") }
+            TextButton(onClick = onBack) { Text("‹ 返回") }
         }
         Text(
             text = "两个人用真棋盘下棋，手机当棋钟：下完一步，点自己这边的钟。",
@@ -308,6 +342,7 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
                 periodsLeft = c.blackPeriods,
                 periodMs = c.blackPeriodMs,
                 isActive = active == Stone.BLACK && running && !paused && winner == null,
+                flash = flashSide == Stone.BLACK,
                 hint = when {
                     winner != null -> "对局结束"
                     paused -> "已暂停"
@@ -323,6 +358,7 @@ fun PhysicalClockScreen(onBack: () -> Unit) {
                 periodsLeft = c.whitePeriods,
                 periodMs = c.whitePeriodMs,
                 isActive = active == Stone.WHITE && running && !paused && winner == null,
+                flash = flashSide == Stone.WHITE,
                 hint = when {
                     winner != null -> "对局结束"
                     paused -> "已暂停"
@@ -387,6 +423,7 @@ private fun ClockPanel(
     periodMs: Long,
     isActive: Boolean,
     hint: String,
+    flash: Boolean = false,
     onPress: () -> Unit
 ) {
     val bg = if (isBlack) Color(0xFF263238) else Color(0xFFFAFAFA)
@@ -395,10 +432,15 @@ private fun ClockPanel(
         modifier = Modifier.fillMaxWidth(),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = bg),
-        border = BorderStroke(
-            if (isActive) 2.dp else 1.dp,
-            if (isActive) Color(0xFFD64F7C) else Color.LightGray
-        ),
+        border = if (flash) {
+            // Just-pressed flash: a brief bright blue frame.
+            BorderStroke(3.dp, Color(0xFF2F7CF6))
+        } else {
+            BorderStroke(
+                if (isActive) 2.dp else 1.dp,
+                if (isActive) Color(0xFFD64F7C) else Color.LightGray
+            )
+        },
         onClick = onPress
     ) {
         Column(

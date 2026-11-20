@@ -2,6 +2,7 @@ package com.tuxungo.android.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,15 +44,11 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SetupScreen(
     onStart: (GameConfig) -> Unit,
-    onOpenModels: () -> Unit,
-    onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenEditor: (Int, Int) -> Unit,
-    onOpenGuess: () -> Unit = {},
     onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
-    onOpenTsumego: (Int) -> Unit = {},
-    onOpenStats: () -> Unit = {},
-    onOpenPhysicalClock: () -> Unit = {}
+    onOpenTraining: () -> Unit = {},
+    onOpenTools: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
@@ -93,6 +91,7 @@ fun SetupScreen(
     var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
     var seriesTarget by remember { mutableIntStateOf(setupPrefs.getInt("seriesTarget", 0)) }
     var focusMode by remember { mutableStateOf(setupPrefs.getBoolean("focusMode", false)) }
+    var oneColor by remember { mutableStateOf(setupPrefs.getBoolean("oneColor", false)) }
     var byoyomiPeriods by remember {
         mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
     }
@@ -110,7 +109,7 @@ fun SetupScreen(
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
-        clockMinutes, byoyomiPeriods, seriesTarget, focusMode
+        clockMinutes, byoyomiPeriods, seriesTarget, focusMode, oneColor
     ) {
         setupPrefs.edit()
             .putString("mode", mode.name)
@@ -124,6 +123,7 @@ fun SetupScreen(
             .putInt("byoyomiPeriods", byoyomiPeriods)
             .putInt("seriesTarget", seriesTarget)
             .putBoolean("focusMode", focusMode)
+            .putBoolean("oneColor", oneColor)
             .apply()
     }
 
@@ -274,6 +274,21 @@ fun SetupScreen(
             }
             Switch(checked = focusMode, onCheckedChange = { focusMode = it })
         }
+        if (mode != GameMode.EVE) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("一色棋", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "双方棋子都显示黑色，全靠记忆下棋；顶栏点「显色」可以偷看一眼",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            Switch(checked = oneColor, onCheckedChange = { oneColor = it })
+        }
+        }
         if (mode == GameMode.PVE) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "你执子", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -413,6 +428,14 @@ fun SetupScreen(
 
         val needsAi = mode != GameMode.PVP
         val blocked = needsAi && !aiSupported
+        val startInteraction = remember {
+            androidx.compose.foundation.interaction.MutableInteractionSource()
+        }
+        val startPressed by startInteraction.collectIsPressedAsState()
+        val startScale by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (startPressed) 0.98f else 1f,
+            label = "startButtonPress"
+        )
         Button(
             onClick = {
                 if (blocked) {
@@ -428,7 +451,8 @@ fun SetupScreen(
                             clockMinutes = clockMinutes,
                             byoyomiPeriods = byoyomiPeriods,
                             seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0,
-                            focusMode = focusMode
+                            focusMode = focusMode,
+                            oneColor = if (mode != GameMode.EVE) oneColor else false
                         )
                     )
                 }
@@ -441,7 +465,11 @@ fun SetupScreen(
             } else {
                 androidx.compose.material3.ButtonDefaults.buttonColors()
             },
-            modifier = Modifier.fillMaxWidth().height(54.dp)
+            interactionSource = startInteraction,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .graphicsLayer { scaleX = startScale; scaleY = startScale }
         ) {
             Text(text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局", fontSize = 17.sp)
         }
@@ -457,114 +485,19 @@ fun SetupScreen(
             ) { Text("设置") }
         }
         Spacer(modifier = Modifier.height(20.dp))
-        SectionTitle("训练")
-        Spacer(modifier = Modifier.height(10.dp))
-        val guessBestFoot = remember {
-            val p = context.getSharedPreferences(
-                "guess_prefs", android.content.Context.MODE_PRIVATE
-            )
-            val bs = p.getInt("bestScore", 0)
-            val bk = p.getInt("bestStreak", 0)
-            if (bs > 0 || bk > 0) "最佳 $bs 分 · 连对 $bk" else "暂无成绩"
-        }
-        val tsumegoSolvedSet = remember {
-            val s = context.getSharedPreferences(
-                "tsumego_prefs", android.content.Context.MODE_PRIVATE
-            ).getString("solved", "") ?: ""
-            if (s.isBlank()) {
-                emptySet()
-            } else {
-                s.split(",").mapNotNull { it.toIntOrNull() }.toSet()
-            }
-        }
-        val tsumegoSolvedCount = tsumegoSolvedSet.size
-        // Daily problem: rotate through the unsolved ones by day of
-        // year, so the card always recommends a fresh problem.
-        val dailyTsumego = remember {
-            val unsolved = TSUMEGO_PROBLEMS.indices.filter {
-                it !in tsumegoSolvedSet
-            }
-            if (unsolved.isEmpty()) {
-                -1
-            } else {
-                val day = java.util.Calendar.getInstance()
-                    .get(java.util.Calendar.DAY_OF_YEAR)
-                unsolved[day % unsolved.size]
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NavCard(
-                title = "猜一选",
-                desc = "猜 AI 每一步的一选，练棋感和大局观",
-                foot = guessBestFoot,
-                modifier = Modifier.weight(1f),
-                onClick = onOpenGuess
-            )
-            NavCard(
-                title = "死活题",
-                desc = "紧气、双吃、对杀、征子 · 已解 $tsumegoSolvedCount/${TSUMEGO_PROBLEMS.size}",
-                foot = if (dailyTsumego >= 0) {
-                    "今日一题：${TSUMEGO_PROBLEMS[dailyTsumego].title}"
-                } else {
-                    "全部解完，太强了"
-                },
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    onOpenTsumego(if (dailyTsumego >= 0) dailyTsumego else 0)
-                }
-            )
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-        SectionTitle("资料与工具")
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NavCard(
-                title = "棋谱库",
-                desc = "收藏的对局都在这里，点开就能复盘",
-                foot = "打开棋谱库",
-                modifier = Modifier.weight(1f),
-                onClick = onOpenLibrary
-            )
-            NavCard(
-                title = "我的数据",
-                desc = "对局总览、黑白胜负和训练进度",
-                foot = "查看统计",
-                modifier = Modifier.weight(1f),
-                onClick = onOpenStats
-            )
-        }
+        MenuCard(
+            title = "训练",
+            desc = "猜一选 · 死活题，慢慢涨棋",
+            foot = "今日一题和错题本都在这里",
+            onClick = onOpenTraining
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "AI 模型", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "当前模型：$activeModelName", fontSize = 13.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenModels,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
-        }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "实体棋盘棋钟", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "两个人用真棋盘下棋，手机当棋钟：下完一步点自己这边", fontSize = 13.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenPhysicalClock,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("打开棋钟") }
-        }
-        }
+        MenuCard(
+            title = "资料与工具",
+            desc = "棋谱库 · 我的数据 · AI 模型 · 实体棋盘棋钟",
+            foot = "当前模型：$activeModelName",
+            onClick = onOpenTools
+        )
         if (recentGames.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -618,7 +551,7 @@ fun SetupScreen(
         val guideBodies = listOf(
             "内置 KataGo 引擎的免费围棋 App，完全离线、没有账号。选个模式就能开局：人对 AI、AI 对 AI、人对人；棋盘 5–25 路任意宽高，让子、贴目都能自由设。",
             "下棋时点「AI 分析」看候选着点和胜率，「形式判断」看地盘与死活。对局时每一手的胜率会在后台悄悄算好，终局打开复盘基本秒开：恶手、妙手、关键手自动标出，还能从任意一手试下分支。",
-            "主页有猜一选和死活题两种训练：猜错的题会进错题本，死活题每天推荐一道。模型库可以导入更强的 KataGo 模型（.txt.gz / .bin.gz），每个模型还能测速。祝你棋力大涨！"
+            "主页「训练」里有猜一选和死活题：猜错的题会进错题本，死活题每天推荐一道。「资料与工具」里可以导入更强的 KataGo 模型（.txt.gz / .bin.gz），每个模型还能测速。祝你棋力大涨！"
         )
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { closeGuide() },
@@ -664,23 +597,6 @@ fun SetupScreen(
     }
 }
 
-/** Section header with a small accent bar. */
-@Composable
-private fun SectionTitle(text: String) {
-    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(width = 4.dp, height = 17.dp)
-                .background(
-                    MaterialTheme.colorScheme.primary,
-                    RoundedCornerShape(2.dp)
-                )
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
 /** Selectable mode card on the setup screen. */
 @Composable
 private fun ModeOption(
@@ -691,9 +607,16 @@ private fun ModeOption(
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        label = "modeOptionPress"
+    )
     Card(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
         onClick = onClick,
+        interactionSource = interaction,
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
@@ -708,55 +631,40 @@ private fun ModeOption(
             null
         }
     ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (selected) {
-                    colors.onPrimaryContainer
-                } else {
-                    colors.onSurface
+        Box {
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) {
+                        colors.onPrimaryContainer
+                    } else {
+                        colors.onSurface
+                    }
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = desc,
+                    fontSize = 11.sp,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+            if (selected) {
+                // Check badge on the selected card's corner.
+                Box(
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.TopEnd)
+                        .offset(x = 5.dp, y = (-5).dp)
+                        .size(18.dp)
+                        .background(colors.primary, CircleShape),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Text(text = "✓", fontSize = 11.sp, color = colors.onPrimary)
                 }
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = desc,
-                fontSize = 11.sp,
-                color = colors.onSurfaceVariant,
-                maxLines = 2
-            )
+            }
         }
     }
 }
 
-/** Navigation card used in the training / library grids. */
-@Composable
-private fun NavCard(
-    title: String,
-    desc: String,
-    foot: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    Card(
-        modifier = modifier.height(118.dp),
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.surface)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = desc, fontSize = 12.sp, color = Color.Gray, maxLines = 2)
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = foot,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.primary
-            )
-        }
-    }
-}

@@ -122,6 +122,8 @@ fun GameScreen(
     var showAiPanel by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
     var focusMode by remember { mutableStateOf(config.focusMode) }
+    var showTrueColors by remember { mutableStateOf(false) }
+    var lastTickSecond by remember { mutableIntStateOf(-1) }
 
     val isPve = config.mode == GameMode.PVE
     val isEve = config.mode == GameMode.EVE
@@ -924,6 +926,31 @@ fun GameScreen(
                     }
                 }
             }
+            // Byoyomi countdown: one tick per second through the
+            // last 10 seconds of the side-to-move's period.
+            val tickMain = if (game.current == Stone.BLACK) {
+                clockBlackMainMs
+            } else {
+                clockWhiteMainMs
+            }
+            val tickPeriod = if (game.current == Stone.BLACK) {
+                clockBlackPeriodMs
+            } else {
+                clockWhitePeriodMs
+            }
+            if (tickMain <= 0L && tickPeriod in 1L..10_500L) {
+                val sec = (tickPeriod / 1000L).toInt()
+                if (sec != lastTickSecond) {
+                    lastTickSecond = sec
+                    if (settings.soundEnabled && placeSoundIds.isNotEmpty()) {
+                        soundPool.play(
+                            placeSoundIds[0], 0.5f, 0.5f, 1, 0, 1.6f
+                        )
+                    }
+                }
+            } else if (tickPeriod > 10_500L) {
+                lastTickSecond = -1
+            }
         }
     }
 
@@ -1235,6 +1262,8 @@ fun GameScreen(
                 preview = if (scoringMode) null else pendingPoint,
                 markedDead = if (scoringMode) deadSet else emptySet(),
                 judgedDead = judgedDeadSet,
+                showMoveNumbers = settings.showMoveNumbers,
+                oneColor = config.oneColor && !showTrueColors,
                 flipped = boardFlipped
             ) { x, y ->
                 if (scoringMode) {
@@ -1305,7 +1334,14 @@ fun GameScreen(
                             onClick = {},
                             enabled = false,
                             modifier = Modifier.weight(1f)
-                        ) { Text("分析中…") }
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("分析中…")
+                        }
                         analysisFreshFs -> Button(
                             onClick = {
                                 analysis = null
@@ -1329,7 +1365,14 @@ fun GameScreen(
                             onClick = {},
                             enabled = false,
                             modifier = Modifier.weight(1f)
-                        ) { Text("判断中…") }
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("判断中…")
+                        }
                         judgmentFreshFs -> Button(
                             onClick = { judgment = null; judgmentKey = -1 },
                             modifier = Modifier.weight(1f)
@@ -1386,6 +1429,16 @@ fun GameScreen(
                         if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
                 )
             }) { Text("分享") }
+            if (config.oneColor) {
+                TextButton(onClick = { showTrueColors = !showTrueColors }) {
+                    Text(if (showTrueColors) "一色" else "显色")
+                }
+            }
+            if (finished && resultDismissed) {
+                TextButton(onClick = { resultDismissed = false }) {
+                    Text("结果")
+                }
+            }
             TextButton(onClick = { fullscreen = true }) { Text("全屏") }
         }
         // Player cards: who plays each side, captures and that
@@ -1649,6 +1702,8 @@ fun GameScreen(
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
+            showMoveNumbers = settings.showMoveNumbers,
+            oneColor = config.oneColor && !showTrueColors,
             flipped = boardFlipped
         ) { x, y ->
             if (scoringMode) {
@@ -1788,6 +1843,16 @@ fun GameScreen(
                         if (lead >= 0) "黑领先约 ${formatNum(lead)} 目" else "白领先约 ${formatNum(-lead)} 目",
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold
                 )
+                Text(
+                    text = commentaryLine(
+                        wr, lead,
+                        kotlin.math.abs(
+                            (currentAnalysis.candidates.getOrNull(0)?.winrateBlack ?: 0.0) -
+                                (currentAnalysis.candidates.getOrNull(1)?.winrateBlack ?: 0.0)
+                        )
+                    ),
+                    fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                )
                 val topCand = currentAnalysis.candidates.firstOrNull()
                 if (topCand != null) {
                     Text(
@@ -1920,7 +1985,14 @@ fun GameScreen(
                         onClick = {},
                         enabled = false,
                         modifier = Modifier.weight(1f)
-                    ) { Text("分析中…") }
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("分析中…")
+                    }
                     analysisFresh -> Button(
                         onClick = {
                             analysis = null
@@ -1944,7 +2016,14 @@ fun GameScreen(
                         onClick = {},
                         enabled = false,
                         modifier = Modifier.weight(1f)
-                    ) { Text("判断中…") }
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("判断中…")
+                    }
                     judgmentFresh -> Button(
                         onClick = { judgment = null; judgmentKey = -1 },
                         modifier = Modifier.weight(1f)
@@ -2186,6 +2265,24 @@ fun GameScreen(
                             PositionShare.share(context, game, "对局结束 · $resultText")
                         }
                     ) { Text("分享结果图") }
+                    TextButton(
+                        onClick = {
+                            Thread {
+                                val ok = PositionShare.saveToGallery(
+                                    context, game, "对局结束 · $resultText"
+                                )
+                                android.os.Handler(
+                                    android.os.Looper.getMainLooper()
+                                ).post {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        if (ok) "已保存到相册" else "保存失败",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }.start()
+                        }
+                    ) { Text("保存到相册") }
                 }
             },
             confirmButton = {
@@ -2202,6 +2299,30 @@ private fun formatPercent(v: Double): String = String.format("%.1f%%", v * 100)
 
 private fun formatNum(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.1f", v)
+
+/** One plain-language sentence about the position: who is ahead,
+ * by how much, and how much the top move stands out. */
+private fun commentaryLine(wrBlack: Double, leadBlack: Double, gap: Double): String {
+    val pct = (wrBlack * 100).toInt()
+    val side = if (leadBlack >= 0) "黑方" else "白方"
+    val leadAbs = kotlin.math.abs(leadBlack)
+    val base = when {
+        leadAbs >= 30.0 ->
+            "$side 优势很大，胜率约 $pct%，领先约 ${formatNum(leadAbs)} 目，这局基本拿下了"
+        leadAbs >= 12.0 ->
+            "$side 占优，胜率约 $pct%，领先约 ${formatNum(leadAbs)} 目"
+        leadAbs >= 4.0 ->
+            "$side 稍占上风，胜率约 $pct%，领先约 ${formatNum(leadAbs)} 目"
+        else ->
+            "局面很接近，胜率约 $pct%，谁先下出关键一手谁占优"
+    }
+    val tail = when {
+        gap >= 0.05 -> "；一选明显强于其他着法，这手很关键"
+        gap >= 0.02 -> "；一选比较突出，值得优先考虑"
+        else -> "；几个候选着法差距不大"
+    }
+    return base + tail
+}
 
 /** Animated "AI is thinking" indicator: a small spinner plus
  * three dots that light up in turn — less monotonous than a

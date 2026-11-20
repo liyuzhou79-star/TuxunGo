@@ -77,6 +77,10 @@ fun BoardView(
     /** Stones marked dead in scoring mode: drawn faded with a cross. */
     markedDead: Set<Int> = emptySet(),
     judgedDead: Set<Int>? = null,
+    /** Draw each stone's move number on it. */
+    showMoveNumbers: Boolean = false,
+    /** One-colour Go: render every stone black. */
+    oneColor: Boolean = false,
     /** Render the board rotated 180 degrees (White's point of view). */
     flipped: Boolean = false,
     onPointTap: (Int, Int) -> Unit
@@ -353,11 +357,22 @@ fun BoardView(
                 )
             }
         }
+        // Latest move number per point, for the move-number overlay.
+        val moveNumbers: Map<Int, Pair<Int, Stone>> = if (showMoveNumbers) {
+            val m = HashMap<Int, Pair<Int, Stone>>()
+            game.moves.forEachIndexed { i, mv ->
+                if (!mv.isPass) m[game.index(mv.x, mv.y)] = (i + 1) to mv.stone
+            }
+            m
+        } else {
+            emptyMap()
+        }
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val stone = game.stoneAt(x, y) ?: continue
                 val dead = game.index(x, y) in markedDead
-                drawStone(px(x), py(y), stone, if (dead) 0.45f else 1f)
+                val renderStone = if (oneColor) Stone.BLACK else stone
+                drawStone(px(x), py(y), renderStone, if (dead) 0.45f else 1f)
                 if (dead) {
                     // Red cross over scoring-mode dead stones.
                     val cx = px(x)
@@ -417,6 +432,33 @@ fun BoardView(
             )
         }
 
+        // Move numbers on the stones (latest move at each point).
+        if (showMoveNumbers) {
+            for ((idx, numStone) in moveNumbers) {
+                val (num, moveStone) = numStone
+                val x = idx % w
+                val y = idx / w
+                if (game.stoneAt(x, y) != moveStone) continue
+                val renderStone = if (oneColor) Stone.BLACK else moveStone
+                val paint = android.graphics.Paint().apply {
+                    color = if (renderStone == Stone.BLACK) {
+                        android.graphics.Color.WHITE
+                    } else {
+                        android.graphics.Color.rgb(38, 50, 56)
+                    }
+                    textSize = if (num >= 100) r * 0.58f else r * 0.78f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isFakeBoldText = true
+                    isAntiAlias = true
+                }
+                val metrics = paint.fontMetrics
+                val baseline = py(y) - (metrics.ascent + metrics.descent) / 2f
+                drawContext.canvas.nativeCanvas.drawText(
+                    num.toString(), px(x), baseline, paint
+                )
+            }
+        }
+
         // Preview stone for tap-to-confirm placement.
         if (preview != null) {
             val (pvx, pvy) = preview
@@ -457,7 +499,9 @@ fun BoardView(
         // and number.
         for (mark in candidates) {
             val center = Offset(px(mark.x), py(mark.y))
-            val discR = if (mark.rank == 1) r * 0.80f else r * 0.70f
+            // Discs step down in size by rank, so the first choice
+            // stands out at a glance.
+            val discR = r * (0.86f - 0.05f * mark.rank).coerceAtLeast(0.55f)
             drawCircle(
                 Color.Black.copy(alpha = 0.32f),
                 radius = discR,

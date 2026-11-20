@@ -70,11 +70,8 @@ fun StatsScreen(onBack: () -> Unit) {
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onBack) { Text("返回") }
-        }
-        Text(text = "我的数据", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
+        ScreenHeader("我的数据", "对局总览、黑白胜负和训练进度", onBack)
+        Spacer(modifier = Modifier.height(4.dp))
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {

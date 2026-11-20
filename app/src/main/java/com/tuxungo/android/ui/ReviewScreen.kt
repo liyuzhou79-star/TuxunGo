@@ -531,6 +531,27 @@ fun ReviewScreen(
                     modifier = Modifier.weight(1f)
                 ) { Text("分享局面") }
             }
+            Row {
+                TextButton(
+                    onClick = {
+                        Thread {
+                            val ok = PositionShare.saveToGallery(
+                                context, replayGame,
+                                "复盘 · 第 $ply / $totalMoves 手"
+                            )
+                            android.os.Handler(
+                                android.os.Looper.getMainLooper()
+                            ).post {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    if (ok) "已保存到相册" else "保存失败",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }.start()
+                    }
+                ) { Text("保存到相册") }
+            }
             if (marks.isNotEmpty()) {
                 val markPlys = marks.map { it.moveNumber }.distinct().sorted()
                 Spacer(modifier = Modifier.height(6.dp))

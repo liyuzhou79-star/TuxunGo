@@ -32,5 +32,9 @@ data class GameConfig(
      * the live score line and the analysis panel stay hidden.
      * Background pre-computation keeps running, so the post-game
      * review is unaffected. */
-    val focusMode: Boolean = false
+    val focusMode: Boolean = false,
+    /** One-colour Go: both sides' stones render black, so the
+     * game is played from memory. A top-bar toggle peeks at the
+     * true colours. */
+    val oneColor: Boolean = false
 )

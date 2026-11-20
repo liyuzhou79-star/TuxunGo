@@ -346,7 +346,7 @@ fun GuessScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onBack) { Text("返回") }
+            TextButton(onClick = onBack) { Text("‹ 返回") }
         }
         Text(
             text = "AI 自对弈逐手推进，每一手先由你猜 KataGo 的一选：猜中一选 +3 分，猜中二、三选 +1 分。",

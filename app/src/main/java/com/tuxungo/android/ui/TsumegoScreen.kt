@@ -17,7 +17,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -215,6 +219,8 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
     var version by remember { mutableIntStateOf(0) }
     var step by remember { mutableIntStateOf(0) }
     var mistakes by remember { mutableIntStateOf(0) }
+    val shakeX = remember { androidx.compose.animation.core.Animatable(0f) }
+    val shakeScope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var hintPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var replyPending by remember { mutableStateOf(false) }
@@ -304,7 +310,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onBack) { Text("返回") }
+            TextButton(onClick = onBack) { Text("‹ 返回") }
         }
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(
@@ -391,6 +397,11 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         }
         Spacer(modifier = Modifier.height(6.dp))
 
+        Box(
+            modifier = Modifier.offset {
+                androidx.compose.ui.unit.IntOffset(shakeX.value.toInt(), 0)
+            }
+        ) {
         BoardView(
             game = game,
             enabled = !solved && !replyPending && !demoMode,
@@ -436,12 +447,33 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                         missTotal++
                         prefs.edit().putInt("miss_$index", missTotal).apply()
                         statusText = "这步不对，再想想。需要的话点「提示」看关键点。"
+                        // A short board shake as tactile feedback.
+                        shakeScope.launch {
+                            shakeX.snapTo(0f)
+                            shakeX.animateTo(
+                                -9f,
+                                androidx.compose.animation.core.tween(40)
+                            )
+                            shakeX.animateTo(
+                                9f,
+                                androidx.compose.animation.core.tween(70)
+                            )
+                            shakeX.animateTo(
+                                -6f,
+                                androidx.compose.animation.core.tween(60)
+                            )
+                            shakeX.animateTo(
+                                0f,
+                                androidx.compose.animation.core.tween(50)
+                            )
+                        }
                     }
                 } else {
                     pending = Pair(x, y)
                 }
             }
         )
+        }
         Spacer(modifier = Modifier.height(10.dp))
 
         if (solved) {

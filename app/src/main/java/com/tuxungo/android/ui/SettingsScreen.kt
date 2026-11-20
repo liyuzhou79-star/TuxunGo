@@ -87,11 +87,8 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(text = "设置", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onBack) { Text("返回") }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
+        ScreenHeader("设置", "落子、棋盘、音效、更新与备份", onBack)
+        Spacer(modifier = Modifier.height(8.dp))
 
         Text(text = "落子方式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
@@ -122,6 +119,21 @@ fun SettingsScreen(
             Switch(
                 checked = settings.showCoordinates,
                 onCheckedChange = { update(settings.copy(showCoordinates = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "显示手数", fontSize = 15.sp)
+                Text(text = "在棋子上标出第几手落的", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.showMoveNumbers,
+                onCheckedChange = { update(settings.copy(showMoveNumbers = it)) }
             )
         }
         Spacer(modifier = Modifier.height(8.dp))

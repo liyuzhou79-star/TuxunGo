@@ -28,6 +28,10 @@ vs AI games, or play a friend on the same phone.
 - **Fullscreen mode**: board at maximum size with just analysis controls — ideal for spectating AI games
 - **Game clock & move times**: five clock options (5/10/20/30/60 minutes) plus byoyomi, pausable, timeout loses; the status line shows how long the AI thought about each move, so model and strength changes are easy to compare
 - **Focus mode**: one tap hides the win rate, top-move hints and position judgment, leaving just the board — background analysis keeps running, so the post-game review is unaffected
+- **One-colour Go**: both sides' stones render black, so the game is played from memory; peek at the true colours any time from the top bar
+- **Continuous analysis**: a switch in the analysis panel analyzes every new position automatically, with a one-sentence plain-language commentary
+- **Data backup**: export the game library, training progress and settings to a single file, and restore it after a reinstall or on a new phone
+- **Move numbers**: optionally draw each stone's move number on the board (in Settings)
 - **Physical-board clock**: two players on a real board can use the phone as the clock: tap your side after moving, with sound and vibration cues for byoyomi
 - **Endgame scoring**: the engine proposes dead stones (marked with red crosses), tap whole groups to flip them, then confirm the score
 

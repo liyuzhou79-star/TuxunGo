@@ -65,6 +65,7 @@ object GameStore {
             .putInt("clockMinutes", config.clockMinutes)
             .putInt("seriesTarget", config.seriesTarget)
             .putBoolean("focusMode", config.focusMode)
+            .putBoolean("oneColor", config.oneColor)
             .putString("timeoutBy", timeoutBy?.name ?: "")
         if (clock != null) {
             editor
@@ -100,7 +101,8 @@ object GameStore {
             startPlayer = startPlayer,
             clockMinutes = clockMinutes,
             seriesTarget = p.getInt("seriesTarget", 0),
-            focusMode = p.getBoolean("focusMode", false)
+            focusMode = p.getBoolean("focusMode", false),
+            oneColor = p.getBoolean("oneColor", false)
         )
         val clock = if (clockMinutes > 0 && p.contains("clockBlackMain")) {
             ClockSnapshot(

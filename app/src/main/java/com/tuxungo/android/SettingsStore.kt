@@ -18,7 +18,9 @@ data class AppSettings(
     /** Visits for the silent per-move background analysis during games. */
     val autoVisits: Int = 80,
     /** Keep the screen awake while a game is on screen. */
-    val keepScreenOn: Boolean = false
+    val keepScreenOn: Boolean = false,
+    /** Draw move numbers on the stones during a game. */
+    val showMoveNumbers: Boolean = false
 )
 
 object SettingsStore {
@@ -78,7 +80,8 @@ object SettingsStore {
             eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
             accent = p.getString("accent", "sakura") ?: "sakura",
             autoVisits = p.getInt("autoVisits", 80),
-            keepScreenOn = p.getBoolean("keepScreenOn", false)
+            keepScreenOn = p.getBoolean("keepScreenOn", false),
+            showMoveNumbers = p.getBoolean("showMoveNumbers", false)
         )
     }
 
@@ -95,6 +98,7 @@ object SettingsStore {
             .putString("accent", s.accent)
             .putInt("autoVisits", s.autoVisits)
             .putBoolean("keepScreenOn", s.keepScreenOn)
+            .putBoolean("showMoveNumbers", s.showMoveNumbers)
             .apply()
     }
 

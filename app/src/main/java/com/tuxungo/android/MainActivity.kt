@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS, PHYSICAL_CLOCK }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS, PHYSICAL_CLOCK, TRAINING, TOOLS }
 
 @Composable
 fun TuxunGoApp(
@@ -259,15 +259,8 @@ fun TuxunGoApp(
                 restoreTimeoutBy = null
                 screen = Screen.GAME
             },
-            onOpenModels = { screen = Screen.MODELS },
-            onOpenLibrary = { screen = Screen.LIBRARY },
-            onOpenGuess = { screen = Screen.GUESS },
-            onOpenTsumego = { idx ->
-                tsumegoInitial = idx
-                screen = Screen.TSUMEGO
-            },
-            onOpenStats = { screen = Screen.STATS },
-            onOpenPhysicalClock = { screen = Screen.PHYSICAL_CLOCK },
+            onOpenTraining = { screen = Screen.TRAINING },
+            onOpenTools = { screen = Screen.TOOLS },
             onOpenGame = {
                 reviewGame = it
                 reviewInitialPly = null
@@ -282,6 +275,21 @@ fun TuxunGoApp(
         )
         Screen.MODELS -> ModelsScreen(onBack = { screen = Screen.SETUP })
         Screen.PHYSICAL_CLOCK -> PhysicalClockScreen(onBack = { screen = Screen.SETUP })
+        Screen.TRAINING -> com.tuxungo.android.ui.TrainingScreen(
+            onBack = { screen = Screen.SETUP },
+            onOpenGuess = { screen = Screen.GUESS },
+            onOpenTsumego = { idx ->
+                tsumegoInitial = idx
+                screen = Screen.TSUMEGO
+            }
+        )
+        Screen.TOOLS -> com.tuxungo.android.ui.ToolsScreen(
+            onBack = { screen = Screen.SETUP },
+            onOpenLibrary = { screen = Screen.LIBRARY },
+            onOpenStats = { screen = Screen.STATS },
+            onOpenModels = { screen = Screen.MODELS },
+            onOpenPhysicalClock = { screen = Screen.PHYSICAL_CLOCK }
+        )
         Screen.LIBRARY -> LibraryScreen(
             onBack = { screen = Screen.SETUP },
             onOpenGame = {

@@ -74,7 +74,7 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = "摆棋", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onBack) { Text("返回") }
+            TextButton(onClick = onBack) { Text("‹ 返回") }
         }
         Text(
             text = "选好棋子颜色后点棋盘放子；点已有的子可以拿掉。",

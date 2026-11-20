@@ -56,6 +56,47 @@ object PositionShare {
         else -> emptyList()
     }
 
+    /** Saves the rendered position image into the device
+     * gallery (Pictures/TuxunGo). Returns true on success.
+     * Does file IO — call it off the main thread. */
+    fun saveToGallery(context: Context, game: GoGame, caption: String): Boolean {
+        return try {
+            val bmp = render(game, caption)
+            val values = android.content.ContentValues().apply {
+                put(
+                    android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                    "tuxungo_${System.currentTimeMillis()}.png"
+                )
+                put(
+                    android.provider.MediaStore.Images.Media.MIME_TYPE,
+                    "image/png"
+                )
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    put(
+                        android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        "Pictures/TuxunGo"
+                    )
+                    put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val uri = context.contentResolver.insert(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                values
+            ) ?: return false
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                values.clear()
+                values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun render(game: GoGame, caption: String): Bitmap {
         val w = game.size.width
         val h = game.size.height

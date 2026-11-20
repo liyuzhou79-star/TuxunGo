@@ -155,7 +155,7 @@ fun ModelsScreen(onBack: () -> Unit) {
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = "模型库", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onBack) { Text("返回") }
+            TextButton(onClick = onBack) { Text("‹ 返回") }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
