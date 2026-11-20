@@ -441,6 +441,13 @@ fun GuessScreen(onBack: () -> Unit) {
                         },
                         enabled = phase != GuessPhase.THINKING
                     ) { Text("错题本（${mistakes.size} 题待复习）") }
+                    TextButton(
+                        onClick = {
+                            mistakes = emptyList()
+                            saveMistakes()
+                        },
+                        enabled = phase != GuessPhase.THINKING
+                    ) { Text("清空错题本") }
                 }
             }
         }

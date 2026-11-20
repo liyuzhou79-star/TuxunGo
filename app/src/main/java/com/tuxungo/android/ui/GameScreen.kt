@@ -1015,6 +1015,13 @@ fun GameScreen(
                             Text(if (userPaused) "继续" else "暂停")
                         }
                     }
+                    TextButton(onClick = {
+                        PositionShare.share(
+                            context, game,
+                            "对局 · 第 ${game.moves.size} 手 · " +
+                                if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
+                        )
+                    }) { Text("分享") }
                     TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
                 }
             }

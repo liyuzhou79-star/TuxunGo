@@ -489,10 +489,14 @@ fun ReviewScreen(
                 ) { Text("从这手试下（分支探索）") }
                 OutlinedButton(
                     onClick = {
-                        PositionShare.share(
-                            context, replayGame,
+                        val stat = turns?.getOrNull(ply)
+                        val cap = if (stat != null) {
+                            "复盘 · 第 $ply / $totalMoves 手 · 黑胜率 " +
+                                String.format("%.0f%%", stat.winrateBlack * 100)
+                        } else {
                             "复盘 · 第 $ply / $totalMoves 手"
-                        )
+                        }
+                        PositionShare.share(context, replayGame, cap)
                     },
                     modifier = Modifier.weight(1f)
                 ) { Text("分享局面") }

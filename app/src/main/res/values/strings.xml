@@ -5,4 +5,6 @@
     <string name="shortcut_quick_long">19 路人机对局</string>
     <string name="shortcut_guess">猜一选</string>
     <string name="shortcut_guess_long">猜一选训练</string>
+    <string name="shortcut_tsumego">每日一题</string>
+    <string name="shortcut_tsumego_long">死活题每日一题</string>
 </resources>

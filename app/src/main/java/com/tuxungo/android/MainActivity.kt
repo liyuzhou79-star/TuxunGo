@@ -159,6 +159,7 @@ fun TuxunGoApp(
         mutableStateOf(
             when {
                 shortcut == "guess" -> Screen.GUESS
+                shortcut == "tsumego" -> Screen.TSUMEGO
                 restored != null -> Screen.GAME
                 shortcut == "quick" -> Screen.GAME
                 else -> Screen.SETUP
@@ -193,7 +194,32 @@ fun TuxunGoApp(
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
     var reviewInitialPly by remember { mutableStateOf<Int?>(null) }
     var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
-    var tsumegoInitial by remember { mutableIntStateOf(0) }
+    var tsumegoInitial by remember {
+        mutableIntStateOf(
+            if (shortcut == "tsumego") {
+                // Same daily pick as the home card: rotate through
+                // the unsolved problems by day of year.
+                val prefs = context.getSharedPreferences(
+                    "tsumego_prefs", android.content.Context.MODE_PRIVATE
+                )
+                val solved = prefs.getString("solved", "")
+                    ?.split(",")?.mapNotNull { it.toIntOrNull() }?.toSet()
+                    ?: emptySet()
+                val unsolved = com.tuxungo.android.ui.TSUMEGO_PROBLEMS.indices
+                    .filter { it !in solved }
+                if (unsolved.isEmpty()) {
+                    0
+                } else {
+                    unsolved[
+                        java.util.Calendar.getInstance()
+                            .get(java.util.Calendar.DAY_OF_YEAR) % unsolved.size
+                    ]
+                }
+            } else {
+                0
+            }
+        )
+    }
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
         transitionSpec = {

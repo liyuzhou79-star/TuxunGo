@@ -32,4 +32,20 @@
         </intent>
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
+    <shortcut
+        android:shortcutId="tsumego_daily"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_tsumego"
+        android:shortcutLongLabel="@string/shortcut_tsumego_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.tuxungo.android"
+            android:targetClass="com.tuxungo.android.MainActivity">
+            <extra
+                android:name="shortcut"
+                android:value="tsumego" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
 </shortcuts>
