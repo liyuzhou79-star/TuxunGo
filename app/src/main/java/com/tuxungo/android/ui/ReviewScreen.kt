@@ -279,6 +279,17 @@ fun ReviewScreen(
     var territory by remember { mutableStateOf<DoubleArray?>(null) }
     var territoryPly by remember { mutableIntStateOf(-1) }
     var territoryBusy by remember { mutableStateOf(false) }
+    // Per-ply cache for this game: revisiting a position shows
+    // its territory instantly instead of recomputing it.
+    var territoryCache by remember {
+        mutableStateOf<Map<Int, DoubleArray>>(emptyMap())
+    }
+
+    LaunchedEffect(current.id) {
+        territoryCache = emptyMap()
+        territory = null
+        territoryPly = -1
+    }
 
     fun toggleTerritory() {
         if (territoryPly == ply && territory != null) {
@@ -287,6 +298,12 @@ fun ReviewScreen(
             return
         }
         if (territoryBusy || analyzing) return
+        val cached = territoryCache[ply]
+        if (cached != null) {
+            territory = cached
+            territoryPly = ply
+            return
+        }
         territoryBusy = true
         val g = current
         val atPly = ply
@@ -318,6 +335,7 @@ fun ReviewScreen(
                 )
                 territory = res.ownershipBlack
                 territoryPly = atPly
+                territoryCache = territoryCache + (atPly to res.ownershipBlack)
             } catch (e: Exception) {
                 errorText = "领地分析失败：${e.message ?: "未知错误"}"
             } finally {

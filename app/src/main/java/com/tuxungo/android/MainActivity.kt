@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 形势判断可信度低、又在用轻量模型时，会提示强力模型判断更稳（可免费下载）\n" +
-                "· AI 表演赛的解说可以一键分享成文字了",
+            whatsNew = "· 性能优化：棋谱缩略图改成后台生成，列表滑动更顺\n" +
+                "· 复盘看领地会记住看过的位置，再看同一手秒出，不重复算",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
