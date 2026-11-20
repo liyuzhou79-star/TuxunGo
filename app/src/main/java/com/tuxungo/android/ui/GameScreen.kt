@@ -2796,10 +2796,12 @@ fun GameScreen(
                                 setupStones = config.customStones,
                                 startPlayer = config.startPlayer
                             )
-                            val dir = File(context.filesDir, "sgf").apply { mkdirs() }
-                            val file = File(dir, "tuxungo-${System.currentTimeMillis()}.sgf")
-                            file.writeText(sgf)
-                            Toast.makeText(context, "棋谱已保存：${file.name}", Toast.LENGTH_LONG).show()
+                            clipboard.setText(
+                                androidx.compose.ui.text.AnnotatedString(sgf)
+                            )
+                            Toast.makeText(
+                                context, "SGF 已复制到剪贴板", Toast.LENGTH_SHORT
+                            ).show()
                         }
                     )
                     androidx.compose.material3.DropdownMenuItem(

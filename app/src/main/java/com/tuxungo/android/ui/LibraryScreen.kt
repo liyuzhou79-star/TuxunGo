@@ -3,6 +3,7 @@ package com.tuxungo.android.ui
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -103,6 +104,7 @@ fun SaveGameDialog(
 }
 
 /** The game library: folders of saved games, tap one to review it. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
     onBack: () -> Unit,
@@ -426,7 +428,20 @@ fun LibraryScreen(
             )
         }
         for (g in shown) {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            // Long-press enters multi-select with
+                            // this game already picked.
+                            if (!selectionMode) {
+                                selectionMode = true
+                                selectedIds = selectedIds + g.id
+                            }
+                        }
+                    )
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     if (selectionMode) {
                         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {

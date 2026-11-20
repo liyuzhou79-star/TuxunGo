@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 对局页双方卡片会显示 AI 的段位了（比如「轻量模型 · 5 级」），不用打开面板也知道在跟谁下\n" +
-                "· 清理了两个没用上的旧音效文件，安装包小了一点点",
+            whatsNew = "· 棋谱库可以长按一盘棋直接进入多选，还会自动勾上它\n" +
+                "· 对局中「更多 → 导出 SGF」改为复制到剪贴板，粘贴到任何地方都能用",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
