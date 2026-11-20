@@ -7,7 +7,7 @@ data class AppSettings(
     val soundEnabled: Boolean = true,
     val placeSound: String = "real",
     val captureSound: String = "real",
-    val boardSkin: String = "wood_light",
+    val boardSkin: String = "kaya",
     val confirmMove: Boolean = true,
     val showCoordinates: Boolean = true,
     val vibrationEnabled: Boolean = true,
@@ -21,6 +21,8 @@ data class AppSettings(
     val keepScreenOn: Boolean = false,
     /** Draw move numbers on the stones during a game. */
     val showMoveNumbers: Boolean = false,
+    /** Smart referee: auto-score a fully settled game. */
+    val refereeEnabled: Boolean = false,
     // ---- Position judgment (形势判断) tuning ----
     /** Visits for the in-game judgment / scoring analysis. */
     val judgeVisits: Int = 800,
@@ -95,6 +97,7 @@ object SettingsStore {
     }
 
     val BOARD_SKINS = listOf(
+        "kaya" to "榧木实纹（默认）",
         "wood_light" to "榧木纹（浅）",
         "wood_dark" to "胡桃木（深）",
         "bamboo" to "竹黄",
@@ -109,7 +112,7 @@ object SettingsStore {
             soundEnabled = p.getBoolean("soundEnabled", true),
             placeSound = p.getString("placeSound", "real") ?: "real",
             captureSound = p.getString("captureSound", "real") ?: "real",
-            boardSkin = p.getString("boardSkin", "wood_light") ?: "wood_light",
+            boardSkin = p.getString("boardSkin", "kaya") ?: "kaya",
             confirmMove = p.getBoolean("confirmMove", true),
             showCoordinates = p.getBoolean("showCoordinates", true),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
@@ -118,6 +121,7 @@ object SettingsStore {
             autoVisits = p.getInt("autoVisits", 80),
             keepScreenOn = p.getBoolean("keepScreenOn", false),
             showMoveNumbers = p.getBoolean("showMoveNumbers", false),
+            refereeEnabled = p.getBoolean("refereeEnabled", false),
             judgeVisits = p.getInt("judgeVisits", 800),
             territorySpread = p.getFloat("territorySpread", 0.30f),
             territoryIntensity = p.getFloat("territoryIntensity", 1.0f),
@@ -142,6 +146,7 @@ object SettingsStore {
             .putInt("autoVisits", s.autoVisits)
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("showMoveNumbers", s.showMoveNumbers)
+            .putBoolean("refereeEnabled", s.refereeEnabled)
             .putInt("judgeVisits", s.judgeVisits)
             .putFloat("territorySpread", s.territorySpread)
             .putFloat("territoryIntensity", s.territoryIntensity)

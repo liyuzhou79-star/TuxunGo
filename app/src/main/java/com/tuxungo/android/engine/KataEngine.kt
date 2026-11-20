@@ -185,10 +185,17 @@ class KataEngine private constructor(
         command("play $color ${toVertex(move, size)}")
     }
 
+    /** Whether the last [genmove] answer was "resign" (vs "pass"):
+     *  both return null, but a resign is an AI resign proposal the
+     *  UI must ask the user about, not a pass. */
+    var lastGenmoveResigned: Boolean = false
+        private set
+
     /** Asks the engine to generate a move for [stone]. Returns null on pass/resign. */
     fun genmove(stone: Stone, size: BoardSize): Move? {
         val color = if (stone == Stone.BLACK) "black" else "white"
         val vertex = command("genmove $color").trim().lowercase()
+        lastGenmoveResigned = vertex == "resign"
         if (vertex == "pass" || vertex == "resign") return null
         return fromVertex(vertex, stone, size)
     }

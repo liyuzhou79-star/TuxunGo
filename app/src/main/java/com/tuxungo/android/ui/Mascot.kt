@@ -113,7 +113,7 @@ fun Mascot(modifier: Modifier = Modifier) {
  *  menus read as graphics, not just text in boxes. */
 enum class AppIconKind {
     TRAINING, LIBRARY, MODELS, STATS, CLOCK, SETTINGS, EDIT, GUIDE, TARGET, CHIP,
-    APPEARANCE, SOUND, JUDGE
+    APPEARANCE, SOUND, JUDGE, UNDO, PASS, FLAG, CHART, SHARE, EXPAND
 }
 
 @Composable
@@ -277,6 +277,69 @@ fun AppIcon(
                 drawLine(tint, Offset(s * 0.36f, s * 0.36f), Offset(s * 0.64f, s * 0.36f), sw)
                 drawLine(tint, Offset(s * 0.36f, s * 0.52f), Offset(s * 0.64f, s * 0.52f), sw)
                 drawLine(tint, Offset(s * 0.36f, s * 0.68f), Offset(s * 0.56f, s * 0.68f), sw)
+            }
+            AppIconKind.UNDO -> {
+                // A curved arrow sweeping back to the left.
+                drawArc(
+                    tint, startAngle = -30f, sweepAngle = 250f, useCenter = false,
+                    topLeft = Offset(s * 0.18f, s * 0.18f),
+                    size = Size(s * 0.64f, s * 0.64f), style = Stroke(sw)
+                )
+                drawLine(tint, Offset(s * 0.16f, s * 0.42f), Offset(s * 0.16f, s * 0.16f), sw)
+                drawLine(tint, Offset(s * 0.16f, s * 0.16f), Offset(s * 0.42f, s * 0.16f), sw)
+            }
+            AppIconKind.PASS -> {
+                // A stone with a skip bar: "not this turn".
+                drawCircle(tint, radius = s * 0.40f, center = c, style = Stroke(sw))
+                drawLine(tint, Offset(s * 0.26f, s * 0.74f), Offset(s * 0.74f, s * 0.26f), sw)
+            }
+            AppIconKind.FLAG -> {
+                drawLine(tint, Offset(s * 0.30f, s * 0.12f), Offset(s * 0.30f, s * 0.88f), sw)
+                val flagPath = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(s * 0.30f, s * 0.14f)
+                    lineTo(s * 0.82f, s * 0.30f)
+                    lineTo(s * 0.30f, s * 0.48f)
+                    close()
+                }
+                drawPath(flagPath, tint)
+            }
+            AppIconKind.CHART -> {
+                // A rising trend line over two axis ticks.
+                drawLine(tint, Offset(s * 0.14f, s * 0.86f), Offset(s * 0.88f, s * 0.86f), sw)
+                drawLine(tint, Offset(s * 0.16f, s * 0.68f), Offset(s * 0.42f, s * 0.46f), sw * 1.2f)
+                drawLine(tint, Offset(s * 0.42f, s * 0.46f), Offset(s * 0.58f, s * 0.58f), sw * 1.2f)
+                drawLine(tint, Offset(s * 0.58f, s * 0.58f), Offset(s * 0.84f, s * 0.24f), sw * 1.2f)
+                drawCircle(tint, radius = s * 0.05f, center = Offset(s * 0.84f, s * 0.24f))
+            }
+            AppIconKind.SHARE -> {
+                val a = Offset(s * 0.24f, s * 0.50f)
+                val b = Offset(s * 0.76f, s * 0.22f)
+                val d = Offset(s * 0.76f, s * 0.78f)
+                drawLine(tint, a, b, sw * 0.8f)
+                drawLine(tint, a, d, sw * 0.8f)
+                drawCircle(tint, radius = s * 0.11f, center = a, style = Stroke(sw))
+                drawCircle(tint, radius = s * 0.11f, center = b, style = Stroke(sw))
+                drawCircle(tint, radius = s * 0.11f, center = d, style = Stroke(sw))
+            }
+            AppIconKind.EXPAND -> {
+                // Four corner brackets opening outward.
+                for ((cx, cy, dx, dy) in listOf(
+                    listOf(0.14f, 0.14f, 1f, 1f),
+                    listOf(0.86f, 0.14f, -1f, 1f),
+                    listOf(0.14f, 0.86f, 1f, -1f),
+                    listOf(0.86f, 0.86f, -1f, -1f)
+                )) {
+                    drawLine(
+                        tint,
+                        Offset(s * cx, s * cy),
+                        Offset(s * (cx + 0.18f * dx), s * cy), sw
+                    )
+                    drawLine(
+                        tint,
+                        Offset(s * cx, s * cy),
+                        Offset(s * cx, s * (cy + 0.18f * dy)), sw
+                    )
+                }
             }
         }
     }

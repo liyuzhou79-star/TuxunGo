@@ -43,7 +43,7 @@ data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
 /** Board face designs, selectable in settings. */
 enum class BoardSkin {
-    WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
+    KAYA, WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
 
     companion object {
         fun fromId(id: String): BoardSkin = when (id) {
@@ -52,7 +52,8 @@ enum class BoardSkin {
             "sakura" -> SAKURA
             "moon" -> MOON
             "obsidian" -> OBSIDIAN
-            else -> WOOD_LIGHT
+            "wood_light" -> WOOD_LIGHT
+            else -> KAYA
         }
     }
 }
@@ -114,6 +115,7 @@ fun BoardView(
     }
     val texture: ImageBitmap? = remember(skin) {
         val asset = when (skin) {
+            BoardSkin.KAYA -> "board/kaya_real.jpg"
             BoardSkin.WOOD_LIGHT -> "board/wood_light.jpg"
             BoardSkin.WOOD_DARK -> "board/wood_dark.jpg"
             else -> null
@@ -208,6 +210,7 @@ fun BoardView(
         )
         val corner = CornerRadius(s * 0.014f, s * 0.014f)
         val edgeColor = when (skin) {
+            BoardSkin.KAYA -> Color(0xFF9C7434)
             BoardSkin.WOOD_LIGHT -> Color(0xFFB0823F)
             BoardSkin.WOOD_DARK -> Color(0xFF2E1B0E)
             BoardSkin.BAMBOO -> Color(0xFF9A6B2F)

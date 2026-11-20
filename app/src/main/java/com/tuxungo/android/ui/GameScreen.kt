@@ -205,6 +205,16 @@ fun GameScreen(
     var analysisExpanded by remember { mutableStateOf(false) }
     var judgmentKey by remember { mutableIntStateOf(-1) }
     var judging by remember { mutableStateOf(false) }
+    // ---- AI resign proposals + the smart referee ----
+    var resignProposal by remember { mutableStateOf<Stone?>(null) }
+    var resignRefusedAtBlack by remember { mutableIntStateOf(-100) }
+    var resignRefusedAtWhite by remember { mutableIntStateOf(-100) }
+    var refereeEnabled by remember { mutableStateOf(settings.refereeEnabled) }
+    var settledStreak by remember { mutableIntStateOf(0) }
+    var refereeNotice by remember {
+        mutableStateOf<Pair<String, Set<Int>>?>(null)
+    }
+    var refereeSnoozeUntil by remember { mutableIntStateOf(-1) }
     // Incremented to cancel an in-flight analysis: its late result is
     // discarded and the UI is freed immediately.
     var analysisToken by remember { mutableIntStateOf(0) }
@@ -408,6 +418,42 @@ fun GameScreen(
         val moveStone = game.current
         val eng = engineFor(moveStone) ?: return
         if (game.finished || aiThinking) return
+        if (resignProposal != null) return
+        // AI resign proposal: at full strength, when the freshest
+        // judgment already calls this side hopeless (win rate at
+        // most 2% and 12+ points behind, 40+ moves in), the AI asks
+        // the user before resigning — it never just quits. After a
+        // refusal it must wait at least 15 moves to ask again.
+        run {
+            val refusedAt = if (moveStone == Stone.BLACK) {
+                resignRefusedAtBlack
+            } else {
+                resignRefusedAtWhite
+            }
+            if (sideCfg(moveStone).rank == "max" &&
+                game.moves.size >= 40 &&
+                game.moves.size - refusedAt >= 15
+            ) {
+                val res = when {
+                    autoKey == game.moves.size -> autoResult
+                    analysisKey == game.moves.size -> analysis
+                    else -> null
+                }
+                val wrSide = res?.let {
+                    if (moveStone == Stone.BLACK) {
+                        it.rootWinrateBlack
+                    } else {
+                        1.0 - it.rootWinrateBlack
+                    }
+                }
+                if (res != null && wrSide != null && wrSide <= 0.02 &&
+                    kotlin.math.abs(res.rootScoreLeadBlack) >= 12.0
+                ) {
+                    resignProposal = moveStone
+                    return
+                }
+            }
+        }
         val myToken = aiToken
         aiThinking = true
         engineStatus = "AI 思考中…"
@@ -447,7 +493,22 @@ fun GameScreen(
                 }
                 if (!game.finished) {
                     val capsBefore = totalCaptures()
+                    val refusedAt = if (moveStone == Stone.BLACK) {
+                        resignRefusedAtBlack
+                    } else {
+                        resignRefusedAtWhite
+                    }
                     val applied = when {
+                        // The engine itself answered "resign": turn
+                        // it into a proposal the user consents to
+                        // (same 15-move refusal cooldown), never an
+                        // instant loss.
+                        aiMove == null && eng.lastGenmoveResigned &&
+                            sideCfg(moveStone).rank == "max" &&
+                            game.moves.size - refusedAt >= 15 -> {
+                            resignProposal = moveStone
+                            false
+                        }
                         aiMove == null -> game.pass()
                         else -> game.play(aiMove.x, aiMove.y) || game.pass()
                     }
@@ -709,16 +770,29 @@ fun GameScreen(
             judgmentKey = game.moves.size
             return
         }
+        // The background auto-analysis judges every position as the
+        // game goes; when its result is for this exact position,
+        // judgment is instant too. (Judgment used to ignore it and
+        // always pay a full high-visit engine pass — with the strong
+        // model that pass could run past the timeout and the panel
+        // simply never appeared.)
+        if (autoResult != null && autoKey == game.moves.size) {
+            judgment = autoResult
+            judgmentKey = game.moves.size
+            return
+        }
         if (analyzing) return
-        // Judgment runs its own engine pass (800 visits for a
-        // sharper ownership map) and never touches the manual
-        // analysis state — opening judgment used to light up the
-        // "close analysis" button next to it, which confused users.
+        // Judgment runs its own engine pass and never touches the
+        // manual analysis state — opening judgment used to light up
+        // the "close analysis" button next to it, which confused
+        // users. Provisional results stream into the panel as they
+        // firm up, so even a slow full pass shows territory early.
         judging = true
         val token = analysisToken
         val movesSnapshot = game.moves.toList()
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         analysisRunner.submit({
             var eng = analysisEngine
             if (eng == null || !eng.isAlive) {
@@ -738,7 +812,15 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = settings.judgeVisits
+                maxVisits = settings.judgeVisits,
+                onProvisional = { prov ->
+                    mainHandler.post {
+                        if (token == analysisToken && game.moves.size == moveCount) {
+                            judgment = prov
+                            judgmentKey = moveCount
+                        }
+                    }
+                }
             )
         }) { result ->
             judging = false
@@ -749,6 +831,77 @@ fun GameScreen(
                     judgmentKey = moveCount
                 }
             }
+        }
+    }
+
+    /** Applies the referee's verdict: score with its dead stones. */
+    fun finishReferee() {
+        val notice = refereeNotice ?: return
+        refereeNotice = null
+        game.finishScoringWith(notice.second)
+        version++
+        resultDismissed = false
+    }
+
+    // Smart referee: while enabled, every fresh background result
+    // is checked for a fully settled game — nearly every empty
+    // point's ownership is decided AND the engine's own top choice
+    // is to pass. Two settled checks in a row raise the verdict;
+    // the dialog then counts down 3 seconds before it is applied,
+    // and the user can wave it off (snoozed for 6 moves).
+    LaunchedEffect(autoKey, version, refereeEnabled) {
+        if (!refereeEnabled || game.finished || scoringMode ||
+            resignProposal != null || game.moves.size < 20 ||
+            game.moves.size < refereeSnoozeUntil
+        ) {
+            settledStreak = 0
+            return@LaunchedEffect
+        }
+        val res = autoResult
+        if (res == null || autoKey != game.moves.size) {
+            settledStreak = 0
+            return@LaunchedEffect
+        }
+        val own = res.ownershipBlack
+        if (own.size != game.size.area) {
+            settledStreak = 0
+            return@LaunchedEffect
+        }
+        var emptyCount = 0
+        var settledCount = 0
+        for (i in own.indices) {
+            val x = i % game.size.width
+            val y = i / game.size.width
+            if (game.stoneAt(x, y) == null) {
+                emptyCount++
+                if (kotlin.math.abs(own[i]) >= 0.8) settledCount++
+            }
+        }
+        val settledShare = if (emptyCount == 0) {
+            1.0
+        } else {
+            settledCount.toDouble() / emptyCount
+        }
+        val topIsPass = res.candidates.firstOrNull()?.let {
+            it.move == null
+        } == true
+        settledStreak = if (settledShare >= 0.97 && topIsPass) {
+            settledStreak + 1
+        } else {
+            0
+        }
+        if (settledStreak >= 2 && refereeNotice == null) {
+            val stonesNow = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            val dead = TerritoryEstimate.deadStones(
+                own, stonesNow, game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
+            )
+            val s = game.scoreWithDead(dead)
+            val winner = if (s.lead > 0) "黑" else "白"
+            refereeNotice =
+                "${winner}方胜 ${formatNum(kotlin.math.abs(s.lead))} 目" to dead
         }
     }
 
@@ -776,12 +929,38 @@ fun GameScreen(
     fun enterScoring() {
         if (scoringBusy || game.finished) return
         cancelAi()
+        // Instant path: a fresh judgment / analysis / background
+        // result for this exact position already carries the
+        // ownership map scoring needs — reuse it instead of paying
+        // another full engine pass at the end of the game.
+        val freshRes = when {
+            judgment != null && judgmentKey == game.moves.size -> judgment
+            analysis != null && analysisKey == game.moves.size -> analysis
+            autoResult != null && autoKey == game.moves.size -> autoResult
+            else -> null
+        }
+        if (freshRes != null) {
+            val stonesNow = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            deadSet = TerritoryEstimate.deadStones(
+                freshRes.ownershipBlack, stonesNow,
+                game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
+            ).toMutableSet()
+            judgment = freshRes
+            judgmentKey = game.moves.size
+            scoringMode = true
+            scoringNote = "引擎已标出死子（红叉）。点某个棋块可以整块改判，确认无误后点「确认数目」。"
+            return
+        }
         scoringBusy = true
         scoringNote = "引擎判定死子中…"
         val token = analysisToken
         val movesSnapshot = game.moves.toList()
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         analysisRunner.submit({
             var eng = analysisEngine
             if (eng == null || !eng.isAlive) {
@@ -801,7 +980,17 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = settings.judgeVisits
+                // Scoring needs the ownership map to converge, not
+                // full playing depth — cap it so the wait stays short.
+                maxVisits = minOf(settings.judgeVisits, 500),
+                onProvisional = { prov ->
+                    mainHandler.post {
+                        if (token == analysisToken && game.moves.size == moveCount) {
+                            judgment = prov
+                            judgmentKey = moveCount
+                        }
+                    }
+                }
             )
         }) { result ->
             scoringBusy = false
@@ -845,13 +1034,21 @@ fun GameScreen(
         if (config.mode != GameMode.PVP) {
             analysisRunner.submit({
                 if (analysisEngine == null) {
-                    val model = ModelStore.resolveActiveFile(context)
-                    analysisEngine = AnalysisEngine.start(
-                        nativeLibDir = context.applicationInfo.nativeLibraryDir,
-                        workDir = EngineAssets.engineWorkDir(context),
-                        modelFile = model,
-                        humanModelFile = ModelStore.humanModelFile(context)
-                    )
+                    // Adopt the engine MainActivity pre-warmed at
+                    // launch when it is still around and healthy.
+                    val warmed =
+                        com.tuxungo.android.engine.AnalysisEngineHolder.take()
+                    if (warmed != null && warmed.isAlive) {
+                        analysisEngine = warmed
+                    } else {
+                        val model = ModelStore.resolveActiveFile(context)
+                        analysisEngine = AnalysisEngine.start(
+                            nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                            workDir = EngineAssets.engineWorkDir(context),
+                            modelFile = model,
+                            humanModelFile = ModelStore.humanModelFile(context)
+                        )
+                    }
                 }
             }) { }
         }
@@ -869,9 +1066,11 @@ fun GameScreen(
     // Drives AI turns for PVE, AI-vs-AI and mid-game takeovers alike.
     LaunchedEffect(
         version, engineBlack, engineWhite, eveRunning,
-        takeoverBlack, takeoverWhite, failedBlack, failedWhite
+        takeoverBlack, takeoverWhite, failedBlack, failedWhite,
+        resignProposal
     ) {
         if (game.finished) return@LaunchedEffect
+        if (resignProposal != null) return@LaunchedEffect
         if (!aiControls(game.current) || aiThinking) return@LaunchedEffect
         if (failedFor(game.current)) return@LaunchedEffect
         if (engineFor(game.current) == null) {
@@ -1252,7 +1451,7 @@ fun GameScreen(
     if (fullscreen) {
         // Fullscreen spectating / playing: board as large as possible,
         // no coordinates, only analysis + judgment + exit stay.
-        Column(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(2.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -1406,7 +1605,14 @@ fun GameScreen(
                             onClick = { runAnalysis(false) },
                             enabled = analysisAllowed && !finished,
                             modifier = Modifier.weight(1f)
-                        ) { Text("AI 分析") }
+                        ) {
+                            AppIcon(
+                                AppIconKind.CHART, Modifier.size(16.dp),
+                                tint = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text("AI 分析")
+                        }
                     }
                     val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
                     when {
@@ -1430,13 +1636,63 @@ fun GameScreen(
                             onClick = { runJudgment() },
                             enabled = analysisAllowed && !finished,
                             modifier = Modifier.weight(1f)
-                        ) { Text("形式判断") }
+                        ) {
+                            AppIcon(
+                                AppIconKind.JUDGE, Modifier.size(16.dp),
+                                tint = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text("形式判断")
+                        }
                     }
                 }
                 OutlinedButton(
                     onClick = { fullscreen = false },
                     modifier = Modifier.weight(1f)
                 ) { Text("退出全屏") }
+            }
+            if (!scoringMode) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            if (game.pass()) {
+                                version++
+                                resultDismissed = false
+                                pendingPoint = null
+                                clearAnalysis()
+                            }
+                        },
+                        enabled = !finished && humanTurn,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        AppIcon(AppIconKind.PASS, Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("停一手")
+                    }
+                    OutlinedButton(
+                        onClick = { doUndo() },
+                        enabled = game.moves.isNotEmpty() &&
+                            (!bothAi || !eveRunning),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        AppIcon(AppIconKind.UNDO, Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("悔棋")
+                    }
+                    OutlinedButton(
+                        onClick = { showResignConfirm = true },
+                        enabled = !finished && anyHumanSide,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        AppIcon(AppIconKind.FLAG, Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("认输")
+                    }
+                }
             }
             if (analyzing || judging) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1449,7 +1705,7 @@ fun GameScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 12.dp)
+            .padding(horizontal = 2.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2002,6 +2258,15 @@ fun GameScreen(
                         text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
                         fontSize = 13.sp, color = Color.Gray
                     )
+                    val tactical = remember(currentAnalysis, game.moves.size) {
+                        tacticalLine(game, topCand)
+                    }
+                    if (tactical != null) {
+                        Text(
+                            text = tactical,
+                            fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                        )
+                    }
                 }
                 if (currentAnalysis.humanTopVertex.isNotEmpty()) {
                     val hv = currentAnalysis.humanTopVertex
@@ -2120,17 +2385,29 @@ fun GameScreen(
                 },
                 enabled = !finished && humanTurn,
                 modifier = Modifier.weight(1f)
-            ) { Text("停一手") }
+            ) {
+                AppIcon(AppIconKind.PASS, Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("停一手")
+            }
             OutlinedButton(
                 onClick = { doUndo() },
                 enabled = game.moves.isNotEmpty() && (!bothAi || !eveRunning),
                 modifier = Modifier.weight(1f)
-            ) { Text("悔棋") }
+            ) {
+                AppIcon(AppIconKind.UNDO, Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("悔棋")
+            }
             OutlinedButton(
                 onClick = { showResignConfirm = true },
                 enabled = !finished && anyHumanSide,
                 modifier = Modifier.weight(1f)
-            ) { Text("认输") }
+            ) {
+                AppIcon(AppIconKind.FLAG, Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("认输")
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2164,7 +2441,11 @@ fun GameScreen(
                         onClick = { runAnalysis(deep = false) },
                         enabled = analysisAllowed && !finished,
                         modifier = Modifier.weight(1f)
-                    ) { Text("AI 分析") }
+                    ) {
+                        AppIcon(AppIconKind.CHART, Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("AI 分析")
+                    }
                 }
                 val judgmentFresh = judgment != null && judgmentKey == game.moves.size
                 when {
@@ -2188,14 +2469,22 @@ fun GameScreen(
                         onClick = { runJudgment() },
                         enabled = !analyzing && !aiThinking && !finished,
                         modifier = Modifier.weight(1f)
-                    ) { Text("形式判断") }
+                    ) {
+                        AppIcon(AppIconKind.JUDGE, Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("形式判断")
+                    }
                 }
             }
             OutlinedButton(
                 onClick = { enterScoring() },
                 enabled = !finished && !scoringBusy && !aiThinking && (!bothAi || !eveRunning),
                 modifier = Modifier.weight(1f)
-            ) { Text(if (scoringBusy) "判定中…" else "终局数目") }
+            ) {
+                AppIcon(AppIconKind.STATS, Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(if (scoringBusy) "判定中…" else "终局数目")
+            }
         }
         if (analyzing || judging) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -2262,6 +2551,25 @@ fun GameScreen(
                             pendingPoint = null
                         }
                     )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (refereeEnabled) {
+                                    "智能裁判：已开（点关）"
+                                } else {
+                                    "智能裁判：已关（点开）"
+                                }
+                            )
+                        },
+                        onClick = {
+                            showMoreMenu = false
+                            refereeEnabled = !refereeEnabled
+                            SettingsStore.save(
+                                context,
+                                settings.copy(refereeEnabled = refereeEnabled)
+                            )
+                        }
+                    )
                 }
             }
         }
@@ -2307,10 +2615,109 @@ fun GameScreen(
                         text = "黑白双方可以用不同模型对打。换模型会重启该方引擎（几秒），改强度立即生效。设置会自动保存。",
                         fontSize = 12.sp, color = Color.Gray
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "智能裁判", fontSize = 14.sp)
+                            Text(
+                                text = "局面完全收官时，裁判自动判定胜负：先展示结果，3 秒后判终",
+                                fontSize = 12.sp, color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = refereeEnabled,
+                            onCheckedChange = {
+                                refereeEnabled = it
+                                SettingsStore.save(
+                                    context,
+                                    settings.copy(refereeEnabled = it)
+                                )
+                            }
+                        )
+                    }
+                    Text(
+                        text = "AI 在绝境时会提出认输，需要你同意；拒绝后至少 15 手它才能再提。",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showAiPanel = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    if (resignProposal != null) {
+        val stone = resignProposal!!
+        val refuseResign = {
+            if (stone == Stone.BLACK) {
+                resignRefusedAtBlack = game.moves.size
+            } else {
+                resignRefusedAtWhite = game.moves.size
+            }
+            resignProposal = null
+        }
+        AlertDialog(
+            onDismissRequest = refuseResign,
+            title = { Text("AI 想认输") },
+            text = {
+                Text(
+                    "${if (stone == Stone.BLACK) "黑方" else "白方"} AI 判断自己已经没有胜算，想认输。" +
+                        "同意后对局立即结束、判你胜；拒绝后它会继续下，至少 15 手后才能再提认输。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        resignProposal = null
+                        game.resign(stone)
+                        version++
+                        resultDismissed = false
+                    }
+                ) { Text("同意认输") }
+            },
+            dismissButton = {
+                TextButton(onClick = refuseResign) { Text("继续对局") }
+            }
+        )
+    }
+
+    if (refereeNotice != null) {
+        var countdown by remember(refereeNotice) { mutableIntStateOf(3) }
+        LaunchedEffect(refereeNotice) {
+            countdown = 3
+            while (countdown > 0) {
+                delay(1000)
+                countdown--
+            }
+            finishReferee()
+        }
+        AlertDialog(
+            onDismissRequest = {
+                refereeNotice = null
+                refereeSnoozeUntil = game.moves.size + 6
+                settledStreak = 0
+            },
+            title = { Text("智能裁判") },
+            text = {
+                Text(
+                    "局面已经完全收官，裁判判定：\n${refereeNotice!!.first}\n\n" +
+                        "$countdown 秒后自动判终。想继续下可以关掉这次判定，裁判过一阵才会再提醒。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { finishReferee() }) { Text("立即判定") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        refereeNotice = null
+                        refereeSnoozeUntil = game.moves.size + 6
+                        settledStreak = 0
+                    }
+                ) { Text("继续下") }
             }
         )
     }
@@ -2477,6 +2884,137 @@ private fun formatNum(v: Double): String =
 
 /** One plain-language sentence about the position: who is ahead,
  * by how much, and how much the top move stands out. */
+/** Liberties of the group containing the given board indices. */
+private fun groupLiberties(g: GoGame, group: Set<Int>): Int {
+    val libs = HashSet<Int>()
+    val w = g.size.width
+    val h = g.size.height
+    for (i in group) {
+        val x = i % w
+        val y = i / w
+        if (x > 0 && g.stoneAt(x - 1, y) == null) libs.add(i - 1)
+        if (x < w - 1 && g.stoneAt(x + 1, y) == null) libs.add(i + 1)
+        if (y > 0 && g.stoneAt(x, y - 1) == null) libs.add(i - w)
+        if (y < h - 1 && g.stoneAt(x, y + 1) == null) libs.add(i + w)
+    }
+    return libs.size
+}
+
+/** Board-region name ("左上", "右下", "中央"...) for a point set. */
+private fun regionName(points: Set<Int>, w: Int, h: Int): String {
+    if (points.isEmpty()) return ""
+    val ax = points.map { it % w }.average()
+    val ay = points.map { it / w }.average()
+    val col = when {
+        ax < w / 3.0 -> "左"
+        ax > w * 2.0 / 3.0 -> "右"
+        else -> ""
+    }
+    val row = when {
+        ay < h / 3.0 -> "上"
+        ay > h * 2.0 / 3.0 -> "下"
+        else -> ""
+    }
+    val name = col + row
+    return if (name.isEmpty()) "中央" else name
+}
+
+/**
+ * A concrete tactical reading of the AI's top choice, in the
+ * style of a human commentator: "一选逼住右上的黑棋，它只剩
+ * 2 气了". Every claim is verified by actually playing the
+ * candidate's principal variation on a scratch board and
+ * comparing group liberties before/after — nothing is claimed
+ * that the simulation does not show. Returns null when the PV
+ * does nothing concrete enough to narrate.
+ */
+private fun tacticalLine(
+    game: GoGame,
+    top: com.tuxungo.android.engine.Candidate
+): String? {
+    if (top.pvMoves.isEmpty()) return null
+    val mover = game.current
+    val foe = mover.other()
+    val w = game.size.width
+    val h = game.size.height
+    val scratch = GoGame(game.size, game.komi)
+    val stones = ArrayList<Move>()
+    for (y in 0 until h) {
+        for (x in 0 until w) {
+            val s = game.stoneAt(x, y)
+            if (s != null) stones.add(Move(s, x, y))
+        }
+    }
+    scratch.loadPosition(stones, mover)
+    data class GroupInfo(val stones: Set<Int>, val libs: Int)
+    fun collect(color: Stone): List<GroupInfo> {
+        val seen = HashSet<Int>()
+        val out = ArrayList<GroupInfo>()
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val idx = y * w + x
+                if (scratch.stoneAt(x, y) == color && idx !in seen) {
+                    val grp = scratch.groupAt(x, y)
+                    seen.addAll(grp)
+                    out.add(GroupInfo(grp, groupLiberties(scratch, grp)))
+                }
+            }
+        }
+        return out
+    }
+    val foeBefore = collect(foe)
+    val ownBefore = collect(mover)
+    var played = 0
+    for (mv in top.pvMoves.take(7)) {
+        if (mv.isPass) {
+            scratch.pass()
+            played++
+            continue
+        }
+        if (!scratch.play(mv.x, mv.y)) break
+        played++
+    }
+    if (played == 0) return null
+    val foeName = if (foe == Stone.BLACK) "黑棋" else "白棋"
+    val ownName = if (mover == Stone.BLACK) "黑棋" else "白棋"
+    // Capture: an enemy group that existed before is gone now.
+    for (g in foeBefore) {
+        val alive = g.stones.count {
+            scratch.stoneAt(it % w, it / w) == foe
+        }
+        if (alive == 0 && g.stones.size >= 2) {
+            return "照一选下下去，${regionName(g.stones, w, h)}这块$foeName" +
+                "（${g.stones.size} 子）会被提掉，接不归了。"
+        }
+    }
+    // Squeeze: an enemy group lost most of its air.
+    for (g in foeBefore) {
+        val rep = g.stones.firstOrNull {
+            scratch.stoneAt(it % w, it / w) == foe
+        } ?: continue
+        val now = scratch.groupAt(rep % w, rep / w)
+        val libs = groupLiberties(scratch, now)
+        if (libs in 1..2 && libs < g.libs && g.stones.size >= 3) {
+            return "一选逼住${regionName(g.stones, w, h)}的$foeName，" +
+                "它只剩 $libs 气了，眼位也不足，很危险。"
+        }
+    }
+    // Rescue: one of the mover's tight groups breathes again.
+    for (g in ownBefore) {
+        if (g.libs > 2) continue
+        val rep = g.stones.firstOrNull {
+            scratch.stoneAt(it % w, it / w) == mover
+        } ?: continue
+        val now = scratch.groupAt(rep % w, rep / w)
+        val libs = groupLiberties(scratch, now)
+        if (libs >= g.libs + 3 && g.stones.size >= 3) {
+            return "一选先救${regionName(g.stones, w, h)}自己的$ownName，" +
+                "它本来只剩 ${g.libs} 气，这下缓过来了。"
+        }
+    }
+    return null
+}
+
 private fun commentaryLine(wrBlack: Double, leadBlack: Double, gap: Double): String {
     val pct = (wrBlack * 100).toInt()
     val side = if (leadBlack >= 0) "黑方" else "白方"

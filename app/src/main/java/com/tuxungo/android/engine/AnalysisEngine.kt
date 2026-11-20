@@ -501,7 +501,7 @@ class AnalysisEngine private constructor(
             configFile.writeText(
                 """
                 logFile = analysis.log
-                numSearchThreads = 4
+                numSearchThreads = 6
                 nnMaxBatchSize = 16
                 numAnalysisThreads = 1
                 """.trimIndent() + "\n"
@@ -546,5 +546,32 @@ class AnalysisEngine private constructor(
             }
             return engine
         }
+    }
+}
+
+/**
+ * Holds one idle, pre-warmed analysis engine so the first
+ * analysis of a session does not pay the model-load cost.
+ * MainActivity warms it shortly after launch; the game screen
+ * adopts it via [take] (and owns it from then on).
+ */
+object AnalysisEngineHolder {
+    @Volatile
+    private var held: AnalysisEngine? = null
+
+    /** Stores a warmed engine, retiring any previous one. */
+    fun offer(engine: AnalysisEngine) {
+        val old = held
+        held = engine
+        if (old != null && old !== engine) {
+            runCatching { old.quit() }
+        }
+    }
+
+    /** Takes the warmed engine out (single use), or null. */
+    fun take(): AnalysisEngine? {
+        val e = held
+        held = null
+        return e
     }
 }

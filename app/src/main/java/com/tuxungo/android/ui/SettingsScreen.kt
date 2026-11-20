@@ -218,6 +218,21 @@ fun SettingsScreen(
                 onCheckedChange = { update(settings.copy(keepScreenOn = it)) }
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "智能裁判", fontSize = 15.sp)
+                Text(text = "局面完全收官时自动判定胜负（先展示，3 秒后判终）", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.refereeEnabled,
+                onCheckedChange = { update(settings.copy(refereeEnabled = it)) }
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "AI 对 AI 观战节奏", fontSize = 15.sp)
         Text(text = "两个 AI 对弈时每手之间的停顿", fontSize = 12.sp, color = Color.Gray)

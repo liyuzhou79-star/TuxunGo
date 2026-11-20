@@ -43,6 +43,7 @@ vs AI games, or play a friend on the same phone.
 
 - **AI analysis**: candidate moves ranked on the board with the top choice unmistakable; win-rate bar, score lead, territory estimate, principal-variation ghosts; switchable depth (quick / standard / deep)
 - **Position judgment**: one tap for territory, dead stones and a verdict
+- **Smart referee & AI resignation**: turn the referee on and a fully settled game is scored automatically; a hopeless AI may offer to resign, but only with your consent
 - **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically (a brilliant move must clearly outrun the runner-up — no spam); stretches above 75% win rate are shaded green; black/white perspective switch; at any move the board also draws the top choice's continuation as ghost stones; continue the game from any move; quick / precise / high-precision fill options
 - **Background pre-computation**: while you play, every position's stats are quietly recorded — the post-game review opens (nearly) instantly
 - **Annotated SGF export**: copy a review as SGF with per-move win-rate comments

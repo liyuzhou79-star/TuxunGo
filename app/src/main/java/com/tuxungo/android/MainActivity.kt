@@ -112,6 +112,30 @@ class MainActivity : ComponentActivity() {
                 android.graphics.Color.TRANSPARENT
             )
         )
+        // Idle pre-warm: a couple of seconds after launch, start
+        // the analysis engine on a background thread so the first
+        // in-game analysis / judgment feels instant. The game
+        // screen adopts this engine instead of starting its own.
+        Thread {
+            try {
+                Thread.sleep(2500)
+                val appCtx = applicationContext
+                val model = com.tuxungo.android.engine.ModelStore
+                    .resolveActiveFile(appCtx)
+                val eng = com.tuxungo.android.engine.AnalysisEngine.start(
+                    nativeLibDir = applicationInfo.nativeLibraryDir,
+                    workDir = com.tuxungo.android.engine.EngineAssets
+                        .engineWorkDir(appCtx),
+                    modelFile = model,
+                    humanModelFile = com.tuxungo.android.engine.ModelStore
+                        .humanModelFile(appCtx)
+                )
+                com.tuxungo.android.engine.AnalysisEngineHolder.offer(eng)
+            } catch (_: Exception) {
+                // Pre-warm is best-effort; the game screen starts
+                // its own engine when this one is missing.
+            }
+        }.start()
         setContent {
             var accent by remember {
                 mutableStateOf(SettingsStore.load(this@MainActivity).accent)
@@ -416,12 +440,12 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 性能全面优化：AI 分析先出暂定一选再逐步精确，长局更流畅\n" +
-                "· AI 棋力定级：18 级到 9 段再到 Max，按真人棋风对等陪练\n" +
-                "· 吉祥物登场，菜单有了统一图标，空页面也有图形了\n" +
-                "· 设置按类别分成二级页，另有「形势判断」专页可细调领地着色\n" +
-                "· 复盘胜率图拖动逐手有落子声和震动反馈\n" +
-                "· 小彩蛋：连点主页吉祥物五次试试",
+            whatsNew = "· 形势判断大修：复用后台计算、结果流式出现，强力模型下也不再迟迟不出\n" +
+                "· 智能裁判：在「更多」里开启，局面收官后自动判定胜负\n" +
+                "· AI 可以认输了：要先征得你同意，拒绝后 15 手内不会再提\n" +
+                "· 解说会讲具体棋了：一选逼住哪块棋、哪块棋气紧，都会说明\n" +
+                "· 全新榧木实纹棋盘（默认）；棋盘更铺满，全屏里也能悔棋\n" +
+                "· 打开 App 就预热引擎，第一次分析更快；对局按钮配上了图标",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
