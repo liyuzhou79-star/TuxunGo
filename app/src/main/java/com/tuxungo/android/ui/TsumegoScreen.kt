@@ -171,7 +171,7 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
 )
 
 @Composable
-fun TsumegoScreen(onBack: () -> Unit) {
+fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
     val prefs = remember {
@@ -186,7 +186,9 @@ fun TsumegoScreen(onBack: () -> Unit) {
                 .toSet()
         )
     }
-    var index by remember { mutableIntStateOf(0) }
+    var index by remember {
+        mutableIntStateOf(initialIndex.coerceIn(0, TSUMEGO_PROBLEMS.size - 1))
+    }
     var unsolvedOnly by remember { mutableStateOf(false) }
     val problem = TSUMEGO_PROBLEMS[index]
 

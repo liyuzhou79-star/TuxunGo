@@ -166,6 +166,7 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
     var reviewGame by remember { mutableStateOf<LibraryGame?>(null) }
     var reviewInitialPly by remember { mutableStateOf<Int?>(null) }
     var screenBeforeReview by remember { mutableStateOf(Screen.SETUP) }
+    var tsumegoInitial by remember { mutableIntStateOf(0) }
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
         transitionSpec = {
@@ -195,7 +196,10 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
             onOpenModels = { screen = Screen.MODELS },
             onOpenLibrary = { screen = Screen.LIBRARY },
             onOpenGuess = { screen = Screen.GUESS },
-            onOpenTsumego = { screen = Screen.TSUMEGO },
+            onOpenTsumego = { idx ->
+                tsumegoInitial = idx
+                screen = Screen.TSUMEGO
+            },
             onOpenStats = { screen = Screen.STATS },
             onOpenGame = {
                 reviewGame = it
@@ -256,7 +260,8 @@ fun TuxunGoApp(onAccentChange: (String) -> Unit = {}) {
             onBack = { screen = Screen.SETUP }
         )
         Screen.TSUMEGO -> com.tuxungo.android.ui.TsumegoScreen(
-            onBack = { screen = Screen.SETUP }
+            onBack = { screen = Screen.SETUP },
+            initialIndex = tsumegoInitial
         )
         Screen.STATS -> com.tuxungo.android.ui.StatsScreen(
             onBack = { screen = Screen.SETUP }

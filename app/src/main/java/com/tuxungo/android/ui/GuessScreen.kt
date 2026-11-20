@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tuxungo.android.LibraryStore
 import com.tuxungo.android.SettingsStore
 import com.tuxungo.android.engine.AnalysisEngine
 import com.tuxungo.android.engine.AnalysisResult
@@ -40,6 +41,14 @@ import com.tuxungo.android.go.GoGame
 import com.tuxungo.android.go.Stone
 
 private enum class GuessPhase { GUESSING, THINKING, REVEALED }
+
+/** One saved mistake: a position (board size + moves so far) whose
+ * top move the player failed to find. [raw] is its stored form. */
+private data class GuessMistake(
+    val size: Int,
+    val moves: List<com.tuxungo.android.go.Move>,
+    val raw: String
+)
 
 /**
  * "Guess the top move" training: an AI-vs-AI game advances one move at
@@ -74,6 +83,49 @@ fun GuessScreen(onBack: () -> Unit) {
     // Analysis strength for the quiz (visits per question).
     var visits by remember { mutableIntStateOf(guessPrefs.getInt("visits", 300)) }
 
+    // ---- Mistake book: positions whose top move was missed ----
+    fun loadMistakes(): List<GuessMistake> {
+        val s = guessPrefs.getString("mistakes", "") ?: ""
+        if (s.isBlank()) return emptyList()
+        return s.split("|").mapNotNull { raw ->
+            val p = raw.split(";")
+            if (p.size != 3) {
+                null
+            } else {
+                val sz = p[0].toIntOrNull() ?: return@mapNotNull null
+                GuessMistake(sz, LibraryStore.decodeMoves(p[1]), raw)
+            }
+        }
+    }
+    var mistakes by remember { mutableStateOf(loadMistakes()) }
+    var mistakeMode by remember { mutableStateOf(false) }
+    var mistakeIdx by remember { mutableIntStateOf(0) }
+    var mistakeJustSolved by remember { mutableStateOf(false) }
+
+    fun saveMistakes() {
+        guessPrefs.edit()
+            .putString("mistakes", mistakes.joinToString("|") { it.raw })
+            .apply()
+    }
+
+    fun loadMistake(i: Int) {
+        val m = mistakes.getOrNull(i) ?: return
+        mistakeIdx = i
+        mistakeJustSolved = false
+        boardSize = m.size
+        val g = GoGame(BoardSize(m.size, m.size), 7.5)
+        for (mv in m.moves) {
+            if (mv.isPass) g.pass() else g.play(mv.x, mv.y)
+        }
+        game = g
+        version++
+        phase = GuessPhase.GUESSING
+        pending = null
+        result = null
+        guessPoint = null
+        feedback = "错题复习：这一步上次没猜中，再想想 AI 一选是哪里"
+    }
+
     val runner = remember { EngineRunner() }
     var engine by remember { mutableStateOf<AnalysisEngine?>(null) }
     DisposableEffect(Unit) {
@@ -85,6 +137,7 @@ fun GuessScreen(onBack: () -> Unit) {
     }
 
     fun restart(size: Int) {
+        mistakeMode = false
         boardSize = size
         game = GoGame(BoardSize(size, size), 7.5)
         version++
@@ -186,6 +239,38 @@ fun GuessScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+                if (!skipped) {
+                    val rankNow = if (guessCand == null) {
+                        0
+                    } else {
+                        res.candidates.indexOf(guessCand) + 1
+                    }
+                    if (mistakeMode) {
+                        if (rankNow == 1) {
+                            // Solved: drop it from the book. The next
+                            // entry shifts into this index.
+                            mistakes.getOrNull(mistakeIdx)?.let { cur ->
+                                mistakes = mistakes - cur
+                                saveMistakes()
+                            }
+                            mistakeJustSolved = true
+                            feedback += " 这道错题已攻克，已从错题本移除。"
+                        }
+                    } else if (rankNow == 0) {
+                        // A real miss in normal training: save the
+                        // position so it can be reviewed later.
+                        val topMv = res.candidates.firstOrNull()?.move
+                        val raw = "${boardSize};" +
+                            LibraryStore.encodeMoves(movesSnapshot) + ";" +
+                            "${topMv?.x ?: -1},${topMv?.y ?: -1}"
+                        if (mistakes.none { it.raw == raw }) {
+                            mistakes = (mistakes + GuessMistake(
+                                boardSize, movesSnapshot, raw
+                            )).takeLast(30)
+                            saveMistakes()
+                        }
+                    }
+                }
                 if (score > savedBestScore) {
                     savedBestScore = score
                     guessPrefs.edit().putInt("bestScore", score).apply()
@@ -202,6 +287,19 @@ fun GuessScreen(onBack: () -> Unit) {
     }
 
     fun nextQuestion() {
+        if (mistakeMode) {
+            // After a solve, the next entry shifted into this index;
+            // after a miss, move one forward.
+            val target = if (mistakeJustSolved) mistakeIdx else mistakeIdx + 1
+            if (target < mistakes.size) {
+                loadMistake(target)
+            } else {
+                mistakeMode = false
+                restart(boardSize)
+                feedback = "错题复习完了，回到正常训练"
+            }
+            return
+        }
         val top = result?.candidates?.firstOrNull() ?: return
         val mv = top.move
         if (mv == null) {
@@ -321,6 +419,30 @@ fun GuessScreen(onBack: () -> Unit) {
                 fontSize = 12.sp, color = Color.Gray
             )
         }
+        if (mistakes.isNotEmpty() || mistakeMode) {
+            Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                if (mistakeMode) {
+                    Text(
+                        text = "错题复习中 · 第 ${mistakeIdx + 1} / ${mistakes.size} 题",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF2F7CF6)
+                    )
+                    TextButton(onClick = { restart(boardSize) }) { Text("退出复习") }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            mistakeMode = true
+                            loadMistake(0)
+                        },
+                        enabled = phase != GuessPhase.THINKING
+                    ) { Text("错题本（${mistakes.size} 题待复习）") }
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = when (phase) {
@@ -376,7 +498,7 @@ fun GuessScreen(onBack: () -> Unit) {
                     Button(
                         onClick = { nextQuestion() },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("落下 AI 一选，下一题") }
+                    ) { Text(if (mistakeMode) "下一道错题" else "落下 AI 一选，下一题") }
                 }
             }
         }

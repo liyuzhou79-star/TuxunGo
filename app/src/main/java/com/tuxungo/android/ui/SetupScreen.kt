@@ -47,7 +47,7 @@ fun SetupScreen(
     onOpenEditor: (Int, Int) -> Unit,
     onOpenGuess: () -> Unit = {},
     onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
-    onOpenTsumego: () -> Unit = {},
+    onOpenTsumego: (Int) -> Unit = {},
     onOpenStats: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -414,14 +414,29 @@ fun SetupScreen(
             val bk = p.getInt("bestStreak", 0)
             if (bs > 0 || bk > 0) "最佳 $bs 分 · 连对 $bk" else "暂无成绩"
         }
-        val tsumegoSolvedCount = remember {
+        val tsumegoSolvedSet = remember {
             val s = context.getSharedPreferences(
                 "tsumego_prefs", android.content.Context.MODE_PRIVATE
             ).getString("solved", "") ?: ""
             if (s.isBlank()) {
-                0
+                emptySet()
             } else {
-                s.split(",").count { it.isNotBlank() }
+                s.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+            }
+        }
+        val tsumegoSolvedCount = tsumegoSolvedSet.size
+        // Daily problem: rotate through the unsolved ones by day of
+        // year, so the card always recommends a fresh problem.
+        val dailyTsumego = remember {
+            val unsolved = TSUMEGO_PROBLEMS.indices.filter {
+                it !in tsumegoSolvedSet
+            }
+            if (unsolved.isEmpty()) {
+                -1
+            } else {
+                val day = java.util.Calendar.getInstance()
+                    .get(java.util.Calendar.DAY_OF_YEAR)
+                unsolved[day % unsolved.size]
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -434,10 +449,16 @@ fun SetupScreen(
             )
             NavCard(
                 title = "死活题",
-                desc = "紧气、双吃、对杀、征子，练计算力",
-                foot = "已解 $tsumegoSolvedCount / ${TSUMEGO_PROBLEMS.size} 题",
+                desc = "紧气、双吃、对杀、征子 · 已解 $tsumegoSolvedCount/${TSUMEGO_PROBLEMS.size}",
+                foot = if (dailyTsumego >= 0) {
+                    "今日一题：${TSUMEGO_PROBLEMS[dailyTsumego].title}"
+                } else {
+                    "全部解完，太强了"
+                },
                 modifier = Modifier.weight(1f),
-                onClick = onOpenTsumego
+                onClick = {
+                    onOpenTsumego(if (dailyTsumego >= 0) dailyTsumego else 0)
+                }
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -499,7 +520,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 2.1.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 2.2.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
