@@ -38,7 +38,7 @@ vs AI games, or play a friend on the same phone.
 
 ### Training
 
-- **Tsumego training**: capturing races, double atari, shared-liberty fights, a big-dragon squeeze and a ladder — play the right move and the opponent answers automatically, with hints and explanations; every solution is verified move by move against the rules
+- **Tsumego training**: seven problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, and the classic under-the-stones) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules
 - **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty
 
 ### Game library
@@ -55,7 +55,7 @@ vs AI games, or play a friend on the same phone.
 
 ### Experience
 
-- Real recorded stone sounds (synthesized alternatives included), placement vibration, four board skins, sakura-pink theme
+- Real recorded stone sounds (synthesized alternatives included), placement vibration, four board skins, and three theme accents (sakura pink / matcha green / indigo) switchable instantly
 - Games survive backgrounding and process death — pick up right where you left off
 - **Fully offline**: engine and models live on the device; there is no server, no account, and nothing that needs a network
 

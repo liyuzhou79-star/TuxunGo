@@ -318,5 +318,10 @@ fun SettingsScreen(
             text = "「真实录音」落子/提子音效来自开源围棋软件 Sabaki（MIT 授权），为真棋盘实录。",
             fontSize = 12.sp, color = Color.Gray
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "引擎：KataGo 1.15.3（GTP / 分析协议）· 内置模型：kata1-b10c128（10 层）· 完全离线运行，不联网。",
+            fontSize = 12.sp, color = Color.Gray
+        )
     }
 }

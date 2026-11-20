@@ -353,7 +353,18 @@ fun SetupScreen(
         Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "猜一选训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "AI 自对弈逐手推进，你来猜每一步的一选，练棋感和大局观。", fontSize = 13.sp, color = Color.Gray)
+        val guessBestText = remember {
+            val p = context.getSharedPreferences(
+                "guess_prefs", android.content.Context.MODE_PRIVATE
+            )
+            val bs = p.getInt("bestScore", 0)
+            val bk = p.getInt("bestStreak", 0)
+            if (bs > 0 || bk > 0) "历史最佳：得分 $bs · 连对 $bk。" else ""
+        }
+        Text(
+            text = "AI 自对弈逐手推进，你来猜每一步的一选，练棋感和大局观。" + guessBestText,
+            fontSize = 13.sp, color = Color.Gray
+        )
         Spacer(modifier = Modifier.height(8.dp))
         androidx.compose.material3.OutlinedButton(
             onClick = onOpenGuess,
@@ -425,7 +436,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.12.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.13.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
