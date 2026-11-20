@@ -440,8 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 对局结果弹窗补了一行小字：总手数和双方各自提了多少子\n" +
-                "· 复盘页顶部会显示这盘棋的对局日期了",
+            whatsNew = "· 性能维护：棋谱缩略图缓存加了上限，棋谱存得再多也不会一直吃内存（超上限的旧缩略图下次看时自动重画）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

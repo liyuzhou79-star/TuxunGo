@@ -778,6 +778,10 @@ fun GameThumb(g: LibraryGame, modifier: Modifier = Modifier) {
     LaunchedEffect(g.id) {
         if (bmp == null) {
             bmp = withContext(kotlinx.coroutines.Dispatchers.Default) {
+                // Cap the cache: each bitmap is ~150 KB, so an
+                // unbounded cache would grow with the library.
+                // Thumbnails re-render on demand after a clear.
+                if (thumbCache.size > 60) thumbCache.clear()
                 thumbCache.getOrPut(g.id) { renderThumb(g) }
             }
         }
