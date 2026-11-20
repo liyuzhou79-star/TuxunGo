@@ -6,8 +6,8 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Whole-app backup: the game library (folders.json + every
- * games/*.json, verbatim) plus the small SharedPreferences
+ * Whole-app backup: the game library (folders.json plus every
+ * game JSON file, verbatim) plus the small SharedPreferences
  * stores — settings, the in-progress game, per-side AI
  * choices, training progress, the series tally and more.
  * Imported model FILES are not included (they are large);
