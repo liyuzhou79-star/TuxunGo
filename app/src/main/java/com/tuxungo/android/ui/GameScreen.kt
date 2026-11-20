@@ -1272,9 +1272,6 @@ fun GameScreen(
                     if (group.isNotEmpty()) {
                         deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
                     }
-                } else if (!settings.confirmMovpty()) {
-                        deadSet = if (group.all { it in deadSet }) deadSet - group else deadSet + group
-                    }
                 } else if (!settings.confirmMove) {
                     if (game.stoneAt(x, y) == null && game.isLegal(x, y)) applyHumanMove(x, y)
                 } else {
