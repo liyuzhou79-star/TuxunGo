@@ -2,9 +2,15 @@ package com.tuxungo.android
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
@@ -89,6 +95,21 @@ private val IndigoColors = lightColorScheme(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Full-screen gesture navigation: draw edge to edge with
+        // transparent system bars (dark icons — the app is always
+        // light-themed), and pad the content by the safe-drawing
+        // insets below so nothing hides under the status bar, the
+        // gesture bar or a display cutout.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         setContent {
             var accent by remember {
                 mutableStateOf(SettingsStore.load(this@MainActivity).accent)
@@ -103,7 +124,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    TuxunGoApp(onAccentChange = { accent = it })
+                    // The Surface stays full-bleed so the theme
+                    // background flows behind the transparent system
+                    // bars; only the content is inset to the safe area.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                    ) {
+                        TuxunGoApp(onAccentChange = { accent = it })
+                    }
                 }
             }
         }

@@ -450,7 +450,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.14.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 1.15.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
