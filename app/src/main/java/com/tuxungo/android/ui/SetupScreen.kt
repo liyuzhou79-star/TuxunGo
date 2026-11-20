@@ -535,7 +535,18 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text(text = "版本 2.4.0", fontSize = 12.sp, color = Color.Gray)
+            Text(
+                text = "版本 " + remember {
+                    try {
+                        context.packageManager
+                            .getPackageInfo(context.packageName, 0)
+                            .versionName ?: ""
+                    } catch (e: Exception) {
+                        ""
+                    }
+                },
+                fontSize = 12.sp, color = Color.Gray
+            )
             TextButton(onClick = {
                 guidePage = 0
                 showGuide = true

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
@@ -218,6 +219,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
     var hintPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var replyPending by remember { mutableStateOf(false) }
     var demoMode by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
     var solved by remember { mutableStateOf(false) }
     var statusText by remember {
         mutableStateOf("轮到黑棋下：点棋盘选点，再点一次确认。")
@@ -318,6 +320,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                     if (pick != index) reset(pick) else reset(index)
                 }
             ) { Text("随机一题") }
+            TextButton(onClick = { showPicker = true }) { Text("选题") }
         }
         if (solvedSet.size == TSUMEGO_PROBLEMS.size) {
             Text(
@@ -487,6 +490,53 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("选择题目") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    TSUMEGO_PROBLEMS.forEachIndexed { i, p ->
+                        val bestSec = prefs.getInt("best_$i", Int.MAX_VALUE)
+                        TextButton(
+                            onClick = {
+                                showPicker = false
+                                if (i != index) reset(i) else reset(index)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "第 ${i + 1} 题 · ${p.title}" +
+                                        if (i in solvedSet) "（已解）" else "",
+                                    fontSize = 14.sp,
+                                    color = if (i in solvedSet) {
+                                        Color(0xFF2E7D32)
+                                    } else {
+                                        Color.Unspecified
+                                    }
+                                )
+                                Text(
+                                    text = p.level + if (bestSec != Int.MAX_VALUE) {
+                                        " · 最佳 $bestSec 秒"
+                                    } else {
+                                        ""
+                                    },
+                                    fontSize = 12.sp, color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPicker = false }) { Text("关闭") }
+            }
+        )
     }
 }
 
