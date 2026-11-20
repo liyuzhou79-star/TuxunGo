@@ -1439,6 +1439,23 @@ fun GameScreen(
     // the auto-save above, so a restored finished game is never
     // counted twice.
     var seriesNote by remember { mutableStateOf("") }
+    // Running series score, shown in the commentary card during
+    // AI-vs-AI series games. Seeded from the persisted tally so
+    // game 2 onwards shows the score from the first move; the
+    // series effect refreshes it after every finished game.
+    var seriesScoreText by remember {
+        mutableStateOf(
+            if (config.seriesTarget > 0) {
+                com.tuxungo.android.SeriesStore.current(context)?.let { t ->
+                    "系列赛（先赢 ${config.seriesTarget} 局）：" +
+                        "${t.nameA} ${t.winsA} : ${t.winsB} ${t.nameB}" +
+                        " · 已赛 ${t.games} 局"
+                } ?: ""
+            } else {
+                ""
+            }
+        )
+    }
     var seriesRecorded by remember { mutableStateOf(false) }
     LaunchedEffect(game.finished, game.scoringDead) {
         if (!game.finished || finishedAtStart || seriesRecorded) {
@@ -1466,6 +1483,7 @@ fun GameScreen(
         val scoreLine = "系列赛（先赢 ${config.seriesTarget} 局）：" +
             "${tally.nameA} ${tally.winsA} : ${tally.winsB} ${tally.nameB}" +
             " · 已赛 ${tally.games} 局"
+        seriesScoreText = scoreLine
         if (tally.winsA >= config.seriesTarget ||
             tally.winsB >= config.seriesTarget
         ) {
@@ -2704,6 +2722,12 @@ fun GameScreen(
                                     )
                                 }
                             ) { Text("分享", fontSize = 12.sp) }
+                        }
+                        if (seriesScoreText.isNotEmpty()) {
+                            Text(
+                                seriesScoreText,
+                                fontSize = 12.sp, color = Color(0xFF2F7CF6)
+                            )
                         }
                         val feedScroll = rememberScrollState()
                         LaunchedEffect(feedLines.size) {

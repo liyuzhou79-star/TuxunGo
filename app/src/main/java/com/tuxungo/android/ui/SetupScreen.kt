@@ -935,6 +935,13 @@ private fun EggStatsDialog(onDismiss: () -> Unit) {
                             "${wl[0]} 胜 ${wl[1]} 负"
                         )
                     }
+                    val bestWin = ordered.firstOrNull { it.value[0] > 0 }
+                    EggRow(
+                        "最高胜档",
+                        bestWin?.let {
+                            "赢过 ${com.tuxungo.android.engine.SideAiStore.rankLabel(it.key)}"
+                        } ?: "暂未赢下定级局"
+                    )
                 }
                 if (byMode.isNotEmpty()) {
                     EggSection("各模式")
