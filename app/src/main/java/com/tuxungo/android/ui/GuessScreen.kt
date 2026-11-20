@@ -38,6 +38,7 @@ import com.tuxungo.android.engine.EngineRunner
 import com.tuxungo.android.engine.ModelStore
 import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.GoGame
+import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 
 private enum class GuessPhase { GUESSING, THINKING, REVEALED }
