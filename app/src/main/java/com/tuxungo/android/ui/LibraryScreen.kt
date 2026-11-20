@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tuxungo.android.LibraryFolder
 import com.tuxungo.android.LibraryGame
 import com.tuxungo.android.LibraryStore
 import java.text.SimpleDateFormat
@@ -152,6 +153,7 @@ fun LibraryScreen(
     var deleteFolderTarget by remember { mutableStateOf<String?>(null) }
     var renameFolderTarget by remember { mutableStateOf<LibraryFolder?>(null) }
     var renameFolderText by remember { mutableStateOf("") }
+    var clearAutoTarget by remember { mutableStateOf<LibraryFolder?>(null) }
 
     fun refresh() {
         folders = LibraryStore.listFolders(context)
@@ -258,6 +260,11 @@ fun LibraryScreen(
                 TextButton(onClick = { deleteFolderTarget = selectedFolder.id }) {
                     Text("删除文件夹（棋谱移到未分类）", fontSize = 12.sp)
                 }
+                if (selectedFolder.name == "自动保存") {
+                    TextButton(onClick = { clearAutoTarget = selectedFolder }) {
+                        Text("清空自动保存", fontSize = 12.sp)
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -330,6 +337,32 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolder = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (clearAutoTarget != null) {
+        val target = clearAutoTarget!!
+        val count = games.count { it.folderId == target.id }
+        AlertDialog(
+            onDismissRequest = { clearAutoTarget = null },
+            title = { Text("清空自动保存？") },
+            text = {
+                Text("「自动保存」里的 $count 份棋谱会被删除，收藏到其他文件夹的棋谱不受影响。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        for (g in games.filter { it.folderId == target.id }) {
+                            LibraryStore.deleteGame(context, g.id)
+                        }
+                        clearAutoTarget = null
+                        refresh()
+                    }
+                ) { Text("清空") }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearAutoTarget = null }) { Text("取消") }
             }
         )
     }

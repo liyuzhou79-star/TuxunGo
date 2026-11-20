@@ -959,7 +959,14 @@ fun GameScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(text = status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
+                Row {
+                    if (clockEnabled && !finished) {
+                        TextButton(onClick = { userPaused = !userPaused }) {
+                            Text(if (userPaused) "继续" else "暂停")
+                        }
+                    }
+                    TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
+                }
             }
             val fsA = analysis
             val fsSel = fsA?.candidates?.getOrNull(selectedCandidate)
@@ -971,7 +978,7 @@ fun GameScreen(
             }
             BoardView(
                 game = game,
-                enabled = scoringMode || (!finished && humanTurn && !aiThinking),
+                enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
                 skin = BoardSkin.fromId(settings.boardSkin),
                 showCoordinates = false,
                 territoryThreshold = 0.5,

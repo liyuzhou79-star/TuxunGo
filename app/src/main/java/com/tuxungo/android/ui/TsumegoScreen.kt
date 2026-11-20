@@ -187,6 +187,7 @@ fun TsumegoScreen(onBack: () -> Unit) {
         )
     }
     var index by remember { mutableIntStateOf(0) }
+    var unsolvedOnly by remember { mutableStateOf(false) }
     val problem = TSUMEGO_PROBLEMS[index]
 
     var game by remember { mutableStateOf(buildProblemGame(problem)) }
@@ -292,7 +293,15 @@ fun TsumegoScreen(onBack: () -> Unit) {
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
         ) {
+            FilterChip(
+                selected = unsolvedOnly,
+                onClick = { unsolvedOnly = !unsolvedOnly },
+                label = { Text("只看未解") }
+            )
             TSUMEGO_PROBLEMS.forEachIndexed { i, _ ->
+                if (unsolvedOnly && i in solvedSet && i != index) {
+                    return@forEachIndexed
+                }
                 FilterChip(
                     selected = index == i,
                     onClick = { if (index != i) reset(i) },
