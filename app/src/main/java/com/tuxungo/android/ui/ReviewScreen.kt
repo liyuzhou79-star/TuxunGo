@@ -276,7 +276,7 @@ fun ReviewScreen(
 
     // Territory (ownership) overlay for the position at the
     // current ply, computed on demand with a one-off analysis.
-    var territory by remember { mutableStateOf<FloatArray?>(null) }
+    var territory by remember { mutableStateOf<DoubleArray?>(null) }
     var territoryPly by remember { mutableIntStateOf(-1) }
     var territoryBusy by remember { mutableStateOf(false) }
 
