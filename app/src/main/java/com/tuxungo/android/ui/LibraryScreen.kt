@@ -1,6 +1,8 @@
 package com.tuxungo.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -98,8 +100,13 @@ fun LibraryScreen(
     onOpenGame: (LibraryGame) -> Unit
 ) {
     val context = LocalContext.current
-    var folders by remember { mutableStateOf(LibraryStore.listFolders(context)) }
-    var games by remember { mutableStateOf(LibraryStore.listGames(context)) }
+    var folders by remember {
+        mutableStateOf<List<com.tuxungo.android.LibraryFolder>>(emptyList())
+    }
+    var games by remember {
+        mutableStateOf<List<com.tuxungo.android.LibraryGame>>(emptyList())
+    }
+    var loading by remember { mutableStateOf(true) }
     // "ALL" shows everything, null shows uncategorized, else a folder id.
     var selected by remember { mutableStateOf<String?>("ALL") }
     var showNewFolder by remember { mutableStateOf(false) }
@@ -194,6 +201,15 @@ fun LibraryScreen(
     fun refresh() {
         folders = LibraryStore.listFolders(context)
         games = LibraryStore.listGames(context)
+    }
+
+    // Load off the main thread: a big library no longer stalls the
+    // screen opening; skeleton cards show while it loads.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            refresh()
+        }
+        loading = false
     }
 
     var searchText by remember { mutableStateOf("") }
@@ -341,10 +357,16 @@ fun LibraryScreen(
             Text(exportedNote, fontSize = 13.sp, color = Color(0xFF2F7CF6))
             Spacer(modifier = Modifier.height(4.dp))
         }
-        if (shown.isEmpty()) {
-            Text(
-                "这里还没有棋谱。对局结束后，或者在复盘页，点「收藏棋谱」就能存进来。",
-                fontSize = 14.sp, color = Color.Gray
+        if (loading) {
+            SkeletonCards()
+        } else if (shown.isEmpty()) {
+            EmptyState(
+                title = if (games.isEmpty()) "还没有棋谱" else "这里是空的",
+                desc = if (games.isEmpty()) {
+                    "对局结束后会自动存进来，也可以在复盘页点「收藏棋谱」。"
+                } else {
+                    "这个文件夹或搜索下还没有棋谱，换个条件看看。"
+                }
             )
         }
         for (g in shown) {
@@ -613,5 +635,51 @@ fun LibraryScreen(
                 TextButton(onClick = { deleteFolderTarget = null }) { Text("取消") }
             }
         )
+    }
+}
+
+/** Grey placeholder cards while the library loads off-thread. */
+@Composable
+private fun SkeletonCards() {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(
+        label = "skeletonPulse"
+    )
+    val alpha by transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.55f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(800),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "skeletonAlpha"
+    )
+    Column {
+        repeat(3) {
+            androidx.compose.material3.Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(15.dp)
+                            .background(
+                                Color.LightGray.copy(alpha = alpha),
+                                androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(12.dp)
+                            .background(
+                                Color.LightGray.copy(alpha = alpha),
+                                androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            )
+                    )
+                }
+            }
+        }
     }
 }

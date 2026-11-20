@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +65,19 @@ fun SettingsScreen(
         SettingsStore.save(context, next)
     }
 
+    // Settings are grouped into sub-pages so the screen is not one
+    // long crowded list: "home" shows the groups, the rest show one
+    // group's controls each.
+    var page by remember { mutableStateOf("home") }
+    val pageTitle = when (page) {
+        "play" -> "对局与操作"
+        "look" -> "外观"
+        "sound" -> "声音与震动"
+        "judge" -> "形势判断"
+        "data" -> "数据与更新"
+        else -> "设置"
+    }
+
     fun previewFromList(resList: List<Int>) {
         val sid = previewPool.load(context, resList.random(), 1)
         // SoundPool loads asynchronously; retry briefly until ready.
@@ -87,9 +101,62 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        ScreenHeader("设置", "落子、棋盘、音效、更新与备份", onBack)
-        Spacer(modifier = Modifier.height(8.dp))
+        if (page == "home") {
+            ScreenHeader("设置", "按类别分好，一点都不挤", onBack)
+            Spacer(modifier = Modifier.height(8.dp))
+            MenuCard(
+                title = "对局与操作",
+                desc = "确认落子、坐标、手数、屏幕常亮、观战节奏、自动分析",
+                foot = "",
+                icon = AppIconKind.EDIT,
+                onClick = { page = "play" }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            MenuCard(
+                title = "外观",
+                desc = "主题色、棋盘样式（带实时预览）",
+                foot = "",
+                icon = AppIconKind.APPEARANCE,
+                onClick = { page = "look" }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            MenuCard(
+                title = "声音与震动",
+                desc = "落子与提子音效、震动反馈",
+                foot = "",
+                icon = AppIconKind.SOUND,
+                onClick = { page = "sound" }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            MenuCard(
+                title = "形势判断",
+                desc = "领地着色蔓延与浓淡、判断计算量、死子严格度、面板显示",
+                foot = "",
+                icon = AppIconKind.JUDGE,
+                onClick = { page = "judge" }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            MenuCard(
+                title = "数据与更新",
+                desc = "备份与恢复、检查更新、恢复默认设置",
+                foot = "",
+                icon = AppIconKind.LIBRARY,
+                onClick = { page = "data" }
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { page = "home" }) {
+                    Text("‹ 返回", fontSize = 15.sp)
+                }
+                Text(
+                    text = pageTitle, fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
+        if (page == "play") {
         Text(text = "落子方式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -182,8 +249,9 @@ fun SettingsScreen(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        }
 
+        if (page == "look") {
         Text(text = "主题色", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -240,8 +308,9 @@ fun SettingsScreen(
                 ) { _, _ -> }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        }
 
+        if (page == "sound") {
         Text(text = "音效", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -301,6 +370,173 @@ fun SettingsScreen(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (page == "judge") {
+        Text(text = "判断计算量", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "形势判断和终局数目算多深：越大越准，也越慢。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((v, label) in SettingsStore.JUDGE_VISITS) {
+                FilterChip(
+                    selected = settings.judgeVisits == v,
+                    onClick = { update(settings.copy(judgeVisits = v)) },
+                    label = { Text(label) }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(text = "领地着色", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "棋盘上的黑白小方块是引擎判断的领地：颜色越深，归属越确定。拖动下面两个滑杆，预览会实时变。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = "蔓延程度", fontSize = 14.sp)
+            Text(
+                text = "归属 ${(settings.territorySpread * 100).toInt()}% 以上才上色",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
+        Slider(
+            value = settings.territorySpread,
+            onValueChange = { update(settings.copy(territorySpread = it)) },
+            valueRange = 0.05f..0.6f,
+            steps = 10
+        )
+        Text(
+            text = "调高：只有定型的地方才上色，棋盘干净；调低：稍有倾向就上色，看得出势力的走向。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = "颜色浓淡", fontSize = 14.sp)
+            Text(
+                text = "${(settings.territoryIntensity * 100).toInt()}%",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
+        Slider(
+            value = settings.territoryIntensity,
+            onValueChange = { update(settings.copy(territoryIntensity = it)) },
+            valueRange = 0.4f..1.0f,
+            steps = 5
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        val judgeDemo = remember {
+            com.tuxungo.android.go.GoGame(com.tuxungo.android.go.BoardSize(9, 9), 7.5).apply {
+                loadPosition(
+                    listOf(
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.BLACK, 2, 2),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.WHITE, 6, 6),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.BLACK, 6, 2),
+                        com.tuxungo.android.go.Move(com.tuxungo.android.go.Stone.WHITE, 2, 6)
+                    ),
+                    com.tuxungo.android.go.Stone.BLACK
+                )
+            }
+        }
+        val judgeOwnership = remember {
+            DoubleArray(81) { i ->
+                val x = i % 9
+                val y = i / 9
+                (((4 - x) + (4 - y)) / 8.0 * 1.7 - 0.85).coerceIn(-1.0, 1.0)
+            }
+        }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.layout.Box(modifier = Modifier.width(220.dp)) {
+                BoardView(
+                    game = judgeDemo,
+                    enabled = false,
+                    skin = BoardSkin.fromId(settings.boardSkin),
+                    showCoordinates = false,
+                    ownership = judgeOwnership,
+                    territorySpread = settings.territorySpread,
+                    territoryIntensity = settings.territoryIntensity
+                ) { _, _ -> }
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(text = "死子判定严格度", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "判断时把一整块棋判死的门槛。保守更少误判，活棋不会被错杀；大胆判得更果断。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        for ((id, label) in SettingsStore.DEAD_STRICTNESS) {
+            FilterChip(
+                selected = settings.deadStrictness == id,
+                onClick = { update(settings.copy(deadStrictness = id)) },
+                label = { Text(label) },
+                modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(text = "判断面板显示", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "目数明细", fontSize = 15.sp)
+                Text(text = "黑白双方的活子、空、贴目逐项列出", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.judgeShowDetail,
+                onCheckedChange = { update(settings.copy(judgeShowDetail = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "得分比例条", fontSize = 15.sp)
+                Text(text = "黑白得分占比的横条", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.judgeShowBar,
+                onCheckedChange = { update(settings.copy(judgeShowBar = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "可信度提示", fontSize = 15.sp)
+                Text(text = "局面还有多少没定型，一行话说明", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.judgeShowConfidence,
+                onCheckedChange = { update(settings.copy(judgeShowConfidence = it)) }
+            )
+        }
+        }
+
+        if (page == "data") {
         var showResetConfirm by remember { mutableStateOf(false) }
         androidx.compose.material3.OutlinedButton(
             onClick = { showResetConfirm = true },
@@ -480,5 +716,6 @@ fun SettingsScreen(
             text = "引擎：KataGo 1.15.3（GTP / 分析协议）· 内置模型：kata1-b10c128（10 层）· 对局与分析完全离线；只有手动检查更新时才联网一次。",
             fontSize = 12.sp, color = Color.Gray
         )
+        }
     }
 }

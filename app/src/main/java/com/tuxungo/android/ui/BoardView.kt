@@ -5,7 +5,15 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -84,6 +92,12 @@ fun BoardView(
     /** The human-style model's favourite point: drawn as a blue ring
      *  so it reads differently from the AI's numbered discs. */
     humanPoint: Pair<Int, Int>? = null,
+    /** Territory colouring starts at this ownership strength: points
+     *  weaker than this stay uncoloured, so early-game boards do not
+     *  speckle. Adjustable in the judgment settings. */
+    territorySpread: Float = 0.30f,
+    /** Territory colouring strength multiplier (0.4..1). */
+    territoryIntensity: Float = 1.0f,
     /** Render the board rotated 180 degrees (White's point of view). */
     flipped: Boolean = false,
     onPointTap: (Int, Int) -> Unit
@@ -117,6 +131,25 @@ fun BoardView(
     val darkSkin = skin == BoardSkin.WOOD_DARK || skin == BoardSkin.OBSIDIAN
     val ink = if (darkSkin) GridInkOnDark else GridInk
     val coordInk = if (darkSkin) CoordInkOnDark else CoordInk
+    // Placement ripple: restarts whenever a new move lands.
+    val ripple = remember { Animatable(1f) }
+    LaunchedEffect(game.moves.size) {
+        if (game.moves.isNotEmpty()) {
+            ripple.snapTo(0f)
+            ripple.animateTo(1f, animationSpec = tween(450))
+        }
+    }
+    // Gentle breathing ring around the last move.
+    val breatheTransition = rememberInfiniteTransition(label = "lastMoveBreathe")
+    val breatheAlpha by breatheTransition.animateFloat(
+        initialValue = 0.16f,
+        targetValue = 0.48f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breatheAlpha"
+    )
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
@@ -306,18 +339,21 @@ fun BoardView(
         // Territory marks: squares in the owner's color on empty
         // points, shaded by how strongly the engine believes the
         // point belongs to that side — a pale small square for a
-        // slight lean, a big dark one for settled territory. The
-        // weight IS the information, so there is no hard threshold.
+        // slight lean, a big dark one for settled territory. Points
+        // weaker than territorySpread stay uncoloured (the user
+        // controls how far the colouring "spreads" in settings).
         if (ownership != null) {
             for (y in 0 until h) {
                 for (x in 0 until w) {
                     if (game.stoneAt(x, y) != null) continue
                     val v = ownership.getOrNull(y * w + x) ?: continue
-                    val mag = kotlin.math.abs(v)
-                    if (mag < 0.05) continue
-                    val alpha = (0.16f + 0.84f * mag.toFloat()).coerceIn(0f, 1f)
-                    val half = minOf(cellX, cellY) * 0.19f *
-                        (0.5f + 0.5f * mag.toFloat())
+                    val mag = kotlin.math.abs(v).toFloat()
+                    if (mag < territorySpread) continue
+                    val t = ((mag - territorySpread) /
+                        (1f - territorySpread)).coerceIn(0f, 1f)
+                    val alpha = ((0.16f + 0.84f * t) * territoryIntensity)
+                        .coerceIn(0f, 1f)
+                    val half = minOf(cellX, cellY) * 0.19f * (0.5f + 0.5f * t)
                     val topLeft = Offset(px(x) - half, py(y) - half)
                     val sqSize = Size(half * 2, half * 2)
                     if (v > 0) {
@@ -436,6 +472,23 @@ fun BoardView(
                 tri,
                 color = if (last.stone == Stone.BLACK) Color.White.copy(alpha = 0.92f) else Color.Black.copy(alpha = 0.88f)
             )
+            // Breathing ring + the placement ripple on the newest stone.
+            drawCircle(
+                color = Color(0xFF2F7CF6).copy(alpha = breatheAlpha),
+                radius = r * 1.10f,
+                center = Offset(cx, cy),
+                style = Stroke(width = maxOf(1.2f, r * 0.05f))
+            )
+            if (ripple.value < 1f) {
+                drawCircle(
+                    color = Color(0xFF2F7CF6).copy(
+                        alpha = 0.45f * (1f - ripple.value)
+                    ),
+                    radius = r * (0.7f + 0.9f * ripple.value),
+                    center = Offset(cx, cy),
+                    style = Stroke(width = maxOf(1.5f, r * 0.07f))
+                )
+            }
         }
 
         // Move numbers on the stones (latest move at each point).

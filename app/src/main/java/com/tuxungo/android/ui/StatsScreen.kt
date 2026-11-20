@@ -78,9 +78,9 @@ fun StatsScreen(onBack: () -> Unit) {
                 Text(text = "对局总览", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
                 if (games.isEmpty()) {
-                    Text(
-                        text = "还没有对局记录，去下一盘，这里就会有数据了。",
-                        fontSize = 13.sp, color = Color.Gray
+                    EmptyState(
+                        title = "还没有对局记录",
+                        desc = "去下一盘，这里就会有数据了。"
                     )
                 } else {
                     StatRow("棋谱总数", "${games.size} 局")

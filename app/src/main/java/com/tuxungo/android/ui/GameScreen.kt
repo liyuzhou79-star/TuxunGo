@@ -305,7 +305,8 @@ fun GameScreen(
         if (current != null && current.isAlive) {
             when {
                 startedCfg?.modelId != cfg.modelId ||
-                    startedCfg?.humanLike != cfg.humanLike -> {
+                    startedCfg?.humanLike != cfg.humanLike ||
+                    startedCfg?.rank != cfg.rank -> {
                     // Model changed: retire this process, start fresh below.
                     if (stone == Stone.BLACK) {
                         engineBlack = null; startedCfgBlack = null
@@ -316,7 +317,12 @@ fun GameScreen(
                 }
                 startedCfg?.visits != cfg.visits -> {
                     if (stone == Stone.BLACK) startedCfgBlack = cfg else startedCfgWhite = cfg
-                    runner.submit({ current.setMaxVisits(cfg.visits) }) { }
+                    val effective = if (SideAiStore.rankProfile(cfg.rank) != null) {
+                        minOf(cfg.visits, 60)
+                    } else {
+                        cfg.visits
+                    }
+                    runner.submit({ current.setMaxVisits(effective) }) { }
                     return
                 }
                 else -> return
@@ -332,16 +338,28 @@ fun GameScreen(
         engineStatus = "引擎启动中…"
         runner.submit({
             val model = ModelStore.resolveFile(context, cfg.modelId)
+            // The human model file backs both human-like play and
+            // rank capping; if it was deleted, both quietly disable.
+            val humanFile = if (cfg.humanLike || cfg.rank != "max") {
+                ModelStore.humanModelFile(context)
+            } else {
+                null
+            }
+            val rankProfile = SideAiStore.rankProfile(cfg.rank)
+                ?.takeIf { humanFile != null }
             KataEngine.start(
                 nativeLibDir = context.applicationInfo.nativeLibraryDir,
                 workDir = EngineAssets.engineWorkDir(context),
                 modelFile = model,
-                maxVisits = cfg.visits,
-                humanModelFile = if (cfg.humanLike) {
-                    ModelStore.humanModelFile(context)
+                // A ranked AI imitates the human policy directly;
+                // a small search budget is plenty and keeps it fast.
+                maxVisits = if (rankProfile != null) {
+                    minOf(cfg.visits, 60)
                 } else {
-                    null
-                }
+                    cfg.visits
+                },
+                humanModelFile = humanFile,
+                rankProfile = rankProfile
             )
         }) { result ->
             if (stone == Stone.BLACK) startingBlack = false else startingWhite = false
@@ -557,6 +575,7 @@ fun GameScreen(
         val movesSnapshot = game.moves.toList()
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         analysisRunner.submit({
             var eng = analysisEngine
             if (eng == null || !eng.isAlive) {
@@ -576,7 +595,20 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = visitsOverride ?: if (deep) 1200 else 300
+                maxVisits = visitsOverride ?: if (deep) 1200 else 300,
+                onProvisional = { prov ->
+                    // Show the provisional top move as soon as the
+                    // search has one, then let the final result
+                    // refine it (the panel keeps its "analyzing"
+                    // state until the final callback lands).
+                    mainHandler.post {
+                        if (token == analysisToken && game.moves.size == moveCount) {
+                            analysis = prov
+                            analysisKey = moveCount
+                            selectedCandidate = 0
+                        }
+                    }
+                }
             )
         }) { result ->
             if (token != analysisToken) {
@@ -706,7 +738,7 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = 800
+                maxVisits = settings.judgeVisits
             )
         }) { result ->
             judging = false
@@ -769,7 +801,7 @@ fun GameScreen(
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = 600
+                maxVisits = settings.judgeVisits
             )
         }) { result ->
             scoringBusy = false
@@ -785,7 +817,8 @@ fun GameScreen(
                     suggested.addAll(
                         TerritoryEstimate.deadStones(
                             res.ownershipBlack, stonesNow,
-                            game.size.width, game.size.height
+                            game.size.width, game.size.height,
+                            SettingsStore.deadGroupMean(settings.deadStrictness)
                         )
                     )
                     // Scoring also turns on the position judgment:
@@ -816,7 +849,8 @@ fun GameScreen(
                     analysisEngine = AnalysisEngine.start(
                         nativeLibDir = context.applicationInfo.nativeLibraryDir,
                         workDir = EngineAssets.engineWorkDir(context),
-                        modelFile = model
+                        modelFile = model,
+                        humanModelFile = ModelStore.humanModelFile(context)
                     )
                 }
             }) { }
@@ -1199,7 +1233,8 @@ fun GameScreen(
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
             TerritoryEstimate.deadStones(
-                j.ownershipBlack, st, game.size.width, game.size.height
+                j.ownershipBlack, st, game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
             )
         } ?: emptySet()
         showTerritory -> analysis?.let { a ->
@@ -1207,7 +1242,8 @@ fun GameScreen(
                 game.stoneAt(i % game.size.width, i / game.size.width)
             }
             TerritoryEstimate.deadStones(
-                a.ownershipBlack, st, game.size.width, game.size.height
+                a.ownershipBlack, st, game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
             )
         } ?: emptySet()
         else -> emptySet()
@@ -1273,6 +1309,8 @@ fun GameScreen(
                 preview = if (scoringMode) null else pendingPoint,
                 markedDead = if (scoringMode) deadSet else emptySet(),
                 judgedDead = judgedDeadSet,
+                territorySpread = settings.territorySpread,
+                territoryIntensity = settings.territoryIntensity,
                 showMoveNumbers = settings.showMoveNumbers,
                 oneColor = config.oneColor && !showTrueColors,
                 flipped = boardFlipped
@@ -1571,7 +1609,8 @@ fun GameScreen(
                     liveRes.ownershipBlack, stonesArr, game.size.width, game.size.height, 0.5
                 )
                 val deadLive = TerritoryEstimate.deadStones(
-                    liveRes.ownershipBlack, stonesArr, game.size.width, game.size.height
+                    liveRes.ownershipBlack, stonesArr, game.size.width, game.size.height,
+                    SettingsStore.deadGroupMean(settings.deadStrictness)
                 )
                 var aliveB = 0
                 var aliveW = 0
@@ -1603,7 +1642,8 @@ fun GameScreen(
                 liveRes.ownershipBlack, stonesArr2, game.size.width, game.size.height, 0.5
             )
             val deadLive2 = TerritoryEstimate.deadStones(
-                liveRes.ownershipBlack, stonesArr2, game.size.width, game.size.height
+                liveRes.ownershipBlack, stonesArr2, game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
             )
             var aliveB2 = 0
             var aliveW2 = 0
@@ -1718,6 +1758,8 @@ fun GameScreen(
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
+            territorySpread = settings.territorySpread,
+            territoryIntensity = settings.territoryIntensity,
             showMoveNumbers = settings.showMoveNumbers,
             oneColor = config.oneColor && !showTrueColors,
             flipped = boardFlipped
@@ -1786,7 +1828,8 @@ fun GameScreen(
                 j.ownershipBlack, stones, game.size.width, game.size.height, 0.5
             )
             val deadJ = TerritoryEstimate.deadStones(
-                j.ownershipBlack, stones, game.size.width, game.size.height
+                j.ownershipBlack, stones, game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
             )
             var blackDead = 0
             var whiteDead = 0
@@ -1819,11 +1862,12 @@ fun GameScreen(
                         diff < -0.25 -> "白胜约 ${formatNum(-diff)} 目"
                         else -> "局势接近"
                     },
-                    fontSize = 15.sp, fontWeight = FontWeight.Bold
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Rose
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
             // Score share bar: black share vs white share.
+            if (settings.judgeShowBar) {
+            Spacer(modifier = Modifier.height(8.dp))
             val shareTotal = (blackScore + whiteScore).coerceAtLeast(1.0)
             Row(modifier = Modifier.fillMaxWidth().height(12.dp)) {
                 Box(
@@ -1840,14 +1884,16 @@ fun GameScreen(
                         .background(Color(0xFFE8E8E8), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
                 )
             }
+            }
+            if (settings.judgeShowDetail) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "黑：活子 $aliveBlack + 空 ${terr.blackTerritory} = ${formatNum(blackScore.toDouble())}",
-                fontSize = 13.sp
+                fontSize = 13.sp, color = Color.Gray
             )
             Text(
                 text = "白：活子 $aliveWhite + 空 ${terr.whiteTerritory} + 贴目 ${formatNum(game.komi)} = ${formatNum(whiteScore)}",
-                fontSize = 13.sp
+                fontSize = 13.sp, color = Color.Gray
             )
             if (blackDead + whiteDead > 0) {
                 Text(
@@ -1860,6 +1906,7 @@ fun GameScreen(
                     text = "未定区域约 ${terr.neutral} 点，下完官子后判断会更准",
                     fontSize = 12.sp, color = Color.Gray
                 )
+            }
             }
             // Confidence from how decisive the ownership looks on the
             // empty points: lots of pale (undecided) points means the
@@ -1877,6 +1924,8 @@ fun GameScreen(
             } else {
                 0.0
             }
+            if (settings.judgeShowConfidence) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = when {
                     unclearShare > 0.35 -> "可信度：一般 — 不少区域还在争夺中（棋盘上颜色越深归属越确定）"
@@ -1885,6 +1934,7 @@ fun GameScreen(
                 } + " · 引擎估算，仅供参考",
                 fontSize = 12.sp, color = Color.Gray
             )
+            }
             }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -2504,6 +2554,7 @@ private fun AiSideSection(
     onCfgChange: (SideAiConfig) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var rankExpanded by remember { mutableStateOf(false) }
     val currentName = models.firstOrNull { it.id == cfg.modelId }?.displayName ?: "轻量模型"
     androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -2575,11 +2626,48 @@ private fun AiSideSection(
                     fontSize = 12.sp, color = Color.Gray
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { rankExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = humanInstalled
+                    ) {
+                        Text("棋力定级：${SideAiStore.rankLabel(cfg.rank)}")
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = rankExpanded,
+                        onDismissRequest = { rankExpanded = false }
+                    ) {
+                        for (r in SideAiStore.RANKS) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(SideAiStore.rankLabel(r)) },
+                                onClick = {
+                                    rankExpanded = false
+                                    onCfgChange(cfg.copy(rank = r))
+                                }
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = when {
+                        !humanInstalled ->
+                            "定级需要人类风格模型，它已删除，在模型库里可以免费恢复"
+                        cfg.rank != "max" ->
+                            "按${SideAiStore.rankLabel(cfg.rank)}的真实水平下棋：落子来自按这个级别真人棋谱训练的模型，会犯这个级别常犯的错，输赢都真实"
+                        else ->
+                            "Max 为 AI 全部实力；往下可定级到 18 级，陪练更对等"
+                    },
+                    fontSize = 12.sp, color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "模拟人类落子", fontSize = 14.sp)
                         Text(
-                            text = if (humanInstalled) {
+                            text = if (cfg.rank != "max") {
+                                "已定级时以定级为准，此开关不生效"
+                            } else if (humanInstalled) {
                                 "选点风格像真人棋手，强搜索兜底，不故意下错招"
                             } else {
                                 "人类风格模型已删除，在模型库里可以免费恢复"
@@ -2588,8 +2676,8 @@ private fun AiSideSection(
                         )
                     }
                     Switch(
-                        checked = cfg.humanLike && humanInstalled,
-                        enabled = humanInstalled,
+                        checked = cfg.humanLike && humanInstalled && cfg.rank == "max",
+                        enabled = humanInstalled && cfg.rank == "max",
                         onCheckedChange = { onCfgChange(cfg.copy(humanLike = it)) }
                     )
                 }

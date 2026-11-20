@@ -110,6 +110,61 @@ fun ReviewScreen(
             if (initialPly in 0..totalMoves) initialPly else totalMoves
         )
     }
+    // Scrub feedback: dragging across the win-rate chart moves the
+    // board move by move, and every move it passes gets the place
+    // sound (softly) and a tiny vibration tick, like riffling
+    // through the game on a real board.
+    val scrubPool = remember {
+        android.media.SoundPool.Builder()
+            .setMaxStreams(2)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_GAME)
+                    .setContentType(
+                        android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION
+                    )
+                    .build()
+            )
+            .build()
+    }
+    val scrubSoundIds = remember {
+        SettingsStore.placeSoundResList(settings.placeSound)
+            .map { scrubPool.load(context, it, 1) }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { scrubPool.release() }
+    }
+    val scrubVibrator = remember {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val vm = context.getSystemService(
+                android.os.VibratorManager::class.java
+            )
+            vm?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(android.content.Context.VIBRATOR_SERVICE)
+                as? android.os.Vibrator
+        }
+    }
+
+    fun scrubTo(newPly: Int) {
+        if (newPly == ply) return
+        ply = newPly
+        if (settings.soundEnabled && scrubSoundIds.isNotEmpty()) {
+            scrubPool.play(
+                scrubSoundIds.random(), 0.35f, 0.35f, 1, 0,
+                1.15f + kotlin.random.Random.nextFloat() * 0.1f
+            )
+        }
+        if (settings.vibrationEnabled) {
+            scrubVibrator?.vibrate(
+                android.os.VibrationEffect.createOneShot(
+                    12,
+                    android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                )
+            )
+        }
+    }
     // Branch ("what-if") exploration: a scratch game forked at the
     // current ply. The main line is never touched.
     var branchGame by remember { mutableStateOf<GoGame?>(null) }
@@ -664,7 +719,7 @@ fun ReviewScreen(
                     ply = ply,
                     marks = marks,
                     showLead = showLead,
-                    onSeek = { ply = it }
+                    onSeek = { scrubTo(it) }
                 )
                 ChartLegend()
             }

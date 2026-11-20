@@ -93,29 +93,7 @@ fun OnboardingScreen(
                 .padding(24.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            RoundedCornerShape(12.dp)
-                        )
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.BottomStart)
-                            .offset(x = 6.dp, y = (-6).dp)
-                            .background(Color(0xFF1A1A1A), CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .align(Alignment.TopEnd)
-                            .offset(x = (-6).dp, y = 6.dp)
-                            .background(Color.White, CircleShape)
-                    )
-                }
+                Mascot(modifier = Modifier.size(46.dp))
                 Spacer(modifier = Modifier.size(12.dp))
                 Text(text = "TuxunGo", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))

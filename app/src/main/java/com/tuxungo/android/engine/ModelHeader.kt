@@ -96,7 +96,8 @@ object TerritoryEstimate {
         ownership: DoubleArray,
         stones: Array<Stone?>,
         width: Int,
-        height: Int
+        height: Int,
+        groupMean: Double = GROUP_MEAN
     ): Set<Int> {
         val n = minOf(ownership.size, stones.size, width * height)
         val dead = mutableSetOf<Int>()
@@ -127,8 +128,8 @@ object TerritoryEstimate {
                 }
             }
             val mean = sum / group.size
-            if ((s == Stone.BLACK && mean < -GROUP_MEAN) ||
-                (s == Stone.WHITE && mean > GROUP_MEAN)
+            if ((s == Stone.BLACK && mean < -groupMean) ||
+                (s == Stone.WHITE && mean > groupMean)
             ) {
                 dead.addAll(group)
             }

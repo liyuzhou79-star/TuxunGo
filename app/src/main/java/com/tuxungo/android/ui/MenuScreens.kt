@@ -81,6 +81,7 @@ fun NavCard(
     desc: String,
     foot: String,
     modifier: Modifier = Modifier,
+    icon: AppIconKind? = null,
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -92,7 +93,7 @@ fun NavCard(
     )
     Card(
         modifier = modifier
-            .height(118.dp)
+            .height(if (icon != null) 148.dp else 118.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale },
         onClick = onClick,
         interactionSource = interaction,
@@ -100,6 +101,14 @@ fun NavCard(
         colors = CardDefaults.cardColors(containerColor = colors.surface)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
+            if (icon != null) {
+                AppIcon(
+                    kind = icon,
+                    modifier = Modifier.size(30.dp),
+                    tint = colors.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = desc, fontSize = 12.sp, color = Color.Gray, maxLines = 2)
@@ -123,6 +132,7 @@ fun MenuCard(
     desc: String,
     foot: String,
     modifier: Modifier = Modifier,
+    icon: AppIconKind? = null,
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -145,6 +155,14 @@ fun MenuCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (icon != null) {
+                AppIcon(
+                    kind = icon,
+                    modifier = Modifier.size(34.dp),
+                    tint = colors.primary
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title, fontSize = 17.sp,
@@ -221,6 +239,7 @@ fun TrainingScreen(
                 desc = "猜 AI 每一步的一选，练棋感和大局观",
                 foot = guessBestFoot,
                 modifier = Modifier.weight(1f),
+                icon = AppIconKind.TARGET,
                 onClick = onOpenGuess
             )
             NavCard(
@@ -232,6 +251,7 @@ fun TrainingScreen(
                     "全部解完，太强了"
                 },
                 modifier = Modifier.weight(1f),
+                icon = AppIconKind.TRAINING,
                 onClick = {
                     onOpenTsumego(if (dailyTsumego >= 0) dailyTsumego else 0)
                 }
@@ -275,6 +295,7 @@ fun ToolsScreen(
                 desc = "收藏的对局都在这里，点开就能复盘",
                 foot = "打开棋谱库",
                 modifier = Modifier.weight(1f),
+                icon = AppIconKind.LIBRARY,
                 onClick = onOpenLibrary
             )
             NavCard(
@@ -282,6 +303,7 @@ fun ToolsScreen(
                 desc = "对局总览、黑白胜负和训练进度",
                 foot = "查看统计",
                 modifier = Modifier.weight(1f),
+                icon = AppIconKind.STATS,
                 onClick = onOpenStats
             )
         }
@@ -290,6 +312,7 @@ fun ToolsScreen(
             title = "AI 模型",
             desc = "导入更强的 KataGo 模型，或给模型测速",
             foot = "当前模型：$activeModelName",
+            icon = AppIconKind.CHIP,
             onClick = onOpenModels
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -297,6 +320,7 @@ fun ToolsScreen(
             title = "实体棋盘棋钟",
             desc = "两个人用真棋盘下棋，手机当棋钟：下完一步点自己这边",
             foot = "打开棋钟",
+            icon = AppIconKind.CLOCK,
             onClick = onOpenPhysicalClock
         )
     }

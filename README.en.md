@@ -26,6 +26,7 @@ vs AI games, or play a friend on the same phone.
 - **Three modes**: human vs AI, AI vs AI, human vs human (same device)
 - **AI hosting**: hand either color — or both — to the AI at any moment, each side with its **own model and strength** (e.g. the light model on one side, the strong model on the other), switchable mid-game
 - **Human-like play**: a per-side switch in the AI hosting panel. Move choices come from a model trained on human game records, in the style of a top human player, while the strong search vetoes outright blunders — it plays like a human, but never deliberately plays a bad move, and its thinking strength is not reduced
+- **AI rank capping**: cap the AI anywhere from 18 kyu to 9 dan (or Max for full strength). Capped play imitates a model trained on human games of that rank — it makes the mistakes that rank makes, rather than a strong engine pretending to be weak — for evenly matched practice, in human-vs-AI and AI-vs-AI (each side capped separately)
 - **Free-form boards**: 5–25 points per side, rectangular boards included; handicap and komi are free numeric inputs
 - **Position editor**: set up any position by hand, then start from it with either color
 - **Fullscreen mode**: board at maximum size with just analysis controls — ideal for spectating AI games

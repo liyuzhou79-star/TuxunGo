@@ -20,7 +20,23 @@ data class AppSettings(
     /** Keep the screen awake while a game is on screen. */
     val keepScreenOn: Boolean = false,
     /** Draw move numbers on the stones during a game. */
-    val showMoveNumbers: Boolean = false
+    val showMoveNumbers: Boolean = false,
+    // ---- Position judgment (形势判断) tuning ----
+    /** Visits for the in-game judgment / scoring analysis. */
+    val judgeVisits: Int = 800,
+    /** Territory colouring starts at this ownership strength (0.05..0.6):
+     *  higher = only settled territory is coloured (less "spread"). */
+    val territorySpread: Float = 0.30f,
+    /** Territory colouring strength multiplier (0.4..1.0). */
+    val territoryIntensity: Float = 1.0f,
+    /** Dead-stone strictness: conservative / standard / bold. */
+    val deadStrictness: String = "standard",
+    /** Judgment panel: show the per-side count breakdown lines. */
+    val judgeShowDetail: Boolean = true,
+    /** Judgment panel: show the black/white score proportion bar. */
+    val judgeShowBar: Boolean = true,
+    /** Judgment panel: show the confidence line. */
+    val judgeShowConfidence: Boolean = true
 )
 
 object SettingsStore {
@@ -58,6 +74,26 @@ object SettingsStore {
         "slow" to "慢"
     )
 
+    val JUDGE_VISITS = listOf(
+        300 to "快速",
+        800 to "标准",
+        1500 to "精准"
+    )
+
+    val DEAD_STRICTNESS = listOf(
+        "conservative" to "保守（拿不准就不判死）",
+        "standard" to "标准",
+        "bold" to "大胆（更积极判死）"
+    )
+
+    /** Group-mean ownership (against the owner) above which a group is
+     *  judged dead, per strictness setting. */
+    fun deadGroupMean(strictness: String): Double = when (strictness) {
+        "conservative" -> 0.45
+        "bold" -> 0.25
+        else -> 0.35
+    }
+
     val BOARD_SKINS = listOf(
         "wood_light" to "榧木纹（浅）",
         "wood_dark" to "胡桃木（深）",
@@ -81,7 +117,14 @@ object SettingsStore {
             accent = p.getString("accent", "sakura") ?: "sakura",
             autoVisits = p.getInt("autoVisits", 80),
             keepScreenOn = p.getBoolean("keepScreenOn", false),
-            showMoveNumbers = p.getBoolean("showMoveNumbers", false)
+            showMoveNumbers = p.getBoolean("showMoveNumbers", false),
+            judgeVisits = p.getInt("judgeVisits", 800),
+            territorySpread = p.getFloat("territorySpread", 0.30f),
+            territoryIntensity = p.getFloat("territoryIntensity", 1.0f),
+            deadStrictness = p.getString("deadStrictness", "standard") ?: "standard",
+            judgeShowDetail = p.getBoolean("judgeShowDetail", true),
+            judgeShowBar = p.getBoolean("judgeShowBar", true),
+            judgeShowConfidence = p.getBoolean("judgeShowConfidence", true)
         )
     }
 
@@ -99,6 +142,13 @@ object SettingsStore {
             .putInt("autoVisits", s.autoVisits)
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("showMoveNumbers", s.showMoveNumbers)
+            .putInt("judgeVisits", s.judgeVisits)
+            .putFloat("territorySpread", s.territorySpread)
+            .putFloat("territoryIntensity", s.territoryIntensity)
+            .putString("deadStrictness", s.deadStrictness)
+            .putBoolean("judgeShowDetail", s.judgeShowDetail)
+            .putBoolean("judgeShowBar", s.judgeShowBar)
+            .putBoolean("judgeShowConfidence", s.judgeShowConfidence)
             .apply()
     }
 

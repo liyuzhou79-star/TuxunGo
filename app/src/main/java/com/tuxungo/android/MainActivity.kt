@@ -416,12 +416,12 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 强力模型改为免费按需下载，安装包瘦身近 100 MB\n" +
-                "· 形势判断全面升级：目数明细、比例条、可信度，领地按归属深浅着色\n" +
-                "· AI 推荐落点新增人类一选（蓝圈），猜一选里也能看到\n" +
-                "· 新增猜先：开局前按老规矩决定谁执黑\n" +
-                "· 主页全面简化：细调项都收进「对局设置」\n" +
-                "· 所有模型都能删除腾空间，预装的删了可免费恢复",
+            whatsNew = "· 性能全面优化：AI 分析先出暂定一选再逐步精确，长局更流畅\n" +
+                "· AI 棋力定级：18 级到 9 段再到 Max，按真人棋风对等陪练\n" +
+                "· 吉祥物登场，菜单有了统一图标，空页面也有图形了\n" +
+                "· 设置按类别分成二级页，另有「形势判断」专页可细调领地着色\n" +
+                "· 复盘胜率图拖动逐手有落子声和震动反馈\n" +
+                "· 小彩蛋：连点主页吉祥物五次试试",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

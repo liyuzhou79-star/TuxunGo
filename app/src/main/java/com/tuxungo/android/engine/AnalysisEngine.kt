@@ -158,7 +158,8 @@ class AnalysisEngine private constructor(
         moves: List<Move>,
         sideToMove: Stone,
         maxVisits: Int,
-        timeoutSeconds: Long = 120
+        timeoutSeconds: Long = 120,
+        onProvisional: ((AnalysisResult) -> Unit)? = null
     ): AnalysisResult {
         check(isAlive) { "分析引擎未运行。${diagnostics()}" }
         val id = "q${nextId++}"
@@ -171,6 +172,13 @@ class AnalysisEngine private constructor(
         query.put("maxVisits", maxVisits)
         query.put("includeOwnership", true)
         query.put("includePolicy", true)
+        if (onProvisional != null) {
+            // Stream partial results while the search runs, so the UI
+            // can show a provisional top move almost immediately and
+            // refine it (verified locally against v1.15.3: replies
+            // with isDuringSearch=true carry the same shape).
+            query.put("reportDuringSearchEvery", 0.3)
+        }
         if (humanEnabled) {
             query.put(
                 "overrideSettings",
@@ -218,7 +226,15 @@ class AnalysisEngine private constructor(
             if (resp.has("error")) {
                 throw IllegalStateException("分析引擎报错：${resp.optString("error")} ${diagnostics()}")
             }
-            if (resp.optBoolean("isDuringSearch", false)) continue
+            if (resp.optBoolean("isDuringSearch", false)) {
+                if (onProvisional != null) {
+                    try {
+                        onProvisional(parseResult(resp, size, sideToMove))
+                    } catch (_: Exception) {
+                    }
+                }
+                continue
+            }
             return parseResult(resp, size, sideToMove)
         }
     }

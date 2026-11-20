@@ -235,7 +235,8 @@ class KataEngine private constructor(
          */
         fun start(
             nativeLibDir: String, workDir: File, modelFile: File,
-            maxVisits: Int, humanModelFile: File? = null
+            maxVisits: Int, humanModelFile: File? = null,
+            rankProfile: String? = null
         ): KataEngine {
             val binary = File(nativeLibDir, "libkatago.so")
             check(binary.exists()) { "KataGo binary missing: ${binary.absolutePath}" }
@@ -251,11 +252,20 @@ class KataEngine private constructor(
             // both present, and when any of logAllGTPCommunication,
             // logSearchInfo, koRule, scoringRule or multiStoneSuicideLegal
             // is missing. Do not trim keys casually.
+            // Two human-model modes share this key set (verified
+            // locally against v1.15.3 in both): "human-like" blends
+            // the top human profile with a strong-search veto
+            // (PiklLambda 0.08, never plays a blunder on purpose),
+            // while a rank profile plays PURE imitation at that
+            // rank (PiklLambda huge: the search cannot rescue the
+            // move choice, so the strength — mistakes included —
+            // genuinely matches the rank the human model was
+            // trained on).
             val humanKeys = if (humanModelFile == null) "" else """
-                humanSLProfile = rank_9d
+                humanSLProfile = ${rankProfile ?: "rank_9d"}
                 humanSLChosenMoveProp = 1.0
                 humanSLChosenMoveIgnorePass = true
-                humanSLChosenMovePiklLambda = 0.08
+                humanSLChosenMovePiklLambda = ${if (rankProfile != null) "100000000" else "0.08"}
                 humanSLRootExploreProbWeightless = 0.8
                 humanSLCpuctExploration = 0.50
                 humanSLCpuctPermanent = 2.0

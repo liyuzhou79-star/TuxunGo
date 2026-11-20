@@ -3,6 +3,7 @@ package com.tuxungo.android.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -90,6 +91,14 @@ fun SetupScreen(
         )
     }
     var aiVisits by remember { mutableIntStateOf(setupPrefs.getInt("aiVisits", 200)) }
+    var aiRank by remember {
+        mutableStateOf(setupPrefs.getString("aiRank", "max") ?: "max")
+    }
+    var rankMenuOpen by remember { mutableStateOf(false) }
+    // Mascot easter egg: five quick taps open the lifetime stats.
+    var mascotTaps by remember { mutableIntStateOf(0) }
+    var lastMascotTap by remember { mutableStateOf(0L) }
+    var showEgg by remember { mutableStateOf(false) }
     var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
     var seriesTarget by remember { mutableIntStateOf(setupPrefs.getInt("seriesTarget", 0)) }
     var focusMode by remember { mutableStateOf(setupPrefs.getBoolean("focusMode", false)) }
@@ -106,7 +115,7 @@ fun SetupScreen(
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
-        clockMinutes, byoyomiPeriods, seriesTarget, focusMode, oneColor
+        clockMinutes, byoyomiPeriods, seriesTarget, focusMode, oneColor, aiRank
     ) {
         setupPrefs.edit()
             .putString("mode", mode.name)
@@ -121,6 +130,7 @@ fun SetupScreen(
             .putInt("seriesTarget", seriesTarget)
             .putBoolean("focusMode", focusMode)
             .putBoolean("oneColor", oneColor)
+            .putString("aiRank", aiRank)
             .apply()
     }
 
@@ -151,6 +161,16 @@ fun SetupScreen(
             if (mode == GameMode.EVE && seriesTarget > 0) {
                 com.tuxungo.android.SeriesStore.reset(context)
             }
+            if (mode == GameMode.PVE) {
+                // The chosen rank cap applies to the AI's side.
+                val aiStone = humanStone.other()
+                val cur = com.tuxungo.android.engine.SideAiStore.load(
+                    context, aiStone, aiVisits
+                )
+                com.tuxungo.android.engine.SideAiStore.save(
+                    context, aiStone, cur.copy(rank = aiRank, visits = aiVisits)
+                )
+            }
             onStart(
                 GameConfig(
                     mode, width, height, effectiveHandicap,
@@ -179,31 +199,25 @@ fun SetupScreen(
             .padding(20.dp)
     ) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            // Logo block: theme-colored tile with a black and a
-            // white stone, echoing the app icon.
-            Box(
+            // The mascot. Five quick taps in a row open the
+            // hidden lifetime-stats page (an easter egg).
+            Mascot(
                 modifier = Modifier
-                    .size(54.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primary,
-                        RoundedCornerShape(15.dp)
-                    )
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .align(androidx.compose.ui.Alignment.BottomStart)
-                        .offset(x = 8.dp, y = (-8).dp)
-                        .background(Color(0xFF1A1A1A), CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .align(androidx.compose.ui.Alignment.TopEnd)
-                        .offset(x = (-8).dp, y = 8.dp)
-                        .background(Color.White, CircleShape)
-                )
-            }
+                    .size(56.dp)
+                    .clickable {
+                        val now = System.currentTimeMillis()
+                        mascotTaps = if (now - lastMascotTap > 1500) {
+                            1
+                        } else {
+                            mascotTaps + 1
+                        }
+                        lastMascotTap = now
+                        if (mascotTaps >= 5) {
+                            mascotTaps = 0
+                            showEgg = true
+                        }
+                    }
+            )
             Spacer(modifier = Modifier.width(14.dp))
             Column {
                 Text(text = "TuxunGo", fontSize = 27.sp, fontWeight = FontWeight.Bold)
@@ -218,41 +232,6 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
-
-        if (!showDetail) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "快速开始", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    onStart(GameConfig(mode = GameMode.PVE, width = 9, height = 9, aiVisits = 200))
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("9 路快棋") }
-            Button(
-                onClick = {
-                    onStart(GameConfig(mode = GameMode.PVE, width = 19, height = 19, aiVisits = 200))
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("19 路标准局") }
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    onStart(GameConfig(mode = GameMode.EVE, width = 19, height = 19, aiVisits = 200))
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("AI 表演赛") }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "一键开局，参数按常用配置设好；想细调可以进下面的「对局设置」。", fontSize = 12.sp, color = Color.Gray)
-        }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        }
 
         if (showDetail) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -339,6 +318,35 @@ fun SetupScreen(
                 FilterChip(selected = aiVisits == 200, onClick = { aiVisits = 200 }, label = { Text("中等") })
                 FilterChip(selected = aiVisits == 800, onClick = { aiVisits = 800 }, label = { Text("困难") })
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = "AI 棋力定级", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { rankMenuOpen = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("棋力：${com.tuxungo.android.engine.SideAiStore.rankLabel(aiRank)}") }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = rankMenuOpen,
+                    onDismissRequest = { rankMenuOpen = false }
+                ) {
+                    for (r in com.tuxungo.android.engine.SideAiStore.RANKS) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = {
+                                Text(com.tuxungo.android.engine.SideAiStore.rankLabel(r))
+                            },
+                            onClick = {
+                                rankMenuOpen = false
+                                aiRank = r
+                            }
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "定级后，AI 按这个级别的真人棋风下棋，会犯这个级别常犯的错，不是故意乱下；Max 为全部实力。局内的「AI 托管」面板里也能随时改，AI 对 AI 时双方可以分别定级。",
+                fontSize = 12.sp, color = Color.Gray
+            )
         }
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -521,6 +529,7 @@ fun SetupScreen(
             title = "对局设置",
             desc = "模式 · 棋盘 · 让子贴目 · 棋钟 · 猜先",
             foot = "当前：$configSummary",
+            icon = AppIconKind.SETTINGS,
             onClick = { showDetail = true }
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -528,6 +537,7 @@ fun SetupScreen(
             title = "训练",
             desc = "猜一选 · 死活题，慢慢涨棋",
             foot = "今日一题和错题本都在这里",
+            icon = AppIconKind.TRAINING,
             onClick = onOpenTraining
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -535,6 +545,7 @@ fun SetupScreen(
             title = "资料与工具",
             desc = "棋谱库 · 我的数据 · AI 模型 · 实体棋盘棋钟",
             foot = "当前模型：$activeModelName",
+            icon = AppIconKind.LIBRARY,
             onClick = onOpenTools
         )
         if (recentGames.isNotEmpty()) {
@@ -590,6 +601,10 @@ fun SetupScreen(
             onDismiss = { showNigiri = false },
             onPveResult = { stone -> humanStone = stone }
         )
+    }
+
+    if (showEgg) {
+        EggStatsDialog(onDismiss = { showEgg = false })
     }
 
     if (showUnsupportedDialog) {
@@ -804,6 +819,113 @@ private fun NigiriDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+/** One label/value row of the easter-egg stats page. */
+@Composable
+private fun EggRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(text = label, fontSize = 13.sp, color = Color.Gray, modifier = Modifier.weight(1f))
+        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun EggSection(title: String) {
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C))
+    Spacer(modifier = Modifier.height(2.dp))
+}
+
+/**
+ * The mascot easter egg: five quick taps on the home mascot open
+ * this lifetime record — every stone played, every game opened,
+ * black/white win rates and the training numbers, grouped in
+ * sections. Data comes from the game library (finished games are
+ * auto-saved there) and the training stores.
+ */
+@Composable
+private fun EggStatsDialog(onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val games = remember { com.tuxungo.android.LibraryStore.listGames(context) }
+    val totalMoves = games.sumOf { it.moves.size }
+    val blackWins = games.count { it.resultText.startsWith("黑") }
+    val whiteWins = games.count { it.resultText.startsWith("白") }
+    val decided = blackWins + whiteWins
+    val unfinished = games.size - decided
+    val longest = games.maxByOrNull { it.moves.size }
+    val avgMoves = if (games.isNotEmpty()) totalMoves / games.size else 0
+    fun pct(n: Int): String =
+        if (decided > 0) String.format("%.1f%%", n * 100.0 / decided) else "—"
+    val tsumegoPrefs = remember {
+        context.getSharedPreferences("tsumego_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    val solvedCount = (tsumegoPrefs.getString("solved", "") ?: "")
+        .split(",").count { it.isNotBlank() }
+    var tsumegoMiss = 0
+    for (i in TSUMEGO_PROBLEMS.indices) {
+        tsumegoMiss += tsumegoPrefs.getInt("miss_$i", 0)
+    }
+    val guessPrefs = remember {
+        context.getSharedPreferences("guess_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    val guessBest = guessPrefs.getInt("bestScore", 0)
+    val guessStreak = guessPrefs.getInt("bestStreak", 0)
+    val guessMistakes = (guessPrefs.getString("mistakes", "") ?: "")
+        .split("|").count { it.isNotBlank() }
+    val byMode = games.groupBy { it.modeLabel }
+        .entries.sortedByDescending { it.value.size }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Mascot(modifier = Modifier.size(40.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("彩蛋 · 你的围棋档案", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "连点吉祥物五次找到的隐藏页，记录你在这个 App 里的全部战绩。",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+                EggSection("对局")
+                EggRow("累计对局", "${games.size} 局")
+                EggRow("累计落子", "$totalMoves 子")
+                EggRow("平均每局", "$avgMoves 手")
+                EggRow(
+                    "最长一局",
+                    longest?.let { "${it.moves.size} 手（${it.title}）" } ?: "—"
+                )
+                EggSection("胜负（已分胜负 $decided 局）")
+                EggRow("黑方胜", "$blackWins 局 · ${pct(blackWins)}")
+                EggRow("白方胜", "$whiteWins 局 · ${pct(whiteWins)}")
+                EggRow("未分胜负", "$unfinished 局")
+                if (byMode.isNotEmpty()) {
+                    EggSection("各模式")
+                    for ((label, list) in byMode) {
+                        EggRow(label, "${list.size} 局 · ${list.sumOf { it.moves.size }} 子")
+                    }
+                }
+                EggSection("训练")
+                EggRow("死活题已解", "$solvedCount / ${TSUMEGO_PROBLEMS.size} 题")
+                EggRow("死活题累计错次", "$tsumegoMiss 次")
+                EggRow("猜一选最高分", "$guessBest 分")
+                EggRow("猜一选最高连对", "$guessStreak 题")
+                EggRow("猜一选错题待复习", "$guessMistakes 题")
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "数据来自棋谱库（已结束的对局会自动保存）和训练记录。",
+                    fontSize = 11.sp, color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
         }
     )
 }
