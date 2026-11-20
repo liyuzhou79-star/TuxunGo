@@ -150,6 +150,8 @@ fun LibraryScreen(
         exportedNote = "已复制「${g.title}」的 SGF 到剪贴板"
     }
     var deleteFolderTarget by remember { mutableStateOf<String?>(null) }
+    var renameFolderTarget by remember { mutableStateOf<LibraryFolder?>(null) }
+    var renameFolderText by remember { mutableStateOf("") }
 
     fun refresh() {
         folders = LibraryStore.listFolders(context)
@@ -246,8 +248,16 @@ fun LibraryScreen(
         }
         val selectedFolder = folders.firstOrNull { it.id == selected }
         if (selectedFolder != null) {
-            TextButton(onClick = { deleteFolderTarget = selectedFolder.id }) {
-                Text("删除文件夹「${selectedFolder.name}」（里面的棋谱会移到未分类）", fontSize = 12.sp)
+            Row {
+                TextButton(
+                    onClick = {
+                        renameFolderTarget = selectedFolder
+                        renameFolderText = selectedFolder.name
+                    }
+                ) { Text("重命名文件夹", fontSize = 12.sp) }
+                TextButton(onClick = { deleteFolderTarget = selectedFolder.id }) {
+                    Text("删除文件夹（棋谱移到未分类）", fontSize = 12.sp)
+                }
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -320,6 +330,34 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolder = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (renameFolderTarget != null) {
+        val target = renameFolderTarget!!
+        AlertDialog(
+            onDismissRequest = { renameFolderTarget = null },
+            title = { Text("重命名文件夹") },
+            text = {
+                OutlinedTextField(
+                    value = renameFolderText,
+                    onValueChange = { renameFolderText = it },
+                    label = { Text("文件夹名") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        LibraryStore.renameFolder(context, target.id, renameFolderText)
+                        renameFolderTarget = null
+                        refresh()
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameFolderTarget = null }) { Text("取消") }
             }
         )
     }

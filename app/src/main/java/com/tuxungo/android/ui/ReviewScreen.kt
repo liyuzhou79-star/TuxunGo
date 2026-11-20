@@ -124,6 +124,7 @@ fun ReviewScreen(
     var branchVersion by remember { mutableIntStateOf(0) }
     var showBranchSave by remember { mutableStateOf(false) }
     var showBest by remember { mutableStateOf(true) }
+    var showLead by remember { mutableStateOf(true) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var savedNote by remember { mutableStateOf(false) }
     var sgfCopied by remember { mutableStateOf(false) }
@@ -571,6 +572,12 @@ fun ReviewScreen(
                 onClick = { showBest = !showBest },
                 label = { Text("显示一选") }
             )
+            Spacer(modifier = Modifier.padding(start = 8.dp))
+            FilterChip(
+                selected = showLead,
+                onClick = { showLead = !showLead },
+                label = { Text("显示目差") }
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -581,6 +588,7 @@ fun ReviewScreen(
                     perspective = perspective,
                     ply = ply,
                     marks = marks,
+                    showLead = showLead,
                     onSeek = { ply = it }
                 )
                 ChartLegend()
@@ -777,6 +785,7 @@ private fun WinrateChart(
     perspective: Stone,
     ply: Int,
     marks: List<MoveMark>,
+    showLead: Boolean = true,
     onSeek: (Int) -> Unit
 ) {
     val total = (turns.size - 1).coerceAtLeast(1)
@@ -846,18 +855,20 @@ private fun WinrateChart(
         if (runStart >= 0) flushRun(turns.size - 1)
 
         // Score-lead line (perspective-adjusted).
-        val leadPath = Path()
-        for (t in turns.indices) {
-            val lead = if (perspective == Stone.BLACK) {
-                turns[t].scoreLeadBlack
-            } else {
-                -turns[t].scoreLeadBlack
+        if (showLead) {
+            val leadPath = Path()
+            for (t in turns.indices) {
+                val lead = if (perspective == Stone.BLACK) {
+                    turns[t].scoreLeadBlack
+                } else {
+                    -turns[t].scoreLeadBlack
+                }
+                val x = xOf(t)
+                val y = yLead(lead)
+                if (t == 0) leadPath.moveTo(x, y) else leadPath.lineTo(x, y)
             }
-            val x = xOf(t)
-            val y = yLead(lead)
-            if (t == 0) leadPath.moveTo(x, y) else leadPath.lineTo(x, y)
+            drawPath(leadPath, leadColor, style = Stroke(width = 2.5f))
         }
-        drawPath(leadPath, leadColor, style = Stroke(width = 2.5f))
 
         // Win-rate line.
         val wrPath = Path()

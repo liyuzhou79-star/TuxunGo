@@ -70,6 +70,16 @@ object LibraryStore {
         return folder
     }
 
+    fun renameFolder(context: Context, folderId: String, newName: String) {
+        val name = newName.trim().ifBlank { return }
+        saveFolders(
+            context,
+            listFolders(context).map {
+                if (it.id == folderId) it.copy(name = name) else it
+            }
+        )
+    }
+
     fun deleteFolder(context: Context, folderId: String) {
         saveFolders(context, listFolders(context).filter { it.id != folderId })
         // Games in the folder become uncategorized, never deleted.

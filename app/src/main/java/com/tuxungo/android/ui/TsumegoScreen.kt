@@ -148,6 +148,25 @@ val TSUMEGO_PROBLEMS: List<TsumegoProblem> = listOf(
         hint = "直三的眼位，关键在正中间：占住中间一点，就把一个大眼分成两个小眼。下在边上，黑棋扑进来提掉扑入子再回提，整块就没了。",
         doneText = "中间一点把直三眼位分成两个真眼，黑棋哪个眼都进不去，这块白棋活了。",
         userWhite = true
+    ),
+    TsumegoProblem(
+        title = "第七题 · 倒脱靴",
+        goal = "黑先，提掉这块白棋",
+        level = "中级",
+        width = 5, height = 5,
+        black = listOf(0 to 3, 1 to 3, 2 to 3, 3 to 3, 4 to 3),
+        white = listOf(
+            0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0,
+            0 to 1, 4 to 1,
+            0 to 2, 1 to 2, 2 to 2, 3 to 2, 4 to 2,
+            1 to 1
+        ),
+        steps = listOf(
+            TsumegoStep(setOf(2 to 1), 3 to 1),
+            TsumegoStep(setOf(2 to 1), null)
+        ),
+        hint = "先扑一子进眼位：白棋提掉这颗扑入子之后，它留下的空点就是整块白棋的最后一口气。",
+        doneText = "扑入、被提、再回到同一点回提——倒脱靴。白棋提掉一子，反而把自己最后一口气让了出来，十三子全提。"
     )
 )
 
