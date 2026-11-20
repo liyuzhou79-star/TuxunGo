@@ -274,6 +274,62 @@ fun ReviewScreen(
         }
     }
 
+    // Territory (ownership) overlay for the position at the
+    // current ply, computed on demand with a one-off analysis.
+    var territory by remember { mutableStateOf<FloatArray?>(null) }
+    var territoryPly by remember { mutableIntStateOf(-1) }
+    var territoryBusy by remember { mutableStateOf(false) }
+
+    fun toggleTerritory() {
+        if (territoryPly == ply && territory != null) {
+            territory = null
+            territoryPly = -1
+            return
+        }
+        if (territoryBusy || analyzing) return
+        territoryBusy = true
+        val g = current
+        val atPly = ply
+        runner.execute {
+            var eng: AnalysisEngine? = null
+            try {
+                eng = AnalysisEngine.start(
+                    context.applicationInfo.nativeLibraryDir,
+                    EngineAssets.engineWorkDir(context),
+                    ModelStore.resolveActiveFile(context)
+                )
+                val initPlayer = when {
+                    g.customStones.isNotEmpty() -> g.startPlayer
+                    g.handicap > 0 -> Stone.WHITE
+                    else -> Stone.BLACK
+                }
+                val res = eng.analyze(
+                    size = g.size,
+                    komi = g.komi,
+                    initialStones = setupStonesOf(g),
+                    initialPlayer = initPlayer,
+                    moves = g.moves.take(atPly),
+                    sideToMove = if (atPly == 0) {
+                        initPlayer
+                    } else {
+                        g.moves[atPly - 1].stone.other()
+                    },
+                    maxVisits = 300
+                )
+                territory = res.ownershipBlack
+                territoryPly = atPly
+            } catch (e: Exception) {
+                errorText = "领地分析失败：${e.message ?: "未知错误"}"
+            } finally {
+                try {
+                    eng?.quit()
+                } catch (_: Exception) {
+                }
+                territoryBusy = false
+            }
+        }
+    }
+
     LaunchedEffect(current.id) {
         // A handful of missing turns fills in automatically; a big gap
         // (a library game with no live-recorded stats) lets the user
@@ -526,7 +582,9 @@ fun ReviewScreen(
                 showCoordinates = settings.showCoordinates,
                 territoryThreshold = 0.5,
                 candidates = bestMark,
-                ownership = null,
+                ownership = if (territoryPly == ply) territory else null,
+                territorySpread = settings.territorySpread,
+                territoryIntensity = settings.territoryIntensity,
                 pvGhost = if (ply < totalMoves) {
                     turns?.getOrNull(ply)?.let { st ->
                         ReviewMath.parsePv(st.bestPv, current.size, replayGame.current)
@@ -708,6 +766,31 @@ fun ReviewScreen(
                 onClick = { showLead = !showLead },
                 label = { Text("显示目差") }
             )
+        }
+        Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = territoryPly == ply && territory != null,
+                onClick = { toggleTerritory() },
+                label = {
+                    Text(
+                        when {
+                            territoryBusy -> "领地计算中…"
+                            territoryPly == ply && territory != null -> "隐藏领地"
+                            else -> "看这步的领地"
+                        }
+                    )
+                },
+                enabled = !territoryBusy && !analyzing
+            )
+            if (territoryPly == ply && territory != null) {
+                Spacer(modifier = Modifier.padding(start = 8.dp))
+                Text(
+                    "第 $ply 手时的地盘归属（按你的判断设置着色）",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
 

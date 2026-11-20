@@ -1,5 +1,6 @@
 package com.tuxungo.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -238,6 +239,17 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
     var missTotal by remember {
         mutableIntStateOf(prefs.getInt("miss_0", 0))
     }
+    // Timed challenge: all problems in random order, 90 seconds
+    // each; the run's score is how many get solved in time.
+    var challengeMode by remember { mutableStateOf(false) }
+    var challengeQueue by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var challengePos by remember { mutableIntStateOf(0) }
+    var challengeSolved by remember { mutableIntStateOf(0) }
+    var challengeLeft by remember { mutableIntStateOf(90) }
+    var challengeOver by remember { mutableStateOf(false) }
+    var challengeBest by remember {
+        mutableIntStateOf(prefs.getInt("challengeBest", 0))
+    }
 
     fun reset(idx: Int) {
         index = idx
@@ -259,6 +271,32 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         } else {
             "轮到黑棋下：点棋盘选点，再点一次确认。"
         }
+    }
+
+    fun challengeNext() {
+        val nextPos = challengePos + 1
+        challengePos = nextPos
+        if (nextPos >= challengeQueue.size) {
+            challengeOver = true
+            if (challengeSolved > challengeBest) {
+                challengeBest = challengeSolved
+                prefs.edit().putInt("challengeBest", challengeSolved).apply()
+            }
+        } else {
+            challengeLeft = 90
+            reset(challengeQueue[nextPos])
+        }
+    }
+
+    fun startChallenge() {
+        challengeQueue = TSUMEGO_PROBLEMS.indices.shuffled()
+        challengePos = 0
+        challengeSolved = 0
+        challengeOver = false
+        challengeMode = true
+        challengeLeft = 90
+        reset(challengeQueue[0])
+        statusText = "挑战开始！90 秒内解出这题，解不出会自动跳下一题。"
     }
 
     // The app answers with the scripted reply after a correct move.
@@ -295,6 +333,33 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         statusText = "这就是正解。点「自己试一次」亲手走一遍，记得更牢。"
     }
 
+    // Challenge countdown: one second at a time; running out
+    // skips to the next problem in the queue.
+    LaunchedEffect(challengeMode, challengeOver, index, solved) {
+        if (!challengeMode || challengeOver || solved) {
+            return@LaunchedEffect
+        }
+        while (challengeLeft > 0) {
+            delay(1000)
+            challengeLeft--
+        }
+        if (!solved && !challengeOver) {
+            statusText = "时间到，这题先跳过——挑战继续。"
+            delay(900)
+            // The user may have solved it during the pause; the
+            // auto-advance effect owns that path.
+            if (!solved && !challengeOver) challengeNext()
+        }
+    }
+
+    // Challenge auto-advance shortly after a solve.
+    LaunchedEffect(solved, challengeMode, challengeOver) {
+        if (challengeMode && solved && !challengeOver) {
+            delay(1400)
+            challengeNext()
+        }
+    }
+
     @Suppress("UNUSED_EXPRESSION")
     version
 
@@ -325,9 +390,70 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                     val pool = unsolved.ifEmpty { TSUMEGO_PROBLEMS.indices.toList() }
                     val pick = pool.random()
                     if (pick != index) reset(pick) else reset(index)
-                }
+                },
+                enabled = !challengeMode
             ) { Text("随机一题") }
-            TextButton(onClick = { showPicker = true }) { Text("选题") }
+            TextButton(
+                onClick = { showPicker = true },
+                enabled = !challengeMode
+            ) { Text("选题") }
+        }
+        if (challengeMode) {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (challengeOver) {
+                        "挑战结束：${challengeQueue.size} 题解出 $challengeSolved 题 · 最佳 $challengeBest 题"
+                    } else {
+                        "限时挑战 · 第 ${challengePos + 1}/${challengeQueue.size} 题 · 已解 $challengeSolved · 剩 $challengeLeft 秒"
+                    },
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF2F7CF6),
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = {
+                        challengeMode = false
+                        challengeOver = false
+                    }
+                ) { Text("退出挑战") }
+            }
+            if (!challengeOver) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(6.dp)
+                        .background(Color.Gray.copy(alpha = 0.25f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(challengeLeft / 90f)
+                            .height(6.dp)
+                            .background(
+                                if (challengeLeft <= 15) {
+                                    Color(0xFFB03A2E)
+                                } else {
+                                    Color(0xFF2F7CF6)
+                                }
+                            )
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        } else {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "限时挑战：全部题目随机顺序，每题 90 秒" +
+                        if (challengeBest > 0) " · 最佳 $challengeBest 题" else "",
+                    fontSize = 12.sp, color = Color.Gray,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { startChallenge() }) {
+                    Text("开始挑战")
+                }
+            }
         }
         if (solvedSet.size == TSUMEGO_PROBLEMS.size) {
             Text(
@@ -369,7 +495,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 }
                 FilterChip(
                     selected = index == i,
-                    onClick = { if (index != i) reset(i) },
+                    onClick = { if (index != i && !challengeMode) reset(i) },
                     label = { Text("第 ${i + 1} 题" + if (i in solvedSet) " ✓" else "") }
                 )
             }
@@ -377,12 +503,12 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         Row(modifier = Modifier.fillMaxWidth()) {
             TextButton(
                 onClick = { reset(index - 1) },
-                enabled = index > 0
+                enabled = index > 0 && !challengeMode
             ) { Text("‹ 上一题") }
             Spacer(modifier = Modifier.weight(1f))
             TextButton(
                 onClick = { reset(index + 1) },
-                enabled = index < TSUMEGO_PROBLEMS.size - 1
+                enabled = index < TSUMEGO_PROBLEMS.size - 1 && !challengeMode
             ) { Text("下一题 ›") }
         }
         Text(
@@ -434,6 +560,9 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                         version++
                         if (step >= problem.steps.size - 1) {
                             solved = true
+                            if (challengeMode && !challengeOver) {
+                                challengeSolved++
+                            }
                             val secs = ((System.currentTimeMillis() - startedAt) / 1000)
                                 .toInt().coerceAtLeast(1)
                             val bestKey = "best_$index"
@@ -491,7 +620,16 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         Spacer(modifier = Modifier.height(10.dp))
 
         if (solved) {
-            if (index < TSUMEGO_PROBLEMS.size - 1) {
+            if (challengeMode) {
+                Text(
+                    text = if (challengeOver) {
+                        "挑战完成！这一轮解出 $challengeSolved 题。"
+                    } else {
+                        "答对了！马上进入下一题…"
+                    },
+                    fontSize = 14.sp, color = Color(0xFF2E7D32)
+                )
+            } else if (index < TSUMEGO_PROBLEMS.size - 1) {
                 Button(
                     onClick = { reset(index + 1) },
                     modifier = Modifier.fillMaxWidth()
@@ -527,7 +665,8 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                         hintPoint = null
                         demoMode = true
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = !challengeMode
                 ) { Text("演示正解") }
                 OutlinedButton(
                     onClick = { reset(index) },

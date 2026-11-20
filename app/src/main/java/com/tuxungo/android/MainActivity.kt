@@ -440,10 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 猜一选能用你自己的棋谱出题了：题目来源选「我的棋谱」\n" +
-                "· 点一下对局里的走势小图，能打开大图看胜率和目数差\n" +
-                "· 设置里可开「终局自动存图」：下完自动把终局局面存进相册\n" +
-                "· 棋谱库点缩略图就能直接进复盘",
+            whatsNew = "· 死活题有限时挑战了：全部题目随机顺序，每题 90 秒，超时自动跳题\n" +
+                "· 复盘能看任意一手当时的领地了：点「看这步的领地」，棋盘按归属着色",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
