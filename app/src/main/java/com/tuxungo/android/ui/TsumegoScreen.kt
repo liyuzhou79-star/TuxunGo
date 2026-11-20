@@ -257,6 +257,15 @@ fun TsumegoScreen(onBack: () -> Unit) {
                 }
             ) { Text("随机一题") }
         }
+        if (solvedSet.size == TSUMEGO_PROBLEMS.size) {
+            Text(
+                text = "全部 ${TSUMEGO_PROBLEMS.size} 道题都解开了，厉害！新题会陆续加入。",
+                fontSize = 13.sp,
+                color = Color(0xFF2E7D32),
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
         Spacer(modifier = Modifier.height(6.dp))
         Row(
             modifier = Modifier

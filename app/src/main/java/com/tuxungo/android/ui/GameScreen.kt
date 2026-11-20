@@ -1141,6 +1141,19 @@ fun GameScreen(
             if (config.customStones.isNotEmpty()) {
                 Text(text = " · 自定义布局", fontSize = 13.sp, color = Color.Gray)
             }
+            if (isPve) {
+                val aiCfg = if (config.humanStone == Stone.BLACK) {
+                    sideWhite
+                } else {
+                    sideBlack
+                }
+                val aiName = remember(aiCfg.modelId) {
+                    ModelStore.list(context)
+                        .firstOrNull { it.id == aiCfg.modelId }
+                        ?.displayName ?: "内置默认模型"
+                }
+                Text(text = " · AI：$aiName", fontSize = 13.sp, color = Color.Gray)
+            }
         }
         if (clockEnabled) {
             fun fmtSide(mainMs: Long, periods: Int, periodMs: Long): String =

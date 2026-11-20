@@ -92,7 +92,18 @@ fun ReviewScreen(
     var progressDone by remember { mutableIntStateOf(0) }
     var progressTotal by remember { mutableIntStateOf(1) }
     var errorText by remember { mutableStateOf("") }
-    var perspective by remember { mutableStateOf(Stone.BLACK) }
+    val reviewPrefs = remember {
+        context.getSharedPreferences("review_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var perspective by remember {
+        mutableStateOf(
+            if (reviewPrefs.getString("perspective", "B") == "W") {
+                Stone.WHITE
+            } else {
+                Stone.BLACK
+            }
+        )
+    }
     var ply by remember {
         mutableIntStateOf(
             if (initialPly in 0..totalMoves) initialPly else totalMoves
@@ -539,13 +550,19 @@ fun ReviewScreen(
         Row {
             FilterChip(
                 selected = perspective == Stone.BLACK,
-                onClick = { perspective = Stone.BLACK },
+                onClick = {
+                    perspective = Stone.BLACK
+                    reviewPrefs.edit().putString("perspective", "B").apply()
+                },
                 label = { Text("黑方视角") }
             )
             Spacer(modifier = Modifier.padding(start = 8.dp))
             FilterChip(
                 selected = perspective == Stone.WHITE,
-                onClick = { perspective = Stone.WHITE },
+                onClick = {
+                    perspective = Stone.WHITE
+                    reviewPrefs.edit().putString("perspective", "W").apply()
+                },
                 label = { Text("白方视角") }
             )
             Spacer(modifier = Modifier.padding(start = 8.dp))
