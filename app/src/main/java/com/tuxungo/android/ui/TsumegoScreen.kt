@@ -217,6 +217,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
     var pending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var hintPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var replyPending by remember { mutableStateOf(false) }
+    var demoMode by remember { mutableStateOf(false) }
     var solved by remember { mutableStateOf(false) }
     var statusText by remember {
         mutableStateOf("轮到黑棋下：点棋盘选点，再点一次确认。")
@@ -239,6 +240,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         pending = null
         hintPoint = null
         replyPending = false
+        demoMode = false
         solved = false
         startedAt = System.currentTimeMillis()
         solveInfo = ""
@@ -262,6 +264,26 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
         step++
         replyPending = false
         statusText = "对方应了一手，继续：找下一步的关键点。"
+    }
+
+    // Solution demo: replay the scripted line move by move. The
+    // problem is NOT marked solved — watching is not solving.
+    LaunchedEffect(demoMode) {
+        if (!demoMode) return@LaunchedEffect
+        statusText = "正解演示中，看仔细了…"
+        delay(700)
+        for (s in problem.steps) {
+            val pt = s.accept.first()
+            game.play(pt.first, pt.second)
+            version++
+            delay(800)
+            if (s.reply != null) {
+                game.play(s.reply.first, s.reply.second)
+                version++
+                delay(800)
+            }
+        }
+        statusText = "这就是正解。点「自己试一次」亲手走一遍，记得更牢。"
     }
 
     @Suppress("UNUSED_EXPRESSION")
@@ -368,12 +390,12 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
 
         BoardView(
             game = game,
-            enabled = !solved && !replyPending,
+            enabled = !solved && !replyPending && !demoMode,
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
             preview = pending ?: hintPoint,
             onPointTap = { x, y ->
-                if (solved || replyPending) return@BoardView
+                if (solved || replyPending || demoMode) return@BoardView
                 if (!game.isLegal(x, y)) return@BoardView
                 if (pending == Pair(x, y)) {
                     pending = null
@@ -431,6 +453,11 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                     fontSize = 14.sp, color = Color(0xFF2E7D32)
                 )
             }
+        } else if (demoMode) {
+            Button(
+                onClick = { reset(index) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("自己试一次") }
         } else {
             Row(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
@@ -443,9 +470,20 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                     modifier = Modifier.weight(1f)
                 ) { Text("提示") }
                 OutlinedButton(
+                    onClick = {
+                        game = buildProblemGame(problem)
+                        version++
+                        step = 0
+                        pending = null
+                        hintPoint = null
+                        demoMode = true
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("演示正解") }
+                OutlinedButton(
                     onClick = { reset(index) },
                     modifier = Modifier.weight(1f)
-                ) { Text("重新开始") }
+                ) { Text("重开") }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
