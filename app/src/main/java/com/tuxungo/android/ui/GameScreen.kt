@@ -2320,6 +2320,16 @@ fun GameScreen(
                 fontSize = 12.sp, color = Color.Gray
             )
             }
+            if (unclearShare > 0.35 &&
+                ModelStore.activeId(context) == ModelStore.BUNDLED_ID &&
+                !EngineAssets.strongFile(context).exists()
+            ) {
+                Text(
+                    text = "这盘棋形复杂，轻量模型有点拿不准。强力模型判断会稳得多，" +
+                        "在模型库里可以免费下载（约 98 MB）。",
+                    fontSize = 12.sp, color = Color(0xFF2F7CF6)
+                )
+            }
             }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -2637,10 +2647,35 @@ fun GameScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            "解说", fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C)
-                        )
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "解说", fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD64F7C),
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = {
+                                    val intent = android.content.Intent(
+                                        android.content.Intent.ACTION_SEND
+                                    ).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            android.content.Intent.EXTRA_TEXT,
+                                            "TuxunGo AI 表演赛解说\n" +
+                                                feedLines.joinToString("\n")
+                                        )
+                                    }
+                                    context.startActivity(
+                                        android.content.Intent.createChooser(
+                                            intent, "分享解说"
+                                        )
+                                    )
+                                }
+                            ) { Text("分享", fontSize = 12.sp) }
+                        }
                         val feedScroll = rememberScrollState()
                         LaunchedEffect(feedLines.size) {
                             feedScroll.animateScrollTo(feedScroll.maxValue)

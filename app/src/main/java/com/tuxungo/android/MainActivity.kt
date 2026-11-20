@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新手指南加了一页「看懂形势判断」：胜率、目数差、领地颜色、可信度都讲清了\n" +
-                "· 主页「最近棋谱」带终局缩略图了，点图直接进复盘",
+            whatsNew = "· 形势判断可信度低、又在用轻量模型时，会提示强力模型判断更稳（可免费下载）\n" +
+                "· AI 表演赛的解说可以一键分享成文字了",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
