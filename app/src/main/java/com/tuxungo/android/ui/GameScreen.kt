@@ -912,6 +912,28 @@ fun GameScreen(
         }
     }
 
+    // Judgment follows the game: once the user has opened the
+    // judgment panel, keep it on the current position by adopting
+    // the freshest already-computed result after every move, so
+    // the panel never goes stale and nothing is recomputed.
+    LaunchedEffect(autoKey, version) {
+        if (judgment == null || judging || analyzing || game.finished ||
+            scoringMode || focusMode
+        ) {
+            return@LaunchedEffect
+        }
+        if (judgmentKey == game.moves.size) return@LaunchedEffect
+        val src = when {
+            analysis != null && analysisKey == game.moves.size -> analysis
+            autoResult != null && autoKey == game.moves.size -> autoResult
+            else -> null
+        }
+        if (src != null) {
+            judgment = src
+            judgmentKey = game.moves.size
+        }
+    }
+
     // Continuous analysis: once switched on in the analysis
     // panel, every new position is analyzed automatically so
     // the user can keep playing with guidance, no re-tapping.
@@ -934,7 +956,12 @@ fun GameScreen(
      * engine cannot judge this board.
      */
     fun enterScoring() {
-        if (scoringBusy || game.finished) return
+        if (scoringBusy) return
+        if (game.finished && (game.resignedBy != null ||
+                game.timeoutBy != null || game.scoringDead != null)
+        ) {
+            return
+        }
         cancelAi()
         // Instant path: a fresh judgment / analysis / background
         // result for this exact position already carries the
@@ -1317,17 +1344,69 @@ fun GameScreen(
     // finished was saved when it ended (or predates this feature).
     val finishedAtStart = remember { game.finished }
     var autoSaved by remember { mutableStateOf(false) }
+    fun saveAutoGame() {
+        if (autoSaved) return
+        autoSaved = true
+        try {
+            val folder = com.tuxungo.android.LibraryStore.ensureFolder(context, "自动保存")
+            com.tuxungo.android.LibraryStore.saveGame(
+                context,
+                buildLibraryGame().copy(folderId = folder.id)
+            )
+        } catch (_: Exception) {
+        }
+    }
+    LaunchedEffect(game.finished, game.scoringDead) {
+        if (!game.finished || finishedAtStart) return@LaunchedEffect
+        val endedByPasses = game.resignedBy == null && game.timeoutBy == null
+        if (endedByPasses && game.scoringDead == null) {
+            // Wait until the scoring below settles (or is cancelled),
+            // so the saved record carries the judged result.
+            return@LaunchedEffect
+        }
+        saveAutoGame()
+    }
+
+    // A game that ends because both sides passed goes straight
+    // into scoring, like on the big platforms: enterScoring first
+    // reuses any fresh result, so this is usually instant. Series
+    // games never show the marking panel — they silently take the
+    // judged count (or the raw count when nothing fresh exists)
+    // and move on to the next game.
     LaunchedEffect(game.finished) {
-        if (game.finished && !finishedAtStart && !autoSaved) {
-            autoSaved = true
-            try {
-                val folder = com.tuxungo.android.LibraryStore.ensureFolder(context, "自动保存")
-                com.tuxungo.android.LibraryStore.saveGame(
-                    context,
-                    buildLibraryGame().copy(folderId = folder.id)
-                )
-            } catch (_: Exception) {
+        if (!game.finished || finishedAtStart || scoringMode) {
+            return@LaunchedEffect
+        }
+        if (game.resignedBy != null || game.timeoutBy != null ||
+            game.scoringDead != null
+        ) {
+            return@LaunchedEffect
+        }
+        if (config.seriesTarget > 0) {
+            val src = when {
+                judgment != null && judgmentKey == game.moves.size -> judgment
+                analysis != null && analysisKey == game.moves.size -> analysis
+                autoResult != null && autoKey == game.moves.size -> autoResult
+                else -> null
             }
+            val dead = if (src != null &&
+                src.ownershipBlack.size == game.size.area
+            ) {
+                val stonesNow = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
+                }
+                TerritoryEstimate.deadStones(
+                    src.ownershipBlack, stonesNow,
+                    game.size.width, game.size.height,
+                    SettingsStore.deadGroupMean(settings.deadStrictness)
+                )
+            } else {
+                emptySet()
+            }
+            game.finishScoringWith(dead)
+            version++
+        } else {
+            enterScoring()
         }
     }
 
@@ -1339,11 +1418,15 @@ fun GameScreen(
     // counted twice.
     var seriesNote by remember { mutableStateOf("") }
     var seriesRecorded by remember { mutableStateOf(false) }
-    LaunchedEffect(game.finished) {
+    LaunchedEffect(game.finished, game.scoringDead) {
         if (!game.finished || finishedAtStart || seriesRecorded) {
             return@LaunchedEffect
         }
         if (config.seriesTarget <= 0) return@LaunchedEffect
+        val endedByPasses = game.resignedBy == null && game.timeoutBy == null
+        if (endedByPasses && game.scoringDead == null) {
+            return@LaunchedEffect
+        }
         seriesRecorded = true
         val summary = resultSummary()
         val blackWon = summary.startsWith("黑方胜")
@@ -2084,9 +2167,15 @@ fun GameScreen(
                     modifier = Modifier.weight(1f)
                 ) { Text("确认数目") }
                 OutlinedButton(
-                    onClick = { scoringMode = false; scoringNote = "" },
+                    onClick = {
+                        scoringMode = false
+                        scoringNote = ""
+                        if (game.finished && game.scoringDead == null) {
+                            saveAutoGame()
+                        }
+                    },
                     modifier = Modifier.weight(1f)
-                ) { Text("取消，继续下") }
+                ) { Text(if (game.finished) "取消" else "取消，继续下") }
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -2495,7 +2584,9 @@ fun GameScreen(
             }
             OutlinedButton(
                 onClick = { enterScoring() },
-                enabled = !finished && !scoringBusy && !aiThinking && (!bothAi || !eveRunning),
+                enabled = !scoringBusy && !aiThinking && (!bothAi || !eveRunning) &&
+                    (!finished || (game.resignedBy == null &&
+                        game.timeoutBy == null && game.scoringDead == null)),
                 modifier = Modifier.weight(1f)
             ) {
                 AppIcon(AppIconKind.STATS, Modifier.size(16.dp))
@@ -2833,7 +2924,7 @@ fun GameScreen(
         )
     }
 
-    if (finished && !resultDismissed) {
+    if (finished && !resultDismissed && !scoringMode) {
         val resultText = if (game.timeoutBy != null) {
             "${if (game.timeoutBy == Stone.BLACK) "白" else "黑"}方胜（对方超时）"
         } else if (game.resignedBy != null) {

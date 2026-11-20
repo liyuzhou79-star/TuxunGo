@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -34,6 +36,8 @@ import androidx.compose.ui.unit.sp
 import com.tuxungo.android.LibraryFolder
 import com.tuxungo.android.LibraryGame
 import com.tuxungo.android.LibraryStore
+import com.tuxungo.android.go.GoGame
+import com.tuxungo.android.go.Stone
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -394,11 +398,17 @@ fun LibraryScreen(
                             }
                         }
                     } else {
-                    Text(g.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${g.modeLabel} · ${g.resultText.ifBlank { "无结果" }} · ${g.moves.size} 手 · ${dateFmt.format(Date(g.createdAt))}",
-                        fontSize = 12.sp, color = Color.Gray
-                    )
+                    Row {
+                        GameThumb(g, modifier = Modifier.size(62.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(g.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${g.modeLabel} · ${g.resultText.ifBlank { "无结果" }} · ${g.moves.size} 手 · ${dateFmt.format(Date(g.createdAt))}",
+                                fontSize = 12.sp, color = Color.Gray
+                            )
+                        }
+                    }
                     Row {
                         TextButton(onClick = { onOpenGame(g) }) { Text("打开复盘") }
                         TextButton(
@@ -683,4 +693,72 @@ private fun SkeletonCards() {
             }
         }
     }
+}
+
+/** Rendered final-position thumbnails, cached per game id. */
+private val thumbCache = HashMap<String, android.graphics.Bitmap>()
+
+@Composable
+private fun GameThumb(g: LibraryGame, modifier: Modifier = Modifier) {
+    val bmp = remember(g.id) { thumbCache.getOrPut(g.id) { renderThumb(g) } }
+    androidx.compose.foundation.Image(
+        bitmap = androidx.compose.ui.graphics.asImageBitmap(bmp),
+        contentDescription = null,
+        modifier = modifier
+    )
+}
+
+/** Draws the game's final position on a small wood-coloured bitmap. */
+private fun renderThumb(g: LibraryGame): android.graphics.Bitmap {
+    val px = 192
+    val bmp = android.graphics.Bitmap.createBitmap(
+        px, px, android.graphics.Bitmap.Config.ARGB_8888
+    )
+    val canvas = android.graphics.Canvas(bmp)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    paint.style = android.graphics.Paint.Style.FILL
+    paint.color = android.graphics.Color.rgb(227, 183, 120)
+    canvas.drawRect(0f, 0f, px.toFloat(), px.toFloat(), paint)
+    val game = GoGame(g.size, g.komi)
+    if (g.customStones.isNotEmpty()) {
+        game.loadPosition(g.customStones, g.startPlayer)
+    }
+    for (m in g.moves) {
+        if (m.isPass) game.pass() else game.play(m.x, m.y)
+    }
+    val w = g.size.width
+    val h = g.size.height
+    val maxDim = maxOf(w, h).coerceAtLeast(2)
+    val cell = (px * 0.86f) / (maxDim - 1)
+    val boardW = cell * (w - 1)
+    val boardH = cell * (h - 1)
+    val ox = (px - boardW) / 2f
+    val oy = (px - boardH) / 2f
+    paint.color = android.graphics.Color.rgb(90, 60, 30)
+    paint.strokeWidth = 1.1f
+    for (x in 0 until w) {
+        canvas.drawLine(ox + x * cell, oy, ox + x * cell, oy + boardH, paint)
+    }
+    for (y in 0 until h) {
+        canvas.drawLine(ox, oy + y * cell, ox + boardW, oy + y * cell, paint)
+    }
+    val r = cell * 0.46f
+    for (y in 0 until h) {
+        for (x in 0 until w) {
+            val s = game.stoneAt(x, y) ?: continue
+            paint.style = android.graphics.Paint.Style.FILL
+            paint.color = if (s == Stone.BLACK) {
+                android.graphics.Color.rgb(28, 28, 28)
+            } else {
+                android.graphics.Color.rgb(246, 246, 246)
+            }
+            canvas.drawCircle(ox + x * cell, oy + y * cell, r, paint)
+            if (s == Stone.WHITE) {
+                paint.style = android.graphics.Paint.Style.STROKE
+                paint.color = android.graphics.Color.rgb(150, 150, 150)
+                canvas.drawCircle(ox + x * cell, oy + y * cell, r, paint)
+            }
+        }
+    }
+    return bmp
 }

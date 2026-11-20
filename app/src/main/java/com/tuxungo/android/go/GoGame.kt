@@ -251,9 +251,13 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
     var scoringDead: Set<Int>? = null
         private set
 
-    /** Finish the game, scoring with [dead] stones removed as captured. */
+    /** Finish the game, scoring with [dead] stones removed as captured.
+     * Also allowed on a game that already finished by passes (where
+     * no dead-stone agreement exists yet), so the judged count can
+     * replace the raw count after the fact. */
     fun finishScoringWith(dead: Set<Int>) {
-        if (finished) return
+        if (finished && scoringDead != null) return
+        if (finished && (resignedBy != null || timeoutBy != null)) return
         scoringDead = dead
         finished = true
     }

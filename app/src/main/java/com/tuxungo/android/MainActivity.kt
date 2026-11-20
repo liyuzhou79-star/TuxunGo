@@ -440,10 +440,9 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 对局里有走势小图了：胜率变化一眼看清，不用等复盘\n" +
-                "· AI 表演赛有解说流了：每手一句话，像看直播一样观战\n" +
-                "· 定级战报：和定级 AI 下完，结果弹窗里会评估你的大致水平\n" +
-                "· 全部数据都复用后台已算好的结果，不重复计算，更快也更省电",
+            whatsNew = "· 双方停一手后自动进入数目：死子由引擎标好，确认即可，不再粗算\n" +
+                "· 形势判断会跟着对局走了：打开过一次，之后每手自动更新\n" +
+                "· 棋谱库有棋盘缩略图了：每局的终局局面一目了然，找棋谱更快",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
