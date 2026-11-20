@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 生涯页的定级战绩加了「合计」一行：所有档位的总胜负一眼看到",
+            whatsNew = "· 这一版主要是仓库文档维护：英文版 README 已与中文版全面同步（之前漏了限时挑战、复盘领地、定级战绩等好几项）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
