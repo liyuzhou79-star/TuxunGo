@@ -1,5 +1,6 @@
 package com.tuxungo.android.engine
 
+import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 
@@ -15,7 +16,14 @@ data class TurnStat(
      * choice at this turn (0..1): how much the best move stood out.
      * 0 when unknown (stats recorded before this was tracked).
      */
-    val bestGap: Double = 0.0
+    val bestGap: Double = 0.0,
+    /**
+     * The top choice's principal variation as space-joined GTP
+     * vertices ("Q16 R17 pass D4"), for showing the AI's suggested
+     * continuation as ghost stones in review. "" when unknown
+     * (stats recorded before this was tracked).
+     */
+    val bestPv: String = ""
 )
 
 enum class MarkKind { BLUNDER, BRILLIANT, KEY }
@@ -96,7 +104,7 @@ object ReviewMath {
         turns.joinToString(";") { t ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)}"
+            "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
         }
 
     fun decodeTurns(text: String): List<TurnStat> {
@@ -111,7 +119,8 @@ object ReviewMath {
                 scoreLeadBlack = f.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
                 bestMove = null,
                 bestIsPass = bx < 0,
-                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0
+                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                bestPv = f.getOrNull(5) ?: ""
             ).let { base ->
                 // bestMove's stone is not stored; marks() only needs its
                 // coordinates, so park them on a throwaway Move.
@@ -135,7 +144,7 @@ object ReviewMath {
         stats.entries.sortedBy { it.key }.joinToString(";") { (turn, t) ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)}"
+            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
         }
 
     /** Parses the sparse form; also tolerates the dense form. */
@@ -164,8 +173,30 @@ object ReviewMath {
                 scoreLeadBlack = f.getOrNull(1)?.toDoubleOrNull() ?: 0.0,
                 bestMove = if (bx >= 0 && by >= 0) Move(Stone.BLACK, bx, by) else null,
                 bestIsPass = bx < 0,
-                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0
+                bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
+                bestPv = f.getOrNull(5) ?: ""
             )
+        }
+        return out
+    }
+
+    /**
+     * Parse a stored PV string ("Q16 R17 pass D4") into ghost
+     * moves, alternating colours starting with [first]. Turns
+     * alternate even through passes and unparsable tokens.
+     */
+    fun parsePv(pv: String, size: BoardSize, first: Stone): List<Move> {
+        if (pv.isBlank()) return emptyList()
+        val out = ArrayList<Move>()
+        var stone = first
+        for (token in pv.trim().split(Regex("\\s+"))) {
+            val mv = if (token.equals("pass", ignoreCase = true)) {
+                Move.pass(stone)
+            } else {
+                KataEngine.fromVertex(token, stone, size)
+            }
+            if (mv != null) out.add(mv)
+            stone = stone.other()
         }
         return out
     }

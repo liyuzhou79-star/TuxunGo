@@ -460,7 +460,14 @@ fun ReviewScreen(
                 territoryThreshold = 0.5,
                 candidates = bestMark,
                 ownership = null,
-                pvGhost = emptyList(),
+                pvGhost = if (ply < totalMoves) {
+                    turns?.getOrNull(ply)?.let { st ->
+                        ReviewMath.parsePv(st.bestPv, current.size, replayGame.current)
+                            .take(7)
+                    } ?: emptyList()
+                } else {
+                    emptyList()
+                },
                 preview = null,
                 markedDead = emptySet(),
                 flipped = perspective == Stone.WHITE
@@ -572,6 +579,12 @@ fun ReviewScreen(
                         "AI 一选：$bestText · 实战：$actualText",
                         fontSize = 13.sp, color = Color.Gray
                     )
+                    if (best.bestPv.isNotBlank() && ply < totalMoves) {
+                        Text(
+                            "棋盘上的虚影是 AI 一选之后的推荐变化",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                    }
                 }
             }
         }

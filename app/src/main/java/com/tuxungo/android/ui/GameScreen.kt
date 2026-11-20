@@ -487,7 +487,16 @@ fun GameScreen(
                 kotlin.math.abs(first.winrateBlack - second.winrateBlack)
             } else {
                 0.0
-            }
+            },
+            bestPv = first?.let { c ->
+                if (c.pvText.isNotBlank()) {
+                    c.pvText
+                } else {
+                    c.pvMoves.joinToString(" ") { m ->
+                        KataEngine.toVertex(m, game.size)
+                    }
+                }
+            } ?: ""
         )
         if (overwrite || !liveStats.containsKey(moveCount)) {
             liveStats[moveCount] = stat

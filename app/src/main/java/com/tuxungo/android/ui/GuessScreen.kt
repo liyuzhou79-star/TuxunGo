@@ -327,6 +327,11 @@ fun GuessScreen(onBack: () -> Unit) {
     } else {
         emptyList()
     }
+    val pvGhost = if (phase == GuessPhase.REVEALED) {
+        result?.candidates?.firstOrNull()?.pvMoves?.take(6) ?: emptyList()
+    } else {
+        emptyList()
+    }
 
     Column(
         modifier = Modifier
@@ -470,6 +475,7 @@ fun GuessScreen(onBack: () -> Unit) {
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
             candidates = candidates,
+            pvGhost = pvGhost,
             preview = if (phase == GuessPhase.REVEALED) guessPoint else pending,
             onPointTap = { x, y ->
                 if (phase == GuessPhase.GUESSING && game.isLegal(x, y)) {

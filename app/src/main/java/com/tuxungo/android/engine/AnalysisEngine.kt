@@ -292,6 +292,7 @@ class AnalysisEngine private constructor(
             var best: Move? = null
             var bestIsPass = false
             var bestGap = 0.0
+            var bestPv = ""
             val infos = resp.optJSONArray("moveInfos")
             if (infos != null && infos.length() > 0) {
                 var bestOrder = Int.MAX_VALUE
@@ -310,6 +311,14 @@ class AnalysisEngine private constructor(
                             best = KataEngine.fromVertex(vertex, mover, size)
                             bestIsPass = false
                         }
+                        val pvArr = info.optJSONArray("pv")
+                        bestPv = if (pvArr != null) {
+                            (0 until pvArr.length()).joinToString(" ") {
+                                pvArr.optString(it)
+                            }
+                        } else {
+                            ""
+                        }
                     }
                 }
                 // How much the top choice stood out from the runner-up
@@ -321,7 +330,7 @@ class AnalysisEngine private constructor(
                     bestGap = (sorted[0].second - sorted[1].second).coerceAtLeast(0.0)
                 }
             }
-            byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass, bestGap)
+            byTurn[turn] = TurnStat(turn, wrB, leadB, best, bestIsPass, bestGap, bestPv)
             onProgress(byTurn.size, total)
         }
         return wantedTurns.map { byTurn[it] ?: TurnStat(it, 0.5, 0.0, null, false) }

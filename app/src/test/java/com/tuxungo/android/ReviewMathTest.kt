@@ -3,6 +3,7 @@ package com.tuxungo.android
 import com.tuxungo.android.engine.MarkKind
 import com.tuxungo.android.engine.ReviewMath
 import com.tuxungo.android.engine.TurnStat
+import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 import org.junit.Assert.assertEquals
@@ -84,6 +85,33 @@ class ReviewMathTest {
         assertEquals(-2.5, back[1].scoreLeadBlack, 0.001)
         assertEquals(3, back[0].bestMove?.x)
         assertTrue(back[1].bestIsPass)
+    }
+
+    @Test
+    fun pvRoundTripAndParse() {
+        val turns = listOf(
+            TurnStat(0, 0.5, 0.0, Move(Stone.BLACK, 3, 3), false, 0.0, "Q16 R17 D4")
+        )
+        val back = ReviewMath.decodeTurns(ReviewMath.encodeTurns(turns))
+        assertEquals("Q16 R17 D4", back[0].bestPv)
+        val sparse = ReviewMath.decodeSparse(
+            ReviewMath.encodeSparse(mapOf(0 to turns[0]))
+        )
+        assertEquals("Q16 R17 D4", sparse[0]!!.bestPv)
+        // Old caches without the PV field still decode.
+        assertEquals("", ReviewMath.decodeTurns("0.500,0.000,3,3,0.000")[0].bestPv)
+
+        val pv = ReviewMath.parsePv(
+            "Q16 R17 pass D4", BoardSize(19, 19), Stone.BLACK
+        )
+        assertEquals(4, pv.size)
+        assertEquals(Stone.BLACK, pv[0].stone)
+        assertEquals(15, pv[0].x)
+        assertEquals(3, pv[0].y)
+        assertEquals(Stone.WHITE, pv[1].stone)
+        assertTrue(pv[2].isPass)
+        assertEquals(Stone.WHITE, pv[3].stone)
+        assertTrue(ReviewMath.parsePv("", BoardSize(19, 19), Stone.BLACK).isEmpty())
     }
 
     @Test
