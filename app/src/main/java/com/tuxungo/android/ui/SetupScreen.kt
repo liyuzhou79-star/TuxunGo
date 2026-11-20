@@ -929,6 +929,13 @@ private fun EggStatsDialog(onDismiss: () -> Unit) {
                     val ordered = rankedTallies.entries.sortedBy { (rank, _) ->
                         com.tuxungo.android.engine.SideAiStore.RANKS.indexOf(rank)
                     }
+                    if (ordered.isNotEmpty()) {
+                        EggRow(
+                            "合计",
+                            "${ordered.sumOf { it.value[0] }} 胜 " +
+                                "${ordered.sumOf { it.value[1] }} 负"
+                        )
+                    }
                     for ((rank, wl) in ordered) {
                         EggRow(
                             "对 ${com.tuxungo.android.engine.SideAiStore.rankLabel(rank)}",

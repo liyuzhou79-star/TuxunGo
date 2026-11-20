@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 设置的「数据与更新」页顶部多了数据概览：棋谱库一共多少局、占多少空间一眼看到",
+            whatsNew = "· 生涯页的定级战绩加了「合计」一行：所有档位的总胜负一眼看到",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
