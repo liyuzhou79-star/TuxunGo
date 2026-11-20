@@ -169,9 +169,13 @@ fun LibraryScreen(
             else -> g.folderId == selected
         }
         val q = searchText.trim()
+        val folderName = g.folderId?.let { fid ->
+            folders.firstOrNull { it.id == fid }?.name
+        } ?: "未分类"
         val inSearch = q.isEmpty() ||
             g.title.contains(q, ignoreCase = true) ||
-            g.modeLabel.contains(q, ignoreCase = true)
+            g.modeLabel.contains(q, ignoreCase = true) ||
+            folderName.contains(q, ignoreCase = true)
         inFolder && inSearch
     }.let { list ->
         when (sortMode) {

@@ -13,6 +13,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -276,10 +278,43 @@ fun GuessScreen(onBack: () -> Unit) {
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
+        var showSummary by remember { mutableStateOf(false) }
         Text(
             text = "得分 $score · 一选命中 $topHits/$answered · 连对 $streak（最高 $bestStreak）",
-            fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+            fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { showSummary = true }
         )
+        if (showSummary) {
+            val hitRate = if (answered > 0) {
+                String.format("%.0f%%", topHits * 100.0 / answered)
+            } else {
+                "—"
+            }
+            AlertDialog(
+                onDismissRequest = { showSummary = false },
+                title = { Text("本次成绩单") },
+                text = {
+                    Text(
+                        "答题 $answered 题 · 得分 $score\n" +
+                            "一选命中 $topHits 题（命中率 $hitRate）\n" +
+                            "最高连对 $bestStreak\n" +
+                            "历史最佳：得分 $savedBestScore · 连对 $savedBestStreak",
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSummary = false }) { Text("继续") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showSummary = false
+                            restart(boardSize)
+                        }
+                    ) { Text("重新开始") }
+                }
+            )
+        }
         if (savedBestScore > 0 || savedBestStreak > 0) {
             Text(
                 text = "历史最佳：得分 $savedBestScore · 连对 $savedBestStreak",

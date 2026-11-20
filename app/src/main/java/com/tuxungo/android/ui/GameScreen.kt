@@ -79,6 +79,20 @@ fun GameScreen(
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.load(context) }
+    // Optional keep-awake while a game is on screen.
+    DisposableEffect(settings.keepScreenOn) {
+        val activity = context as? android.app.Activity
+        if (settings.keepScreenOn) {
+            activity?.window?.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+        onDispose {
+            activity?.window?.clearFlags(
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
     val game = remember(config) {
         GoGame(BoardSize(config.width, config.height), config.komi).also { g ->
             when {

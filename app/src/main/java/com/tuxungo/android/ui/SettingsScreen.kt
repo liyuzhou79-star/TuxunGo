@@ -119,6 +119,21 @@ fun SettingsScreen(
                 onCheckedChange = { update(settings.copy(showCoordinates = it)) }
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "对局时屏幕常亮", fontSize = 15.sp)
+                Text(text = "长考和观战 AI 对决时屏幕不熄灭", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.keepScreenOn,
+                onCheckedChange = { update(settings.copy(keepScreenOn = it)) }
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "AI 对 AI 观战节奏", fontSize = 15.sp)
         Text(text = "两个 AI 对弈时每手之间的停顿", fontSize = 12.sp, color = Color.Gray)

@@ -16,7 +16,9 @@ data class AppSettings(
     /** Theme accent: sakura / matcha / indigo. */
     val accent: String = "sakura",
     /** Visits for the silent per-move background analysis during games. */
-    val autoVisits: Int = 80
+    val autoVisits: Int = 80,
+    /** Keep the screen awake while a game is on screen. */
+    val keepScreenOn: Boolean = false
 )
 
 object SettingsStore {
@@ -73,7 +75,8 @@ object SettingsStore {
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
             eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
             accent = p.getString("accent", "sakura") ?: "sakura",
-            autoVisits = p.getInt("autoVisits", 80)
+            autoVisits = p.getInt("autoVisits", 80),
+            keepScreenOn = p.getBoolean("keepScreenOn", false)
         )
     }
 
@@ -89,6 +92,7 @@ object SettingsStore {
             .putString("eveSpeed", s.eveSpeed)
             .putString("accent", s.accent)
             .putInt("autoVisits", s.autoVisits)
+            .putBoolean("keepScreenOn", s.keepScreenOn)
             .apply()
     }
 
