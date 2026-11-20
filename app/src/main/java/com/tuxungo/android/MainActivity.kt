@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 死活题有限时挑战了：全部题目随机顺序，每题 90 秒，超时自动跳题\n" +
-                "· 复盘能看任意一手当时的领地了：点「看这步的领地」，棋盘按归属着色",
+            whatsNew = "· 新手指南加了一页「看懂形势判断」：胜率、目数差、领地颜色、可信度都讲清了\n" +
+                "· 主页「最近棋谱」带终局缩略图了，点图直接进复盘",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

@@ -37,7 +37,7 @@ private data class GuidePage(val title: String, val body: String)
  * Full-screen guide shown the first time the app opens after an
  * install or a version update (and re-openable from the home
  * footer): welcome, what is new, the feature tour, the model story
- * and the declarations. Six pages, skippable.
+ * and the declarations. Seven pages, skippable.
  */
 @Composable
 fun OnboardingScreen(
@@ -64,8 +64,15 @@ fun OnboardingScreen(
             "分析与训练",
             "· AI 分析给候选着点、胜率和变化图，还会标出人类一选（蓝圈）——真人高手多半下哪里\n" +
                 "· 形势判断按目数明细算账：活子、空、贴目、死子一笔笔列清，棋盘上的领地颜色越深归属越确定\n" +
-                "· 对局时胜率在后台悄悄算好，终局复盘秒开，恶手妙手自动标出\n" +
-                "· 猜一选、死活题两种训练，错题会自动进错题本"
+                "· 对局时胜率在后台悄悄算好，终局复盘秒开，恶手妙手自动标出；复盘还能看任意一手当时的领地\n" +
+                "· 猜一选（还能用你自己的棋谱出题）、死活题（有限时挑战）两种训练，错题会自动进错题本"
+        ),
+        GuidePage(
+            "看懂形势判断",
+            "· 胜率和目数差是两回事：胜率说谁赢面大，目数差说大概领先多少；局面平稳时两个一起看，乱战时先看胜率\n" +
+                "· 棋盘上颜色越深的地方，归属越确定；颜色浅、发灰的地带是还没定型的「势力」，后面几手就可能翻盘\n" +
+                "· 判断面板里的「可信度」低，多半是棋形还没定型，或者有大龙对杀——内置轻量模型在复杂对杀里本来就拿不准，换强力模型会明显更稳\n" +
+                "· 死子判定可以在设置 → 形势判断里调严格程度：拿不准的棋，宁可调保守一点，最后数目时还能手动改"
         ),
         GuidePage(
             "模型",

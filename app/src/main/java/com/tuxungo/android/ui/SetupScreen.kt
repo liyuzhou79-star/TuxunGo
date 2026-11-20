@@ -555,21 +555,37 @@ fun SetupScreen(
             Text(text = "最近棋谱", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
             for (g in recentGames) {
-                androidx.compose.material3.TextButton(
-                    onClick = { onOpenGame(g) },
+                Row(
                     modifier = Modifier.fillMaxWidth()
+                        .clickable { onOpenGame(g) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Text(
-                        "${g.title} · ${g.moves.size} 手 · " +
+                    GameThumb(g, modifier = Modifier.size(46.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "${g.title} · ${g.moves.size} 手",
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Text(
                             java.text.SimpleDateFormat(
                                 "MM-dd HH:mm",
                                 java.util.Locale.getDefault()
-                            ).format(java.util.Date(g.createdAt)),
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                            ).format(java.util.Date(g.createdAt)) +
+                                if (g.resultText.isNotBlank()) {
+                                    " · ${g.resultText}"
+                                } else {
+                                    ""
+                                },
+                            fontSize = 12.sp,
+                            color = androidx.compose.ui.graphics.Color.Gray,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             }

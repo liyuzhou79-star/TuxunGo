@@ -728,7 +728,7 @@ private fun SkeletonCards() {
 private val thumbCache = HashMap<String, android.graphics.Bitmap>()
 
 @Composable
-private fun GameThumb(g: LibraryGame, modifier: Modifier = Modifier) {
+fun GameThumb(g: LibraryGame, modifier: Modifier = Modifier) {
     val bmp = remember(g.id) { thumbCache.getOrPut(g.id) { renderThumb(g) } }
     androidx.compose.foundation.Image(
         bitmap = bmp.asImageBitmap(),
