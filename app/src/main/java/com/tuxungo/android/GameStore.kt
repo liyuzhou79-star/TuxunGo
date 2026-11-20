@@ -64,6 +64,7 @@ object GameStore {
             )
             .putInt("clockMinutes", config.clockMinutes)
             .putInt("seriesTarget", config.seriesTarget)
+            .putBoolean("focusMode", config.focusMode)
             .putString("timeoutBy", timeoutBy?.name ?: "")
         if (clock != null) {
             editor
@@ -98,7 +99,8 @@ object GameStore {
             customStones = decodeMoves(p.getString("customStones", "") ?: ""),
             startPlayer = startPlayer,
             clockMinutes = clockMinutes,
-            seriesTarget = p.getInt("seriesTarget", 0)
+            seriesTarget = p.getInt("seriesTarget", 0),
+            focusMode = p.getBoolean("focusMode", false)
         )
         val clock = if (clockMinutes > 0 && p.contains("clockBlackMain")) {
             ClockSnapshot(

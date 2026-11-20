@@ -27,6 +27,8 @@ vs AI games, or play a friend on the same phone.
 - **Position editor**: set up any position by hand, then start from it with either color
 - **Fullscreen mode**: board at maximum size with just analysis controls — ideal for spectating AI games
 - **Game clock & move times**: five clock options (5/10/20/30/60 minutes) plus byoyomi, pausable, timeout loses; the status line shows how long the AI thought about each move, so model and strength changes are easy to compare
+- **Focus mode**: one tap hides the win rate, top-move hints and position judgment, leaving just the board — background analysis keeps running, so the post-game review is unaffected
+- **Physical-board clock**: two players on a real board can use the phone as the clock: tap your side after moving, with sound and vibration cues for byoyomi
 - **Endgame scoring**: the engine proposes dead stones (marked with red crosses), tap whole groups to flip them, then confirm the score
 
 ### Analysis & review

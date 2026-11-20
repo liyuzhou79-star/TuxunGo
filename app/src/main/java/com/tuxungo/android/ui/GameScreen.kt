@@ -114,6 +114,7 @@ fun GameScreen(
     var resultDismissed by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
+    var focusMode by remember { mutableStateOf(config.focusMode) }
 
     val isPve = config.mode == GameMode.PVE
     val isEve = config.mode == GameMode.EVE
@@ -1092,12 +1093,16 @@ fun GameScreen(
                                 if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
                         )
                     }) { Text("分享") }
-                    TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
+                    TextButton(onClick = { focusMode = !focusMode }) {
+                    Text(if (focusMode) "退出专注" else "专注")
+                }
+                TextButton(onClick = { fullscreen = false }) { Text("退出全屏") }
                 }
             }
             val fsA = analysis
             val fsSel = fsA?.candidates?.getOrNull(selectedCandidate)
             val fsOwnership = when {
+                focusMode -> null
                 scoringMode -> null
                 judgmentActive -> judgment?.ownershipBlack
                 showTerritory -> fsA?.ownershipBlack
@@ -1109,13 +1114,13 @@ fun GameScreen(
                 skin = BoardSkin.fromId(settings.boardSkin),
                 showCoordinates = false,
                 territoryThreshold = 0.5,
-                candidates = if (!judgmentActive && !scoringMode) {
+                candidates = if (!focusMode && !judgmentActive && !scoringMode) {
                     fsA?.candidates?.mapNotNull { cand ->
                         cand.move?.let { CandidateMark(it.x, it.y, fsA.candidates.indexOf(cand) + 1) }
                     } ?: emptyList()
                 } else emptyList(),
                 ownership = fsOwnership,
-                pvGhost = if (!judgmentActive && !scoringMode) {
+                pvGhost = if (!focusMode && !judgmentActive && !scoringMode) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
                 } else emptyList(),
                 preview = if (scoringMode) null else pendingPoint,
@@ -1145,7 +1150,7 @@ fun GameScreen(
                 else -> null
             }
             Box(modifier = Modifier.fillMaxWidth().height(8.dp)) {
-                if (fsRes != null) {
+                if (!focusMode && fsRes != null) {
                     val bw = fsRes.rootWinrateBlack.toFloat().coerceIn(0.02f, 0.98f)
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
                         Box(
@@ -1160,7 +1165,7 @@ fun GameScreen(
                 }
             }
             Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
-                if (fsRes != null) {
+                if (!focusMode && fsRes != null) {
                     Text(
                         text = "黑胜率 ${formatPercent(fsRes.rootWinrateBlack)} · " +
                             "${if (fsRes.rootScoreLeadBlack >= 0) "黑" else "白"}领先约 " +
@@ -1179,45 +1184,47 @@ fun GameScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val analysisFreshFs = analysis != null && analysisKey == game.moves.size
-                when {
-                    analyzing -> Button(
-                        onClick = {},
-                        enabled = false,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("分析中…") }
-                    analysisFreshFs -> Button(
-                        onClick = {
-                            analysis = null
-                            analysisKey = -1
-                            selectedCandidate = 0
-                            analysisStatus = ""
-                            if (!judgmentActive) showTerritory = false
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("关闭分析") }
-                    else -> Button(
-                        onClick = { runAnalysis(false) },
-                        enabled = analysisAllowed && !finished,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("AI 分析") }
-                }
-                val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
-                when {
-                    judging -> Button(
-                        onClick = {},
-                        enabled = false,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("判断中…") }
-                    judgmentFreshFs -> Button(
-                        onClick = { judgment = null; judgmentKey = -1 },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("关闭形式判断") }
-                    else -> Button(
-                        onClick = { runJudgment() },
-                        enabled = analysisAllowed && !finished,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("形式判断") }
+                if (!focusMode) {
+                    val analysisFreshFs = analysis != null && analysisKey == game.moves.size
+                    when {
+                        analyzing -> Button(
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("分析中…") }
+                        analysisFreshFs -> Button(
+                            onClick = {
+                                analysis = null
+                                analysisKey = -1
+                                selectedCandidate = 0
+                                analysisStatus = ""
+                                if (!judgmentActive) showTerritory = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("关闭分析") }
+                        else -> Button(
+                            onClick = { runAnalysis(false) },
+                            enabled = analysisAllowed && !finished,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("AI 分析") }
+                    }
+                    val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
+                    when {
+                        judging -> Button(
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("判断中…") }
+                        judgmentFreshFs -> Button(
+                            onClick = { judgment = null; judgmentKey = -1 },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("关闭形式判断") }
+                        else -> Button(
+                            onClick = { runJudgment() },
+                            enabled = analysisAllowed && !finished,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("形式判断") }
+                    }
                 }
                 OutlinedButton(
                     onClick = { fullscreen = false },
@@ -1247,6 +1254,9 @@ fun GameScreen(
                     TextButton(onClick = { userPaused = !userPaused }) {
                         Text(if (userPaused) "继续" else "暂停")
                     }
+                }
+                TextButton(onClick = { focusMode = !focusMode }) {
+                    Text(if (focusMode) "退出专注" else "专注")
                 }
                 TextButton(onClick = {
                     PositionShare.share(
@@ -1348,7 +1358,7 @@ fun GameScreen(
         // Mini win-rate bar: always occupies its strip so the board
         // does not shift when data arrives.
         Box(modifier = Modifier.fillMaxWidth().height(6.dp)) {
-            if (liveRes != null) {
+            if (!focusMode && liveRes != null) {
                 val wr = liveRes.rootWinrateBlack.toFloat().coerceIn(0.02f, 0.98f)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Box(
@@ -1370,7 +1380,7 @@ fun GameScreen(
         // Fixed height whether or not an estimate is ready yet, so the
         // board never gets pushed down when the numbers arrive.
         Box(modifier = Modifier.fillMaxWidth().height(18.dp)) {
-            if (liveRes != null) {
+            if (!focusMode && liveRes != null) {
                 val stonesArr = Array(game.size.area) { i ->
                     game.stoneAt(i % game.size.width, i / game.size.width)
                 }
@@ -1395,7 +1405,7 @@ fun GameScreen(
                     fontSize = 12.sp, color = Color.Gray,
                     modifier = Modifier.clickable { showScoreDetail = true }
                 )
-            } else {
+            } else if (!focusMode) {
                 Text(
                     text = "形势：等待分析…",
                     fontSize = 12.sp, color = Color.LightGray
@@ -1507,13 +1517,13 @@ fun GameScreen(
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
             territoryThreshold = 0.5,
-            candidates = if (!judgmentActive && !scoringMode) {
+            candidates = if (!focusMode && !judgmentActive && !scoringMode) {
                 currentAnalysis?.candidates?.mapNotNull { cand ->
                     cand.move?.let { CandidateMark(it.x, it.y, currentAnalysis.candidates.indexOf(cand) + 1) }
                 } ?: emptyList()
             } else emptyList(),
-            ownership = displayOwnership,
-            pvGhost = if (!judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
+            ownership = if (focusMode) null else displayOwnership,
+            pvGhost = if (!focusMode && !judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             flipped = boardFlipped
@@ -1573,7 +1583,7 @@ fun GameScreen(
         }
 
         // ---- Judgment panel ----
-        if (judgmentActive) {
+        if (judgmentActive && !focusMode) {
             val j = judgment!!
             val stones = Array(game.size.area) { i ->
                 game.stoneAt(i % game.size.width, i / game.size.width)
@@ -1610,7 +1620,7 @@ fun GameScreen(
         }
 
         // ---- Analysis panel ----
-        if (!judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null)) {
+        if (!focusMode && !judgmentActive && (analyzing || analysisStatus.isNotEmpty() || currentAnalysis != null)) {
             if (analyzing || (currentAnalysis == null && analysisStatus.isNotEmpty())) {
                 Text(text = analysisStatus, fontSize = 13.sp, color = Color(0xFF2F7CF6))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1754,45 +1764,47 @@ fun GameScreen(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val analysisFresh = analysis != null && analysisKey == game.moves.size
-            when {
-                analyzing -> OutlinedButton(
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
-                ) { Text("分析中…") }
-                analysisFresh -> Button(
-                    onClick = {
-                        analysis = null
-                        analysisKey = -1
-                        selectedCandidate = 0
-                        analysisStatus = ""
-                        if (!judgmentActive) showTerritory = false
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text("关闭分析") }
-                else -> OutlinedButton(
-                    onClick = { runAnalysis(deep = false) },
-                    enabled = analysisAllowed && !finished,
-                    modifier = Modifier.weight(1f)
-                ) { Text("AI 分析") }
-            }
-            val judgmentFresh = judgment != null && judgmentKey == game.moves.size
-            when {
-                judging -> OutlinedButton(
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
-                ) { Text("判断中…") }
-                judgmentFresh -> Button(
-                    onClick = { judgment = null; judgmentKey = -1 },
-                    modifier = Modifier.weight(1f)
-                ) { Text("关闭形式判断") }
-                else -> OutlinedButton(
-                    onClick = { runJudgment() },
-                    enabled = !analyzing && !aiThinking && !finished,
-                    modifier = Modifier.weight(1f)
-                ) { Text("形式判断") }
+            if (!focusMode) {
+                val analysisFresh = analysis != null && analysisKey == game.moves.size
+                when {
+                    analyzing -> OutlinedButton(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("分析中…") }
+                    analysisFresh -> Button(
+                        onClick = {
+                            analysis = null
+                            analysisKey = -1
+                            selectedCandidate = 0
+                            analysisStatus = ""
+                            if (!judgmentActive) showTerritory = false
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("关闭分析") }
+                    else -> OutlinedButton(
+                        onClick = { runAnalysis(deep = false) },
+                        enabled = analysisAllowed && !finished,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("AI 分析") }
+                }
+                val judgmentFresh = judgment != null && judgmentKey == game.moves.size
+                when {
+                    judging -> OutlinedButton(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("判断中…") }
+                    judgmentFresh -> Button(
+                        onClick = { judgment = null; judgmentKey = -1 },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("关闭形式判断") }
+                    else -> OutlinedButton(
+                        onClick = { runJudgment() },
+                        enabled = !analyzing && !aiThinking && !finished,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("形式判断") }
+                }
             }
             OutlinedButton(
                 onClick = { enterScoring() },

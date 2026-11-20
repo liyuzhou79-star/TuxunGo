@@ -24,6 +24,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,7 +49,8 @@ fun SetupScreen(
     onOpenGuess: () -> Unit = {},
     onOpenGame: (com.tuxungo.android.LibraryGame) -> Unit = {},
     onOpenTsumego: (Int) -> Unit = {},
-    onOpenStats: () -> Unit = {}
+    onOpenStats: () -> Unit = {},
+    onOpenPhysicalClock: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeModelName = remember {
@@ -90,6 +92,7 @@ fun SetupScreen(
     var aiVisits by remember { mutableIntStateOf(setupPrefs.getInt("aiVisits", 200)) }
     var clockMinutes by remember { mutableIntStateOf(setupPrefs.getInt("clockMinutes", 0)) }
     var seriesTarget by remember { mutableIntStateOf(setupPrefs.getInt("seriesTarget", 0)) }
+    var focusMode by remember { mutableStateOf(setupPrefs.getBoolean("focusMode", false)) }
     var byoyomiPeriods by remember {
         mutableIntStateOf(setupPrefs.getInt("byoyomiPeriods", 3))
     }
@@ -107,7 +110,7 @@ fun SetupScreen(
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
-        clockMinutes, byoyomiPeriods, seriesTarget
+        clockMinutes, byoyomiPeriods, seriesTarget, focusMode
     ) {
         setupPrefs.edit()
             .putString("mode", mode.name)
@@ -120,6 +123,7 @@ fun SetupScreen(
             .putInt("clockMinutes", clockMinutes)
             .putInt("byoyomiPeriods", byoyomiPeriods)
             .putInt("seriesTarget", seriesTarget)
+            .putBoolean("focusMode", focusMode)
             .apply()
     }
 
@@ -255,6 +259,20 @@ fun SetupScreen(
                 text = "两个 AI 使用当前模型轮流落子，可随时暂停，暂停时可分析局面。",
                 fontSize = 13.sp, color = Color.Gray
             )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("专注模式", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "隐藏胜率、一选提示和形势分析，专心下棋；后台照常算，终局复盘不受影响",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            Switch(checked = focusMode, onCheckedChange = { focusMode = it })
         }
         if (mode == GameMode.PVE) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -409,7 +427,8 @@ fun SetupScreen(
                             komi = komiInput, humanStone = humanStone, aiVisits = aiVisits,
                             clockMinutes = clockMinutes,
                             byoyomiPeriods = byoyomiPeriods,
-                            seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0
+                            seriesTarget = if (mode == GameMode.EVE) seriesTarget else 0,
+                            focusMode = focusMode
                         )
                     )
                 }
@@ -528,6 +547,22 @@ fun SetupScreen(
             onClick = onOpenModels,
             modifier = Modifier.fillMaxWidth()
         ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
+        }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+        Text(text = "实体棋盘棋钟", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = "两个人用真棋盘下棋，手机当棋钟：下完一步点自己这边", fontSize = 13.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onOpenPhysicalClock,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("打开棋钟") }
         }
         }
         if (recentGames.isNotEmpty()) {

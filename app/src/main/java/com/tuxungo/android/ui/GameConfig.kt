@@ -27,5 +27,10 @@ data class GameConfig(
     val byoyomiPeriods: Int = 3,
     /** EVE only: an AI-vs-AI series — first to this many wins takes
      * the series, colours swap after every game. 0 = single game. */
-    val seriesTarget: Int = 0
+    val seriesTarget: Int = 0,
+    /** Start the game in focus mode: win rate, top-move marks,
+     * the live score line and the analysis panel stay hidden.
+     * Background pre-computation keeps running, so the post-game
+     * review is unaffected. */
+    val focusMode: Boolean = false
 )

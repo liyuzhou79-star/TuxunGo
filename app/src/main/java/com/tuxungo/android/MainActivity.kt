@@ -31,6 +31,7 @@ import com.tuxungo.android.ui.GameConfig
 import com.tuxungo.android.ui.GameScreen
 import com.tuxungo.android.ui.LibraryScreen
 import com.tuxungo.android.ui.ModelsScreen
+import com.tuxungo.android.ui.PhysicalClockScreen
 import com.tuxungo.android.ui.ReviewScreen
 import com.tuxungo.android.ui.SettingsScreen
 import com.tuxungo.android.ui.SetupScreen
@@ -143,7 +144,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS }
+private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW, GUESS, TSUMEGO, STATS, PHYSICAL_CLOCK }
 
 @Composable
 fun TuxunGoApp(
@@ -254,6 +255,7 @@ fun TuxunGoApp(
                 screen = Screen.TSUMEGO
             },
             onOpenStats = { screen = Screen.STATS },
+            onOpenPhysicalClock = { screen = Screen.PHYSICAL_CLOCK },
             onOpenGame = {
                 reviewGame = it
                 reviewInitialPly = null
@@ -267,6 +269,7 @@ fun TuxunGoApp(
             }
         )
         Screen.MODELS -> ModelsScreen(onBack = { screen = Screen.SETUP })
+        Screen.PHYSICAL_CLOCK -> PhysicalClockScreen(onBack = { screen = Screen.SETUP })
         Screen.LIBRARY -> LibraryScreen(
             onBack = { screen = Screen.SETUP },
             onOpenGame = {
