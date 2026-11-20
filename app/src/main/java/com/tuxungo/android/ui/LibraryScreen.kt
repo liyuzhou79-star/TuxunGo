@@ -111,7 +111,7 @@ fun LibraryScreen(
     var exportedNote by remember { mutableStateOf("") }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
-    fun exportSgf(g: LibraryGame) {
+    fun buildSgf(g: LibraryGame): String {
         val setup = when {
             g.customStones.isNotEmpty() -> g.customStones
             g.handicap > 0 -> {
@@ -142,13 +142,46 @@ fun LibraryScreen(
             g.handicap > 0 -> com.tuxungo.android.go.Stone.WHITE
             else -> com.tuxungo.android.go.Stone.BLACK
         }
-        val sgf = com.tuxungo.android.go.Sgf.export(
+        return com.tuxungo.android.go.Sgf.export(
             replay,
             setupStones = setup,
             startPlayer = startPlayer
         )
-        clipboard.setText(androidx.compose.ui.text.AnnotatedString(sgf))
+    }
+
+    fun exportSgf(g: LibraryGame) {
+        clipboard.setText(androidx.compose.ui.text.AnnotatedString(buildSgf(g)))
         exportedNote = "已复制「${g.title}」的 SGF 到剪贴板"
+    }
+
+    /** Export the whole library as one multi-game SGF file. */
+    fun exportAllSgf() {
+        if (games.isEmpty()) {
+            exportedNote = "棋谱库是空的，还没有可导出的棋谱"
+            return
+        }
+        runCatching {
+            val all = games.joinToString("\n") { buildSgf(it) }
+            val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+            val file = java.io.File(dir, "tuxungo_library.sgf")
+            file.writeText(all)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, context.packageName + ".fileprovider", file
+            )
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_SEND
+            ).apply {
+                type = "application/x-go-sgf"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                android.content.Intent.createChooser(intent, "导出全部棋谱")
+            )
+            exportedNote = "正在导出全部 ${games.size} 局棋谱"
+        }.onFailure {
+            exportedNote = "导出失败：${it.message ?: "未知错误"}"
+        }
     }
     var deleteFolderTarget by remember { mutableStateOf<String?>(null) }
     var renameFolderTarget by remember { mutableStateOf<LibraryFolder?>(null) }
@@ -195,6 +228,7 @@ fun LibraryScreen(
         Row {
             TextButton(onClick = onBack) { Text("‹ 返回") }
             Spacer(modifier = Modifier.weight(1f))
+            TextButton(onClick = { exportAllSgf() }) { Text("导出全部") }
             TextButton(onClick = { showNewFolder = true }) { Text("新建文件夹") }
         }
         Text("棋谱库", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
