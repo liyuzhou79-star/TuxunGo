@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 仓库新增代码地图（docs/CODE_MAP.md）：每个文件管什么、改功能先看哪里，一页讲清（App 功能没有变化）",
+            whatsNew = "· 中英 README 新增「参与开发」入口，指向代码地图，方便新贡献者上手（App 功能没有变化）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

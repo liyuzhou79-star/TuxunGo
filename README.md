@@ -109,6 +109,10 @@
 - AI 引擎为 [KataGo](https://github.com/lightvector/KataGo) v1.15.3（MIT 许可），经 NDK 编译后内置，通过 GTP 与分析协议驱动
 - 规则引擎（提子、禁着点、全局同形禁着、中国规则数目）为纯 Kotlin 实现，带单元测试
 
+## 参与开发
+
+想改代码或提改进，先看 [代码地图](docs/CODE_MAP.md)：每个文件管什么、改功能先看哪里，一页讲清。
+
 ## 致谢
 
 - [KataGo](https://github.com/lightvector/KataGo) —— 引擎与官方模型

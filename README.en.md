@@ -109,6 +109,10 @@ Import the `.bin.gz` file in the app's model library, give it a name, then assig
 - [KataGo](https://github.com/lightvector/KataGo) v1.15.3 (MIT) compiled with the NDK, driven over GTP and the analysis protocol
 - Pure-Kotlin rules engine (captures, suicide ban, positional superko, Chinese scoring) with unit tests
 
+## Contributing
+
+Start with the [code map](docs/CODE_MAP.md): what every file owns and where to look first when changing a feature, all on one page.
+
 ## Credits
 
 - [KataGo](https://github.com/lightvector/KataGo) — engine and official models
