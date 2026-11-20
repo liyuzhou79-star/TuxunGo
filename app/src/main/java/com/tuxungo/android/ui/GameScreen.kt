@@ -419,41 +419,6 @@ fun GameScreen(
         val eng = engineFor(moveStone) ?: return
         if (game.finished || aiThinking) return
         if (resignProposal != null) return
-        // AI resign proposal: at full strength, when the freshest
-        // judgment already calls this side hopeless (win rate at
-        // most 2% and 12+ points behind, 40+ moves in), the AI asks
-        // the user before resigning — it never just quits. After a
-        // refusal it must wait at least 15 moves to ask again.
-        run {
-            val refusedAt = if (moveStone == Stone.BLACK) {
-                resignRefusedAtBlack
-            } else {
-                resignRefusedAtWhite
-            }
-            if (sideCfg(moveStone).rank == "max" &&
-                game.moves.size >= 40 &&
-                game.moves.size - refusedAt >= 15
-            ) {
-                val res = when {
-                    autoKey == game.moves.size -> autoResult
-                    analysisKey == game.moves.size -> analysis
-                    else -> null
-                }
-                val wrSide = res?.let {
-                    if (moveStone == Stone.BLACK) {
-                        it.rootWinrateBlack
-                    } else {
-                        1.0 - it.rootWinrateBlack
-                    }
-                }
-                if (res != null && wrSide != null && wrSide <= 0.02 &&
-                    kotlin.math.abs(res.rootScoreLeadBlack) >= 12.0
-                ) {
-                    resignProposal = moveStone
-                    return
-                }
-            }
-        }
         val myToken = aiToken
         aiThinking = true
         engineStatus = "AI 思考中…"
@@ -703,6 +668,45 @@ fun GameScreen(
     // ---- Automatic light analysis: keeps the header score line live ----
     var autoResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var autoKey by remember { mutableIntStateOf(-1) }
+
+    /**
+     * AI resign proposal check, run by the AI driver before a move
+     * is generated: at full strength, when the freshest judgment
+     * already calls this side hopeless (win rate at most 2% and
+     * 12+ points behind, 40+ moves in), the AI asks the user
+     * before resigning — it never just quits. After a refusal it
+     * must wait at least 15 moves to ask again. Returns true when
+     * a proposal was raised (the driver then skips the move).
+     */
+    fun maybeProposeResign(stone: Stone): Boolean {
+        val refusedAt = if (stone == Stone.BLACK) {
+            resignRefusedAtBlack
+        } else {
+            resignRefusedAtWhite
+        }
+        if (sideCfg(stone).rank != "max" || game.moves.size < 40 ||
+            game.moves.size - refusedAt < 15
+        ) {
+            return false
+        }
+        val res = when {
+            autoKey == game.moves.size -> autoResult
+            analysisKey == game.moves.size -> analysis
+            else -> null
+        } ?: return false
+        val wrSide = if (stone == Stone.BLACK) {
+            res.rootWinrateBlack
+        } else {
+            1.0 - res.rootWinrateBlack
+        }
+        if (wrSide > 0.02 ||
+            kotlin.math.abs(res.rootScoreLeadBlack) < 12.0
+        ) {
+            return false
+        }
+        resignProposal = stone
+        return true
+    }
     var autoBusy by remember { mutableStateOf(false) }
 
     fun runAutoAnalysis() {
@@ -1084,7 +1088,9 @@ fun GameScreen(
             else -> 650L
         }
         delay(if (bothAi) eveDelayMs else 300)
-        if (!game.finished && aiControls(game.current) && !aiThinking) aiMoveNow()
+        if (!game.finished && aiControls(game.current) && !aiThinking) {
+            if (!maybeProposeResign(game.current)) aiMoveNow()
+        }
     }
 
     // ---- Game clock (optional): main time per side, then byoyomi
