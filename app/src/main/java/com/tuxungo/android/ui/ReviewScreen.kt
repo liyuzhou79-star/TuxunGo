@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tuxungo.android.LibraryGame
 import com.tuxungo.android.LibraryStore
+import com.tuxungo.android.PositionShare
 import com.tuxungo.android.SettingsStore
 import com.tuxungo.android.engine.AnalysisEngine
 import com.tuxungo.android.engine.EngineAssets
@@ -479,10 +480,23 @@ fun ReviewScreen(
                 onValueChange = { ply = it.roundToInt() },
                 valueRange = 0f..totalMoves.coerceAtLeast(1).toFloat()
             )
-            OutlinedButton(
-                onClick = { enterBranch() },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("从这手试下（分支探索）") }
+            Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { enterBranch() },
+                    modifier = Modifier.weight(1f)
+                ) { Text("从这手试下（分支探索）") }
+                OutlinedButton(
+                    onClick = {
+                        PositionShare.share(
+                            context, replayGame,
+                            "复盘 · 第 $ply / $totalMoves 手"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("分享局面") }
+            }
             if (marks.isNotEmpty()) {
                 val markPlys = marks.map { it.moveNumber }.distinct().sorted()
                 Spacer(modifier = Modifier.height(6.dp))

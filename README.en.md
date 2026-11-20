@@ -35,6 +35,7 @@ vs AI games, or play a friend on the same phone.
 - **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically (a brilliant move must clearly outrun the runner-up — no spam); stretches above 75% win rate are shaded green; black/white perspective switch; continue the game from any move; quick / precise / high-precision fill options
 - **Background pre-computation**: while you play, every position's stats are quietly recorded — the post-game review opens (nearly) instantly
 - **Annotated SGF export**: copy a review as SGF with per-move win-rate comments
+- **Position image sharing**: turn the current board in a game or review into a picture and share it in one tap
 
 ### Training
 

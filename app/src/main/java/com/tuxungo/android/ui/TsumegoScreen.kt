@@ -329,7 +329,17 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 )
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = { reset(index - 1) },
+                enabled = index > 0
+            ) { Text("‹ 上一题") }
+            Spacer(modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = { reset(index + 1) },
+                enabled = index < TSUMEGO_PROBLEMS.size - 1
+            ) { Text("下一题 ›") }
+        }
         Text(
             text = "${problem.title}：${problem.goal}",
             fontSize = 16.sp, fontWeight = FontWeight.SemiBold

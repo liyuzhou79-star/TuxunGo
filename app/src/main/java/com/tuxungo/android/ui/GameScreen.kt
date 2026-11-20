@@ -61,6 +61,7 @@ import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.GoGame
 import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Sgf
+import com.tuxungo.android.PositionShare
 import com.tuxungo.android.go.Stone
 import java.io.File
 import kotlinx.coroutines.delay
@@ -1170,6 +1171,13 @@ fun GameScreen(
                         Text(if (userPaused) "继续" else "暂停")
                     }
                 }
+                TextButton(onClick = {
+                    PositionShare.share(
+                        context, game,
+                        "对局 · 第 ${game.moves.size} 手 · " +
+                            if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
+                    )
+                }) { Text("分享局面") }
                 TextButton(onClick = { fullscreen = true }) { Text("全屏") }
                 TextButton(onClick = { exitGame() }) { Text("返回") }
             }
