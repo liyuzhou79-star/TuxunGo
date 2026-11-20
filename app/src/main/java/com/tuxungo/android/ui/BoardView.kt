@@ -76,6 +76,7 @@ fun BoardView(
     preview: Pair<Int, Int>? = null,
     /** Stones marked dead in scoring mode: drawn faded with a cross. */
     markedDead: Set<Int> = emptySet(),
+    judgedDead: Set<Int>? = null,
     /** Render the board rotated 180 degrees (White's point of view). */
     flipped: Boolean = false,
     onPointTap: (Int, Int) -> Unit
@@ -375,8 +376,15 @@ fun BoardView(
                 for (x in 0 until w) {
                     val stone = game.stoneAt(x, y) ?: continue
                     val v = ownership.getOrNull(y * w + x) ?: continue
-                    val dead = (stone == Stone.WHITE && v > territoryThreshold) ||
-                        (stone == Stone.BLACK && v < -territoryThreshold)
+                    // When the caller supplies its own judged-dead
+                    // set (the same set the numbers are counted
+                    // from), use it alone so board and panel agree.
+                    val dead = if (judgedDead != null) {
+                        game.index(x, y) in judgedDead
+                    } else {
+                        (stone == Stone.WHITE && v > territoryThreshold) ||
+                            (stone == Stone.BLACK && v < -territoryThreshold)
+                    }
                     if (!dead) continue
                     val half = r * 0.34f
                     val topLeft = Offset(px(x) - half, py(y) - half)

@@ -341,6 +341,119 @@ fun SettingsScreen(
             Text(text = updateText, fontSize = 13.sp, color = Color(0xFF2F7CF6))
         }
         Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "数据备份", fontSize = 15.sp)
+        Text(
+            text = "把棋谱库、训练进度和全部设置打包成一个文件；换手机或重装后，导入即可恢复。导入的模型文件不在备份内（太大），恢复后重新导入模型即可。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        var backupNote by remember { mutableStateOf("") }
+        var pendingImportUri by remember {
+            mutableStateOf<android.net.Uri?>(null)
+        }
+        var showImportConfirm by remember { mutableStateOf(false) }
+        val backupScope = rememberCoroutineScope()
+        val importLauncher =
+            androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts
+                    .OpenDocument()
+            ) { uri ->
+                if (uri != null) {
+                    pendingImportUri = uri
+                    showImportConfirm = true
+                }
+            }
+        androidx.compose.material3.OutlinedButton(
+            onClick = {
+                backupScope.launch {
+                    val file = withContext(Dispatchers.IO) {
+                        com.tuxungo.android.BackupStore
+                            .exportToFile(context)
+                    }
+                    val uri = androidx.core.content.FileProvider
+                        .getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            file
+                        )
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_SEND
+                    ).apply {
+                        type = "application/json"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(
+                            android.content.Intent
+                                .FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    }
+                    context.startActivity(
+                        android.content.Intent.createChooser(
+                            intent, "导出备份"
+                        )
+                    )
+                    backupNote = "备份文件已生成，选一个地方保存好。"
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("导出备份") }
+        Spacer(modifier = Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = {
+                importLauncher.launch(arrayOf("application/json", "*/*"))
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("导入恢复") }
+        if (backupNote.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = backupNote, fontSize = 13.sp, color = Color(0xFF2F7CF6))
+        }
+        if (showImportConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showImportConfirm = false },
+                title = { Text("恢复备份？") },
+                text = {
+                    Text("恢复会覆盖当前的棋谱库、训练进度和设置。确定要恢复吗？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showImportConfirm = false
+                            val uri = pendingImportUri
+                            if (uri != null) {
+                                backupNote = "正在恢复…"
+                                backupScope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val text = context.contentResolver
+                                                .openInputStream(uri)
+                                                ?.bufferedReader()
+                                                ?.readText()
+                                                ?: error("读不到这个文件")
+                                            com.tuxungo.android.BackupStore
+                                                .importJson(context, text)
+                                        }
+                                    }
+                                    backupNote = result.fold(
+                                        onSuccess = {
+                                            "$it。请重启 App，让设置全部生效。"
+                                        },
+                                        onFailure = {
+                                            "恢复失败：${it.message ?: "文件不对"}"
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    ) { Text("恢复") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showImportConfirm = false }
+                    ) { Text("取消") }
+                }
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "设置修改后，对正在进行的对局将在下一局生效。",
             fontSize = 12.sp, color = Color.Gray

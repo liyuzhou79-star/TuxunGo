@@ -4,6 +4,12 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -191,6 +198,8 @@ fun GameScreen(
     var selectedCandidate by remember { mutableIntStateOf(0) }
     var showTerritory by remember { mutableStateOf(false) }
     var judgment by remember { mutableStateOf<AnalysisResult?>(null) }
+    var continuousAnalysis by remember { mutableStateOf(false) }
+    var analysisExpanded by remember { mutableStateOf(false) }
     var judgmentKey by remember { mutableIntStateOf(-1) }
     var judging by remember { mutableStateOf(false) }
     // Incremented to cancel an in-flight analysis: its late result is
@@ -657,13 +666,60 @@ fun GameScreen(
             judgmentKey = game.moves.size
             return
         }
+        if (analyzing) return
+        // Judgment runs its own engine pass (800 visits for a
+        // sharper ownership map) and never touches the manual
+        // analysis state — opening judgment used to light up the
+        // "close analysis" button next to it, which confused users.
         judging = true
-        runAnalysis(deep = false, visitsOverride = 400) {
-            judging = false
-            if (analysis != null && analysisKey == game.moves.size) {
-                judgment = analysis
-                judgmentKey = game.moves.size
+        val token = analysisToken
+        val movesSnapshot = game.moves.toList()
+        val sideSnapshot = game.current
+        val moveCount = movesSnapshot.size
+        analysisRunner.submit({
+            var eng = analysisEngine
+            if (eng == null || !eng.isAlive) {
+                val model = ModelStore.resolveActiveFile(context)
+                eng = AnalysisEngine.start(
+                    nativeLibDir = context.applicationInfo.nativeLibraryDir,
+                    workDir = EngineAssets.engineWorkDir(context),
+                    modelFile = model
+                )
+                analysisEngine = eng
             }
+            eng.analyze(
+                size = game.size,
+                komi = game.komi,
+                initialStones = baseStones,
+                initialPlayer = basePlayer,
+                moves = movesSnapshot,
+                sideToMove = sideSnapshot,
+                maxVisits = 800
+            )
+        }) { result ->
+            judging = false
+            if (token != analysisToken) return@submit
+            result.onSuccess { res ->
+                if (game.moves.size == moveCount) {
+                    judgment = res
+                    judgmentKey = moveCount
+                }
+            }
+        }
+    }
+
+    // Continuous analysis: once switched on in the analysis
+    // panel, every new position is analyzed automatically so
+    // the user can keep playing with guidance, no re-tapping.
+    LaunchedEffect(version, aiThinking, continuousAnalysis, focusMode) {
+        if (!continuousAnalysis || focusMode || game.finished) {
+            return@LaunchedEffect
+        }
+        if (bothAi && eveRunning) return@LaunchedEffect
+        if (analysisKey == game.moves.size) return@LaunchedEffect
+        delay(600)
+        if (!analyzing && !aiThinking && !game.finished) {
+            runAnalysis(deep = false)
         }
     }
 
@@ -719,6 +775,11 @@ fun GameScreen(
                             game.size.width, game.size.height
                         )
                     )
+                    // Scoring also turns on the position judgment:
+                    // when scoring mode ends, the board keeps
+                    // showing the judged territory and dead stones.
+                    judgment = res
+                    judgmentKey = moveCount
                 }
             }
             deadSet = suggested
@@ -904,6 +965,25 @@ fun GameScreen(
         onExit()
     }
 
+    var showExitConfirm by remember { mutableStateOf(false) }
+
+    /** Leaving mid-game abandons the unfinished game, so ask first. */
+    fun requestExit() {
+        if (game.finished || game.moves.isEmpty()) {
+            exitGame()
+        } else {
+            showExitConfirm = true
+        }
+    }
+
+    BackHandler {
+        if (fullscreen) {
+            fullscreen = false
+        } else {
+            requestExit()
+        }
+    }
+
     var showSaveToLibrary by remember { mutableStateOf(false) }
     var savedToLibrary by remember { mutableStateOf(false) }
     var showScoreDetail by remember { mutableStateOf(false) }
@@ -1071,15 +1151,44 @@ fun GameScreen(
         clearAnalysis()
     }
 
+    // Dead stones for the judgment/territory display, from the
+    // same group-aware estimate the panels count with, so the
+    // board marks and the numbers always agree.
+    val judgedDeadSet: Set<Int> = when {
+        focusMode || scoringMode -> emptySet()
+        judgmentActive -> judgment?.let { j ->
+            val st = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            TerritoryEstimate.deadStones(
+                j.ownershipBlack, st, game.size.width, game.size.height
+            )
+        } ?: emptySet()
+        showTerritory -> analysis?.let { a ->
+            val st = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            TerritoryEstimate.deadStones(
+                a.ownershipBlack, st, game.size.width, game.size.height
+            )
+        } ?: emptySet()
+        else -> emptySet()
+    }
+
     if (fullscreen) {
         // Fullscreen spectating / playing: board as large as possible,
         // no coordinates, only analysis + judgment + exit stay.
         Column(modifier = Modifier.fillMaxSize().padding(4.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
-                Text(text = status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = status, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 Row {
                     if (clockEnabled && !finished) {
                         TextButton(onClick = { userPaused = !userPaused }) {
@@ -1125,6 +1234,7 @@ fun GameScreen(
                 } else emptyList(),
                 preview = if (scoringMode) null else pendingPoint,
                 markedDead = if (scoringMode) deadSet else emptySet(),
+                judgedDead = judgedDeadSet,
                 flipped = boardFlipped
             ) { x, y ->
                 if (scoringMode) {
@@ -1173,6 +1283,10 @@ fun GameScreen(
                         fontSize = 13.sp, color = Color.Gray,
                         modifier = Modifier.padding(top = 3.dp)
                     )
+                } else if (aiThinking) {
+                    Box(modifier = Modifier.padding(top = 3.dp)) {
+                        ThinkingIndicator()
+                    }
                 } else if (engineStatus.isNotEmpty()) {
                     Text(
                         text = engineStatus, fontSize = 13.sp,
@@ -1198,6 +1312,7 @@ fun GameScreen(
                                 analysisKey = -1
                                 selectedCandidate = 0
                                 analysisStatus = ""
+                                continuousAnalysis = false
                                 if (!judgmentActive) showTerritory = false
                             },
                             modifier = Modifier.weight(1f)
@@ -1244,30 +1359,34 @@ fun GameScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 12.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { requestExit() }) { Text("‹ 返回") }
             Text(
                 text = if (userPaused) "已暂停" else status,
-                fontSize = 16.sp, fontWeight = FontWeight.SemiBold
+                fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            Row {
-                if (clockEnabled && !finished) {
-                    TextButton(onClick = { userPaused = !userPaused }) {
-                        Text(if (userPaused) "继续" else "暂停")
-                    }
+            if (clockEnabled && !finished) {
+                TextButton(onClick = { userPaused = !userPaused }) {
+                    Text(if (userPaused) "继续" else "暂停")
                 }
-                TextButton(onClick = { focusMode = !focusMode }) {
-                    Text(if (focusMode) "退出专注" else "专注")
-                }
-                TextButton(onClick = {
-                    PositionShare.share(
-                        context, game,
-                        "对局 · 第 ${game.moves.size} 手 · " +
-                            if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
-                    )
-                }) { Text("分享局面") }
-                TextButton(onClick = { fullscreen = true }) { Text("全屏") }
-                TextButton(onClick = { exitGame() }) { Text("返回") }
             }
+            TextButton(onClick = { focusMode = !focusMode }) {
+                Text(if (focusMode) "退出专注" else "专注")
+            }
+            TextButton(onClick = {
+                PositionShare.share(
+                    context, game,
+                    "对局 · 第 ${game.moves.size} 手 · " +
+                        if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
+                )
+            }) { Text("分享") }
+            TextButton(onClick = { fullscreen = true }) { Text("全屏") }
         }
         // Player cards: who plays each side, captures and that
         // side's remaining clock. The side to move is tinted and
@@ -1461,11 +1580,14 @@ fun GameScreen(
         // tap-to-confirm hint live here so the board never jumps up or
         // down when they appear and disappear.
         Box(modifier = Modifier.fillMaxWidth().height(22.dp)) {
+            if (aiThinking) {
+                ThinkingIndicator()
+            }
             val hint = when {
                 pendingPoint != null -> "已选中落子点，再点一次确认落子"
                 else -> engineStatus
             }
-            if (hint.isNotEmpty()) {
+            if (!aiThinking && hint.isNotEmpty()) {
                 Text(
                     text = hint,
                     fontSize = 13.sp,
@@ -1526,6 +1648,7 @@ fun GameScreen(
             pvGhost = if (!focusMode && !judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
+            judgedDead = judgedDeadSet,
             flipped = boardFlipped
         ) { x, y ->
             if (scoringMode) {
@@ -1626,6 +1749,23 @@ fun GameScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
             if (currentAnalysis != null) {
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "AI 分析", fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold, color = Rose
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(text = "连续分析", fontSize = 12.sp, color = Color.Gray)
+                    Switch(
+                        checked = continuousAnalysis,
+                        onCheckedChange = { continuousAnalysis = it }
+                    )
+                    TextButton(onClick = { analysisExpanded = !analysisExpanded }) {
+                        Text(if (analysisExpanded) "收起" else "展开")
+                    }
+                }
                 val wr = currentAnalysis.rootWinrateBlack
                 Row(modifier = Modifier.fillMaxWidth().height(14.dp)) {
                     Box(
@@ -1648,6 +1788,14 @@ fun GameScreen(
                         if (lead >= 0) "黑领先约 ${formatNum(lead)} 目" else "白领先约 ${formatNum(-lead)} 目",
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold
                 )
+                val topCand = currentAnalysis.candidates.firstOrNull()
+                if (topCand != null) {
+                    Text(
+                        text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
+                        fontSize = 13.sp, color = Color.Gray
+                    )
+                }
+                if (analysisExpanded) {
                 val stones = Array(game.size.area) { i ->
                     game.stoneAt(i % game.size.width, i / game.size.width)
                 }
@@ -1733,6 +1881,7 @@ fun GameScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = analysisStatus, fontSize = 12.sp, color = Color.Gray)
                 }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -1778,6 +1927,7 @@ fun GameScreen(
                             analysisKey = -1
                             selectedCandidate = 0
                             analysisStatus = ""
+                            continuousAnalysis = false
                             if (!judgmentActive) showTerritory = false
                         },
                         modifier = Modifier.weight(1f)
@@ -1918,6 +2068,27 @@ fun GameScreen(
     }
 
 
+    if (showExitConfirm) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirm = false },
+            title = { Text("退出对局？") },
+            text = {
+                Text("这局还没下完，退出后不会保留进度（已结束的对局会自动存入棋谱库）。确定退出吗？")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitConfirm = false
+                    exitGame()
+                }) { Text("退出") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirm = false }) {
+                    Text("继续下棋")
+                }
+            }
+        )
+    }
+
     if (showResignConfirm) {
         val resignStone = when {
             bothAi -> game.current
@@ -2031,6 +2202,48 @@ private fun formatPercent(v: Double): String = String.format("%.1f%%", v * 100)
 
 private fun formatNum(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else String.format("%.1f", v)
+
+/** Animated "AI is thinking" indicator: a small spinner plus
+ * three dots that light up in turn — less monotonous than a
+ * static label with an ellipsis. */
+@Composable
+fun ThinkingIndicator() {
+    val transition = rememberInfiniteTransition(label = "thinking")
+    Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(14.dp),
+            strokeWidth = 2.dp,
+            color = Color(0xFF2F7CF6)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = "AI 思考中", fontSize = 13.sp, color = Color(0xFF2F7CF6))
+        Spacer(modifier = Modifier.width(4.dp))
+        for (i in 0..2) {
+            val alpha by transition.animateFloat(
+                initialValue = 0.2f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = 450, delayMillis = i * 150
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "thinkingDot$i"
+            )
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .background(
+                        Color(0xFF2F7CF6).copy(alpha = alpha),
+                        androidx.compose.foundation.shape.CircleShape
+                    )
+            )
+            if (i < 2) Spacer(modifier = Modifier.width(3.dp))
+        }
+    }
+}
 
 /** One side's controls in the AI panel: takeover switch, model picker, strength chips. */
 @Composable

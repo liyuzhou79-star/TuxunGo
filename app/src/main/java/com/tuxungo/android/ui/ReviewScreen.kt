@@ -113,6 +113,18 @@ fun ReviewScreen(
     // Branch ("what-if") exploration: a scratch game forked at the
     // current ply. The main line is never touched.
     var branchGame by remember { mutableStateOf<GoGame?>(null) }
+    var showBranchExitConfirm by remember { mutableStateOf(false) }
+
+    /** Leaving with an unsaved trial branch open asks first. */
+    fun requestReviewExit() {
+        if (branchGame != null) {
+            showBranchExitConfirm = true
+        } else {
+            onBack()
+        }
+    }
+
+    androidx.activity.compose.BackHandler { requestReviewExit() }
     var branchBasePly by remember { mutableIntStateOf(0) }
     var branchPending by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var branchInfo by remember { mutableStateOf("") }
@@ -330,7 +342,7 @@ fun ReviewScreen(
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Row {
-            TextButton(onClick = onBack) { Text("‹ 返回") }
+            TextButton(onClick = { requestReviewExit() }) { Text("‹ 返回") }
             Spacer(modifier = Modifier.weight(1f))
             if (current.id.isBlank()) {
                 TextButton(onClick = { showSaveDialog = true }) { Text("收藏棋谱") }
@@ -805,6 +817,27 @@ fun ReviewScreen(
             modifier = Modifier.fillMaxWidth()
         ) { Text("从这手继续下") }
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showBranchExitConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showBranchExitConfirm = false },
+            title = { Text("退出复盘？") },
+            text = {
+                Text("试下分支还没保存，退出会丢失这条分支。确定退出吗？")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBranchExitConfirm = false
+                    onBack()
+                }) { Text("退出") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBranchExitConfirm = false }) {
+                    Text("继续复盘")
+                }
+            }
+        )
     }
 
     if (showSaveDialog) {

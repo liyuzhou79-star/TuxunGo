@@ -237,6 +237,18 @@ fun TuxunGoApp(
         },
         label = "screen"
     ) { targetScreen ->
+    // System back (button or edge swipe) walks back to the home
+    // screen instead of leaving the app. The game and review
+    // screens handle their own back (exit confirmation), so
+    // they are excluded here.
+    androidx.activity.compose.BackHandler(
+        enabled = targetScreen != Screen.SETUP &&
+            targetScreen != Screen.GAME &&
+            targetScreen != Screen.REVIEW
+    ) {
+        screen = Screen.SETUP
+    }
+
     when (targetScreen) {
         Screen.SETUP -> SetupScreen(
             onStart = {
