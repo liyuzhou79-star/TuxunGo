@@ -30,16 +30,16 @@ vs AI games, or play a friend on the same phone.
 
 ### Analysis & review
 
-- **AI analysis**: candidate moves ranked on the board with the top choice unmistakable; win-rate bar, score lead, territory estimate, principal-variation ghosts
+- **AI analysis**: candidate moves ranked on the board with the top choice unmistakable; win-rate bar, score lead, territory estimate, principal-variation ghosts; switchable depth (quick / standard / deep)
 - **Position judgment**: one tap for territory, dead stones and a verdict
-- **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically; stretches above 75% win rate are shaded green; black/white perspective switch; continue the game from any move
+- **Full-game review**: per-move win-rate and score-lead chart with scrubbable replay; **blunders, brilliant moves and the single biggest swing** are marked automatically (a brilliant move must clearly outrun the runner-up — no spam); stretches above 75% win rate are shaded green; black/white perspective switch; continue the game from any move; quick / precise / high-precision fill options
 - **Background pre-computation**: while you play, every position's stats are quietly recorded — the post-game review opens (nearly) instantly
 - **Annotated SGF export**: copy a review as SGF with per-move win-rate comments
 
 ### Training
 
-- **Tsumego training**: seven problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, and the classic under-the-stones) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules
-- **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty
+- **Tsumego training**: seven problems (capturing race, double atari, shared-liberty fight, big-dragon squeeze, ladder, making life, and the classic under-the-stones) with difficulty labels — play the right move and the opponent answers automatically, with hints, explanations, solve timing and mistake counts; every solution is verified move by move against the rules; the home screen recommends a daily problem from the unsolved ones
+- **Guess-the-move training**: an AI self-play game advances one move at a time and you guess KataGo's top choice, with scoring, streaks and adjustable difficulty; outright misses are saved to a **mistake book** you can review position by position until you nail them
 
 ### Game library
 
@@ -52,11 +52,14 @@ vs AI games, or play a friend on the same phone.
 - Ships with a 10-block KataGo net, ready out of the box
 - Import your own KataGo models (`.txt.gz` / `.bin.gz`, up to 99): integrity check, header parse and a real engine test-load — a broken file never enters the library
 - Every model, including the built-in one, can be given a nickname
+- Every model can be speed-tested (visits per second) right in the library
 
 ### Experience
 
-- Real recorded stone sounds (synthesized alternatives included), placement vibration, four board skins, and three theme accents (sakura pink / matcha green / indigo) switchable instantly
-- Games survive backgrounding and process death — pick up right where you left off
+- Real recorded stone sounds (synthesized alternatives included), placement vibration, five board skins (including the pale Moon stone), and three theme accents (sakura pink / matcha green / indigo) switchable instantly
+- A "My data" page: game totals, black/white win split, recent game lengths and training progress, all computed on-device
+- Player cards above the board show who plays each side, captures and each side's clock; the side to move is highlighted
+- Games survive backgrounding and process death — pick up right where you left off; if the engine process dies mid-game it restarts and retries the move automatically
 - **Offline by design**: engine and models live on the device; no server, no account. The only network feature is the manual "Check for updates" button in Settings — nothing connects unless you tap it
 
 ## Download

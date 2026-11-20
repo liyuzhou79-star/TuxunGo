@@ -56,6 +56,13 @@ fun StatsScreen(onBack: () -> Unit) {
         )
         p.getInt("bestScore", 0) to p.getInt("bestStreak", 0)
     }
+    val guessMistakes = remember {
+        val p = context.getSharedPreferences(
+            "guess_prefs", android.content.Context.MODE_PRIVATE
+        )
+        val s = p.getString("mistakes", "") ?: ""
+        if (s.isBlank()) 0 else s.split("|").count { it.isNotBlank() }
+    }
 
     Column(
         modifier = Modifier
@@ -154,6 +161,10 @@ fun StatsScreen(onBack: () -> Unit) {
                     } else {
                         "还没玩过"
                     }
+                )
+                StatRow(
+                    "猜一选错题待复习",
+                    if (guessMistakes > 0) "$guessMistakes 题" else "暂无"
                 )
             }
         }

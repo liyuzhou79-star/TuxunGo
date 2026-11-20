@@ -508,7 +508,11 @@ fun SetupScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        "${g.title} · ${g.moves.size} 手",
+                        "${g.title} · ${g.moves.size} 手 · " +
+                            java.text.SimpleDateFormat(
+                                "MM-dd HH:mm",
+                                java.util.Locale.getDefault()
+                            ).format(java.util.Date(g.createdAt)),
                         fontSize = 13.sp,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -520,7 +524,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 2.2.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 2.3.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {

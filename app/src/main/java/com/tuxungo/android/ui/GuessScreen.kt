@@ -396,7 +396,8 @@ fun GuessScreen(onBack: () -> Unit) {
                         "答题 $answered 题 · 得分 $score\n" +
                             "一选命中 $topHits 题（命中率 $hitRate）\n" +
                             "最高连对 $bestStreak\n" +
-                            "历史最佳：得分 $savedBestScore · 连对 $savedBestStreak",
+                            "历史最佳：得分 $savedBestScore · 连对 $savedBestStreak\n" +
+                            "错题本：${mistakes.size} 题待复习",
                         fontSize = 14.sp
                     )
                 },
