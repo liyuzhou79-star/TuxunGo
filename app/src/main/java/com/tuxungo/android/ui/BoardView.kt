@@ -35,13 +35,14 @@ data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
 /** Board face designs, selectable in settings. */
 enum class BoardSkin {
-    WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA;
+    WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON;
 
     companion object {
         fun fromId(id: String): BoardSkin = when (id) {
             "wood_dark" -> WOOD_DARK
             "bamboo" -> BAMBOO
             "sakura" -> SAKURA
+            "moon" -> MOON
             else -> WOOD_LIGHT
         }
     }
@@ -169,6 +170,12 @@ fun BoardView(
             BoardSkin.WOOD_DARK -> Color(0xFF2E1B0E)
             BoardSkin.BAMBOO -> Color(0xFF9A6B2F)
             BoardSkin.SAKURA -> Color(0xFFD98CA6)
+            BoardSkin.MOON -> Color(0xFFB4AB9C)
+        }
+        val grainInk = when (skin) {
+            BoardSkin.SAKURA -> Color(0xFFC48AA0)
+            BoardSkin.MOON -> Color(0xFF8F887B)
+            else -> Color(0xFF8A5A24)
         }
 
         // Soft shadow under the board, then the edge and the face.
@@ -202,6 +209,7 @@ fun BoardView(
         } else {
             val (light, deep) = when (skin) {
                 BoardSkin.SAKURA -> Color(0xFFFCE9F1) to Color(0xFFF7CFDE)
+                BoardSkin.MOON -> Color(0xFFF5F2EC) to Color(0xFFE7E1D3)
                 else -> Color(0xFFEECC95) to Color(0xFFDDB26E)
             }
             drawRoundRect(
@@ -222,7 +230,7 @@ fun BoardView(
                     val gy = faceTop + fy * faceSize.height
                     val gx = faceLeft + (alphaSeed - 0.5f) * faceSize.width * 0.3f
                     drawRect(
-                        color = Color(0xFF8A5A24).copy(alpha = 0.028f + alphaSeed * 0.035f),
+                        color = grainInk.copy(alpha = 0.028f + alphaSeed * 0.035f),
                         topLeft = Offset(gx, gy),
                         size = Size(faceSize.width * lenFrac * 1.6f, maxOf(1.1f, s * 0.0022f))
                     )

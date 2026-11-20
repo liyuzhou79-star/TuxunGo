@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -1147,63 +1149,83 @@ fun GameScreen(
                 TextButton(onClick = { exitGame() }) { Text("返回") }
             }
         }
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF1A1A1A), CircleShape)
-                    .size(10.dp)
-            )
-            Spacer(modifier = Modifier.padding(start = 4.dp))
-            Text(text = "提子 ${game.capturesByBlack}", fontSize = 13.sp, color = Color.Gray)
-            Spacer(modifier = Modifier.padding(horizontal = 6.dp))
-            Box(
-                modifier = Modifier
-                    .border(BorderStroke(1.dp, Color(0xFFB0A58F)), CircleShape)
-                    .background(Color.White, CircleShape)
-                    .size(10.dp)
-            )
-            Spacer(modifier = Modifier.padding(start = 4.dp))
-            Text(text = "提子 ${game.capturesByWhite}", fontSize = 13.sp, color = Color.Gray)
-            if (config.handicap > 0) {
-                Text(text = " · 让 ${config.handicap} 子", fontSize = 13.sp, color = Color.Gray)
+        // Player cards: who plays each side, captures and that
+        // side's remaining clock. The side to move is tinted and
+        // outlined so the turn is obvious at a glance.
+        fun fmtSide(mainMs: Long, periods: Int, periodMs: Long): String =
+            if (mainMs > 0) {
+                val s = (mainMs + 999) / 1000
+                String.format("%d:%02d", s / 60, s % 60)
+            } else if (periods > 0) {
+                "读秒 ${(periodMs + 999) / 1000} 秒 × $periods"
+            } else {
+                "时间到"
             }
-            if (config.customStones.isNotEmpty()) {
-                Text(text = " · 自定义布局", fontSize = 13.sp, color = Color.Gray)
-            }
-            if (isPve) {
-                val aiCfg = if (config.humanStone == Stone.BLACK) {
-                    sideWhite
-                } else {
-                    sideBlack
-                }
-                val aiName = remember(aiCfg.modelId) {
-                    ModelStore.list(context)
-                        .firstOrNull { it.id == aiCfg.modelId }
-                        ?.displayName ?: "内置默认模型"
-                }
-                Text(text = " · AI：$aiName", fontSize = 13.sp, color = Color.Gray)
-            }
+        val blackModelName = remember(sideBlack.modelId) {
+            ModelStore.list(context).firstOrNull { it.id == sideBlack.modelId }
+                ?.displayName ?: "内置默认模型"
         }
-        if (clockEnabled) {
-            fun fmtSide(mainMs: Long, periods: Int, periodMs: Long): String =
-                if (mainMs > 0) {
-                    val s = (mainMs + 999) / 1000
-                    String.format("%d:%02d", s / 60, s % 60)
-                } else if (periods > 0) {
-                    "读秒 ${(periodMs + 999) / 1000} 秒 × $periods"
+        val whiteModelName = remember(sideWhite.modelId) {
+            ModelStore.list(context).firstOrNull { it.id == sideWhite.modelId }
+                ?.displayName ?: "内置默认模型"
+        }
+        fun sideTitle(stone: Stone): String = when {
+            isEve -> if (stone == Stone.BLACK) blackModelName else whiteModelName
+            isPve && stone != config.humanStone ->
+                if (stone == Stone.BLACK) blackModelName else whiteModelName
+            isPve -> "你"
+            else -> if (stone == Stone.BLACK) "黑方" else "白方"
+        }
+        fun sideDetail(stone: Stone): String {
+            val parts = mutableListOf<String>()
+            parts += "提子 ${
+                if (stone == Stone.BLACK) game.capturesByBlack else game.capturesByWhite
+            }"
+            if (clockEnabled) {
+                parts += if (stone == Stone.BLACK) {
+                    fmtSide(clockBlackMainMs, clockBlackPeriods, clockBlackPeriodMs)
                 } else {
-                    "时间到"
+                    fmtSide(clockWhiteMainMs, clockWhitePeriods, clockWhitePeriodMs)
                 }
-            val currentInByoyomi =
-                (game.current == Stone.BLACK && clockBlackMainMs <= 0L) ||
-                    (game.current == Stone.WHITE && clockWhiteMainMs <= 0L)
+            }
+            if (aiThinking && !finished && game.current == stone) {
+                parts += "思考中…"
+            }
+            return parts.joinToString(" · ")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PlayerCard(
+                modifier = Modifier.weight(1f),
+                isBlack = true,
+                title = sideTitle(Stone.BLACK),
+                detail = sideDetail(Stone.BLACK),
+                active = !finished && game.current == Stone.BLACK,
+                alert = clockEnabled && game.current == Stone.BLACK &&
+                    clockBlackMainMs <= 0L && clockBlackPeriods > 0
+            )
+            PlayerCard(
+                modifier = Modifier.weight(1f),
+                isBlack = false,
+                title = sideTitle(Stone.WHITE),
+                detail = sideDetail(Stone.WHITE),
+                active = !finished && game.current == Stone.WHITE,
+                alert = clockEnabled && game.current == Stone.WHITE &&
+                    clockWhiteMainMs <= 0L && clockWhitePeriods > 0
+            )
+        }
+        if (config.handicap > 0 || config.customStones.isNotEmpty()) {
             Text(
-                text = "⏱ 黑 ${fmtSide(clockBlackMainMs, clockBlackPeriods, clockBlackPeriodMs)} · 白 ${fmtSide(clockWhiteMainMs, clockWhitePeriods, clockWhitePeriodMs)}",
-                fontSize = 13.sp,
-                fontWeight = if (currentInByoyomi) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (currentInByoyomi) Color(0xFFB3261E) else Color.Gray
+                text = listOfNotNull(
+                    if (config.handicap > 0) "让 ${config.handicap} 子" else null,
+                    if (config.customStones.isNotEmpty()) "自定义布局" else null
+                ).joinToString(" · "),
+                fontSize = 12.sp, color = Color.Gray
             )
         }
+        Spacer(modifier = Modifier.height(6.dp))
         // Live score line: territory (incl. dead stones) + alive stones
         // + winrate, from the freshest analysis for this exact position
         // (manual analysis, judgment, or the automatic light analysis).
@@ -1923,6 +1945,71 @@ private fun AiSideSection(
                 Text(
                     text = "思考量：${cfg.visits}（越大越强、越慢）",
                     fontSize = 12.sp, color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+/** One side's info card above the board in a game. */
+@Composable
+private fun PlayerCard(
+    modifier: Modifier,
+    isBlack: Boolean,
+    title: String,
+    detail: String,
+    active: Boolean,
+    alert: Boolean
+) {
+    val colors = androidx.compose.material3.MaterialTheme.colorScheme
+    androidx.compose.material3.Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = if (active) {
+                colors.primaryContainer
+            } else {
+                colors.surfaceVariant
+            }
+        ),
+        border = if (active) BorderStroke(1.5.dp, colors.primary) else null
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .then(
+                        if (isBlack) {
+                            Modifier
+                        } else {
+                            Modifier.border(
+                                BorderStroke(1.dp, Color(0xFFB0A58F)),
+                                CircleShape
+                            )
+                        }
+                    )
+                    .background(
+                        if (isBlack) Color(0xFF1A1A1A) else Color.White,
+                        CircleShape
+                    )
+                    .size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    text = detail,
+                    fontSize = 11.sp,
+                    color = if (alert) Color(0xFFB3261E) else Color.Gray,
+                    maxLines = 1
                 )
             }
         }

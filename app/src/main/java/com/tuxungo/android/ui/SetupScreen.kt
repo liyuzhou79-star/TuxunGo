@@ -1,18 +1,28 @@
 package com.tuxungo.android.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -126,12 +136,51 @@ fun SetupScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        Text(text = "TuxunGo", fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "免费开源的围棋对弈与 AI 分析应用，内置 KataGo 引擎。", fontSize = 14.sp)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            // Logo block: theme-colored tile with a black and a
+            // white stone, echoing the app icon.
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(15.dp)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(androidx.compose.ui.Alignment.BottomStart)
+                        .offset(x = 8.dp, y = (-8).dp)
+                        .background(Color(0xFF1A1A1A), CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(androidx.compose.ui.Alignment.TopEnd)
+                        .offset(x = (-8).dp, y = 8.dp)
+                        .background(Color.White, CircleShape)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column {
+                Text(text = "TuxunGo", fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "免费开源的围棋对弈与 AI 分析",
+                    fontSize = 13.sp, color = Color.Gray
+                )
+                Text(
+                    text = "内置 KataGo 引擎 · 完全离线",
+                    fontSize = 13.sp, color = Color.Gray
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(20.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
         Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "快速开始", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
@@ -142,7 +191,7 @@ fun SetupScreen(
                 },
                 modifier = Modifier.weight(1f)
             ) { Text("9 路快棋") }
-            androidx.compose.material3.OutlinedButton(
+            Button(
                 onClick = {
                     onStart(GameConfig(mode = GameMode.PVE, width = 19, height = 19, aiVisits = 200))
                 },
@@ -161,14 +210,32 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
         Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "对弈模式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = mode == GameMode.PVP, onClick = { mode = GameMode.PVP }, label = { Text("人对人") })
-            FilterChip(selected = mode == GameMode.PVE, onClick = { mode = GameMode.PVE }, label = { Text("人对 AI") })
-            FilterChip(selected = mode == GameMode.EVE, onClick = { mode = GameMode.EVE }, label = { Text("AI 对 AI") })
+            ModeOption(
+                title = "人对人",
+                desc = "和朋友轮流落子",
+                selected = mode == GameMode.PVP,
+                modifier = Modifier.weight(1f)
+            ) { mode = GameMode.PVP }
+            ModeOption(
+                title = "人对 AI",
+                desc = "挑战 KataGo",
+                selected = mode == GameMode.PVE,
+                modifier = Modifier.weight(1f)
+            ) { mode = GameMode.PVE }
+            ModeOption(
+                title = "AI 对 AI",
+                desc = "看 AI 互搏",
+                selected = mode == GameMode.EVE,
+                modifier = Modifier.weight(1f)
+            ) { mode = GameMode.EVE }
         }
         if (mode == GameMode.EVE) {
             Spacer(modifier = Modifier.height(6.dp))
@@ -321,9 +388,9 @@ fun SetupScreen(
             } else {
                 androidx.compose.material3.ButtonDefaults.buttonColors()
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(54.dp)
         ) {
-            Text(text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局", fontSize = 16.sp)
+            Text(text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局", fontSize = 17.sp)
         }
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -336,48 +403,17 @@ fun SetupScreen(
                 modifier = Modifier.weight(1f)
             ) { Text("设置") }
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "AI 模型", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "当前模型：$activeModelName", fontSize = 13.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenModels,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
-        }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "猜一选训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        val guessBestText = remember {
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("训练")
+        Spacer(modifier = Modifier.height(10.dp))
+        val guessBestFoot = remember {
             val p = context.getSharedPreferences(
                 "guess_prefs", android.content.Context.MODE_PRIVATE
             )
             val bs = p.getInt("bestScore", 0)
             val bk = p.getInt("bestStreak", 0)
-            if (bs > 0 || bk > 0) "历史最佳：得分 $bs · 连对 $bk。" else ""
+            if (bs > 0 || bk > 0) "最佳 $bs 分 · 连对 $bk" else "暂无成绩"
         }
-        Text(
-            text = "AI 自对弈逐手推进，你来猜每一步的一选，练棋感和大局观。" + guessBestText,
-            fontSize = 13.sp, color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenGuess,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("开始猜一选") }
-        }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "死活题训练", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
         val tsumegoSolvedCount = remember {
             val s = context.getSharedPreferences(
                 "tsumego_prefs", android.content.Context.MODE_PRIVATE
@@ -388,42 +424,55 @@ fun SetupScreen(
                 s.split(",").count { it.isNotBlank() }
             }
         }
-        Text(
-            text = "从紧气、双吃到对杀、征子，做对一步，对方自动应招，练读秒般的计算力。" +
-                "已解 $tsumegoSolvedCount / ${TSUMEGO_PROBLEMS.size} 题。",
-            fontSize = 13.sp, color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenTsumego,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("开始做死活题") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NavCard(
+                title = "猜一选",
+                desc = "猜 AI 每一步的一选，练棋感和大局观",
+                foot = guessBestFoot,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenGuess
+            )
+            NavCard(
+                title = "死活题",
+                desc = "紧气、双吃、对杀、征子，练计算力",
+                foot = "已解 $tsumegoSolvedCount / ${TSUMEGO_PROBLEMS.size} 题",
+                modifier = Modifier.weight(1f),
+                onClick = onOpenTsumego
+            )
         }
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle("资料与工具")
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NavCard(
+                title = "棋谱库",
+                desc = "收藏的对局都在这里，点开就能复盘",
+                foot = "打开棋谱库",
+                modifier = Modifier.weight(1f),
+                onClick = onOpenLibrary
+            )
+            NavCard(
+                title = "我的数据",
+                desc = "对局总览、黑白胜负和训练进度",
+                foot = "查看统计",
+                modifier = Modifier.weight(1f),
+                onClick = onOpenStats
+            )
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
         Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "棋谱库", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = "AI 模型", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "收藏的对局都在这里，点开就能复盘整场。", fontSize = 13.sp, color = Color.Gray)
+        Text(text = "当前模型：$activeModelName", fontSize = 13.sp, color = Color.Gray)
         Spacer(modifier = Modifier.height(8.dp))
         androidx.compose.material3.OutlinedButton(
-            onClick = onOpenLibrary,
+            onClick = onOpenModels,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("打开棋谱库") }
-        }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "我的数据", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "对局总览、黑白胜负分布、最近对局手数和训练进度，都在本机统计。", fontSize = 13.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedButton(
-            onClick = onOpenStats,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("查看我的数据") }
+        ) { Text("打开模型库（可上传自己的 KataGo 模型）") }
         }
         }
         if (recentGames.isNotEmpty()) {
@@ -450,7 +499,7 @@ fun SetupScreen(
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "版本 1.15.0", fontSize = 12.sp, color = Color.Gray)
+        Text(text = "版本 2.0.0", fontSize = 12.sp, color = Color.Gray)
     }
 
     if (showUnsupportedDialog) {
@@ -473,5 +522,102 @@ fun SetupScreen(
                 TextButton(onClick = { showUnsupportedDialog = false }) { Text("去改棋盘") }
             }
         )
+    }
+}
+
+/** Section header with a small accent bar. */
+@Composable
+private fun SectionTitle(text: String) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 17.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary,
+                    RoundedCornerShape(2.dp)
+                )
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** Selectable mode card on the setup screen. */
+@Composable
+private fun ModeOption(
+    title: String,
+    desc: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    Card(
+        modifier = modifier,
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                colors.primaryContainer
+            } else {
+                colors.surfaceVariant
+            }
+        ),
+        border = if (selected) {
+            BorderStroke(1.5.dp, colors.primary)
+        } else {
+            null
+        }
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) {
+                    colors.onPrimaryContainer
+                } else {
+                    colors.onSurface
+                }
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = desc,
+                fontSize = 11.sp,
+                color = colors.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+    }
+}
+
+/** Navigation card used in the training / library grids. */
+@Composable
+private fun NavCard(
+    title: String,
+    desc: String,
+    foot: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    Card(
+        modifier = modifier.height(118.dp),
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surface)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = desc, fontSize = 12.sp, color = Color.Gray, maxLines = 2)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = foot,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.primary
+            )
+        }
     }
 }

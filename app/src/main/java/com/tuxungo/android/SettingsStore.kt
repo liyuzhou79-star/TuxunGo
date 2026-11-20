@@ -60,7 +60,8 @@ object SettingsStore {
         "wood_light" to "榧木纹（浅）",
         "wood_dark" to "胡桃木（深）",
         "bamboo" to "竹黄",
-        "sakura" to "樱花粉"
+        "sakura" to "樱花粉",
+        "moon" to "月白石"
     )
 
     fun load(context: Context): AppSettings {
