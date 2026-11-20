@@ -6,10 +6,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Manual update check against the project's GitHub releases. This is
- * the ONLY network call in the app, and it only runs when the user
- * taps the button in Settings — games and analysis stay fully
- * offline. Returns a user-facing message.
+ * Manual update check against the project's GitHub releases. One of
+ * only two network paths in the app (this and the strong-model
+ * download), and both only run when the user taps for them — games
+ * and analysis stay fully offline. Returns a user-facing message.
  */
 object UpdateChecker {
 

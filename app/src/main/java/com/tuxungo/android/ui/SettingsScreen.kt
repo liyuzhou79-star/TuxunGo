@@ -567,6 +567,22 @@ fun SettingsScreen(
         }
 
         if (page == "data") {
+        val libCount = remember {
+            com.tuxungo.android.LibraryStore.listGames(context).size
+        }
+        val libBytes = remember {
+            runCatching {
+                java.io.File(context.filesDir, "library").walkTopDown()
+                    .filter { it.isFile }.sumOf { it.length() }
+            }.getOrDefault(0L)
+        }
+        Text(text = "数据概览", fontSize = 15.sp)
+        Text(
+            text = "棋谱库共 $libCount 局，占约 ${libBytes / 1024} KB" +
+                "（不含模型文件，模型占用在模型库页看）。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         var showResetConfirm by remember { mutableStateOf(false) }
         androidx.compose.material3.OutlinedButton(
             onClick = { showResetConfirm = true },
