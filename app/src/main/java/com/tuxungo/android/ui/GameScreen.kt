@@ -91,6 +91,7 @@ fun GameScreen(
     initialTimeoutBy: Stone? = null
 ) {
     val context = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val settings = remember { SettingsStore.load(context) }
     // Optional keep-awake while a game is on screen.
     DisposableEffect(settings.keepScreenOn) {
