@@ -440,8 +440,8 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 生涯页定级战绩加了「最高胜档」：你赢过的最高一档一目了然\n" +
-                "· AI 表演赛系列赛时，解说卡顶部会常驻显示系列赛比分",
+            whatsNew = "· 对局页双方卡片会显示 AI 的段位了（比如「轻量模型 · 5 级」），不用打开面板也知道在跟谁下\n" +
+                "· 清理了两个没用上的旧音效文件，安装包小了一点点",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

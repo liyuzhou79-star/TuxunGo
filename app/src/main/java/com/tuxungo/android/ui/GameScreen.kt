@@ -1927,12 +1927,23 @@ fun GameScreen(
             ModelStore.list(context).firstOrNull { it.id == sideWhite.modelId }
                 ?.displayName ?: "轻量模型"
         }
-        fun sideTitle(stone: Stone): String = when {
-            isEve -> if (stone == Stone.BLACK) blackModelName else whiteModelName
-            isPve && stone != config.humanStone ->
-                if (stone == Stone.BLACK) blackModelName else whiteModelName
-            isPve -> "你"
-            else -> if (stone == Stone.BLACK) "黑方" else "白方"
+        fun sideTitle(stone: Stone): String {
+            val base = when {
+                isEve -> if (stone == Stone.BLACK) blackModelName else whiteModelName
+                isPve && stone != config.humanStone ->
+                    if (stone == Stone.BLACK) blackModelName else whiteModelName
+                isPve -> "你"
+                else -> if (stone == Stone.BLACK) "黑方" else "白方"
+            }
+            // A ranked AI shows its rank on the card, so you can
+            // see who you are facing without opening the AI panel.
+            val cfg = if (stone == Stone.BLACK) sideBlack else sideWhite
+            val aiSide = isEve || (isPve && stone != config.humanStone)
+            return if (aiSide && cfg.rank != "max") {
+                "$base · ${SideAiStore.rankLabel(cfg.rank)}"
+            } else {
+                base
+            }
         }
         fun sideDetail(stone: Stone): String {
             val parts = mutableListOf<String>()
