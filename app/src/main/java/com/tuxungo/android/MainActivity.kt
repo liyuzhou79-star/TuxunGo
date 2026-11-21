@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新手指南的「对弈与 AI」页补上 AI 定级介绍：18 级到 9 段的定级 AI 在开局设置或对局的 AI 面板里选，战绩记进个人统计",
+            whatsNew = "· 设置 → 数据与更新的「版本更新」区现在会显示当前版本号，不用点检查更新也能先核对自己在用哪一版",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

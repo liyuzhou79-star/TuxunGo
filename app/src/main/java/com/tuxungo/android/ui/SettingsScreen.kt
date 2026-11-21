@@ -609,6 +609,17 @@ fun SettingsScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "版本更新", fontSize = 15.sp)
+        val currentVersion = remember {
+            runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull() ?: ""
+        }
+        if (currentVersion.isNotEmpty()) {
+            Text(
+                text = "当前版本 $currentVersion",
+                fontSize = 12.sp, color = Color.Gray
+            )
+        }
         Text(
             text = "手动检查 GitHub 上有没有新版本；只有点这个按钮时才会联网一次。",
             fontSize = 12.sp, color = Color.Gray
