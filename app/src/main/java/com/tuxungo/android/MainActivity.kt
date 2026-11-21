@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新手指南补齐三处漏介绍：智能裁判与 AI 认输（对弈与 AI 页）、实体棋盘棋钟（欢迎页）",
+            whatsNew = "· 新手指南的「对弈与 AI」页补上 AI 定级介绍：18 级到 9 段的定级 AI 在开局设置或对局的 AI 面板里选，战绩记进个人统计",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
