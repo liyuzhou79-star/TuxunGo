@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 本版给个人统计里的定级战绩存取补上了自动化测试：战绩数据的解析容错每次构建自动验，个别数据损坏会被跳过、不会拖垮整个生涯页",
+            whatsNew = "· 质量收尾：单元测试补齐到 12 个文件 58 个用例（规则、数目、SGF、定级、版本比较、战绩存取全覆盖），代码地图新增测试总览；死活题 8 道也已逐项复核无误",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
