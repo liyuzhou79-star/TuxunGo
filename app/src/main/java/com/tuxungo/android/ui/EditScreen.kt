@@ -85,7 +85,9 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
             game = game,
             enabled = true,
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates
+            showCoordinates = settings.showCoordinates && !settings.boardFill,
+            edgeToEdge = settings.boardFill,
+            parentPadding = 8.dp
         ) { x, y ->
             val key = x to y
             val existing = stones[key]

@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新增深色模式：设置 → 外观可选跟随系统 / 浅色 / 深色，三套主题色（樱花粉、抹茶绿、靛蓝）都有对应的深色配色，状态栏图标也会跟着切换；棋盘和棋子保持原样，晚上看棋不刺眼",
+            whatsNew = "· 「棋盘铺满屏幕」扩展到猜一选、死活题和摆棋页：打开这个设置后，训练页的棋盘也贴到屏幕边、自动隐藏坐标；新手指南补上深色模式与米黄棋盘的说明，并修正了猜先的旧文案",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

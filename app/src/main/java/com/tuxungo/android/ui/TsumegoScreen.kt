@@ -550,8 +550,10 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
             game = game,
             enabled = !solved && !replyPending && !demoMode,
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates,
+            showCoordinates = settings.showCoordinates && !settings.boardFill,
             showMagnifier = settings.magnifier,
+            edgeToEdge = settings.boardFill,
+            parentPadding = 8.dp,
             preview = pending ?: hintPoint,
             onPointTap = { x, y ->
                 if (solved || replyPending || demoMode) return@BoardView
