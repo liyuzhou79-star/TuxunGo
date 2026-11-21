@@ -24,6 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tuxungo.android.LibraryStore
+import com.tuxungo.android.RankEstimate
+import com.tuxungo.android.RankedStore
+import com.tuxungo.android.engine.SideAiStore
 
 /**
  * Personal statistics, computed from the local game library plus the
@@ -72,6 +75,51 @@ fun StatsScreen(onBack: () -> Unit) {
     ) {
         ScreenHeader("我的数据", "对局总览、黑白胜负和训练进度", onBack)
         Spacer(modifier = Modifier.height(4.dp))
+
+        val rankEstimate = remember {
+            RankEstimate.estimate(
+                RankedStore.loadAll(context),
+                tsumegoSolved,
+                TSUMEGO_PROBLEMS.size
+            )
+        }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "棋力自测",
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (rankEstimate == null) {
+                    Text(
+                        text = "数据还不够：去打一盘定级对局（开局设置里给 AI " +
+                            "选个段位），或者先做几道死活题，这里就能估出" +
+                            "你的大致棋力。",
+                        fontSize = 13.sp, color = Color.Gray
+                    )
+                } else {
+                    Text(
+                        text = "估计棋力：约 " +
+                            SideAiStore.rankLabel(rankEstimate.highRank) +
+                            " ~ " +
+                            SideAiStore.rankLabel(rankEstimate.lowRank),
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    for (line in rankEstimate.basis) {
+                        Text(
+                            text = "· $line",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                    }
+                    Text(
+                        text = "按 App 内的定级 AI 和训练数据粗估，只是个参考区间。",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {

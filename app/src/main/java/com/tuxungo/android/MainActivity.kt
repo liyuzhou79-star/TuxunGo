@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 复盘新增「整局讲评」卡：复盘分析完成后，胜率图下方会自动生成一页讲评——本局转折点在哪一手、胜率摆动了多少；最严重的几步恶手逐条列出（丢了多少胜率、AI 当时更想下哪），点任意一条直接跳到那一手；还有双方恶手和妙手的总账",
+            whatsNew = "· 个人统计页新增「棋力自测」：根据你的定级对局战绩（赢过哪一档 AI、全胜还会往上估）和死活题完成度，给出一个大致的棋力区间，并把依据逐条列清；还没有定级记录时，会提示先去打一盘定级局",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
