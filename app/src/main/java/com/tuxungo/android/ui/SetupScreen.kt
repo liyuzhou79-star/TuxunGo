@@ -667,8 +667,6 @@ fun SetupScreen(
     }
 }
 
-/** Selectable mode card on the setup screen. */
-@Composable
 /** A collapsible section of the detail page: tap the header to
  *  fold it away, so the page is not one long wall of options. */
 @Composable
@@ -733,6 +731,8 @@ private fun SetupChip(
     )
 }
 
+/** Selectable mode card on the setup screen. */
+@Composable
 private fun ModeOption(
     title: String,
     desc: String,
