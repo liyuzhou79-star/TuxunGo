@@ -3,6 +3,7 @@ package com.tuxungo.android.engine
 import com.tuxungo.android.go.Stone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelHeaderTest {
