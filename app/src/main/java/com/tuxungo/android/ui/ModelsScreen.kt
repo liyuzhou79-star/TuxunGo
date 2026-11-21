@@ -183,7 +183,7 @@ fun ModelsScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         for (model in models) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

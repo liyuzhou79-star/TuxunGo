@@ -154,7 +154,8 @@ fun OnboardingScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
+            GameButton(
+                text = if (lastPage) "开始使用" else "下一页（${pagerState.currentPage + 1}/${pages.size}）",
                 onClick = {
                     if (lastPage) {
                         onFinish()
@@ -164,15 +165,8 @@ fun OnboardingScreen(
                         }
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                Text(
-                    text = if (lastPage) "开始使用" else "下一页（${pagerState.currentPage + 1}/${pages.size}）",
-                    fontSize = 16.sp
-                )
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

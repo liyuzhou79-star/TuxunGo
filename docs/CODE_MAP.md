@@ -42,6 +42,7 @@
 - `ui/SetupScreen.kt` — 主页：开局设置、最近棋谱、每日一题卡；连点吉祥物五次打开个人统计页
 - `ui/GameScreen.kt` — 对局页（全项目最大的文件）：对局驱动、AI 托管、分析/形势判断/数目、智能裁判、AI 认输、走势小图、表演赛解说流、系列赛、结果弹窗都在这里
 - `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选点、落子放大镜、手数、涟漪动画
+- `ui/GameUi.kt` — 游戏级视觉组件（2.60.0）：渐变质感按钮 GameButton、深度卡片 GameCard、棋盘胡桃木框 BoardFrame、棋子头像 StoneAvatar、几何图标 GameIcon
 - `ui/ReviewScreen.kt` — 复盘：走势图、逐手回放、分支试下、领地归属图（按手数缓存）
 - `ui/LibraryScreen.kt` — 棋谱库：搜索/筛选/多选、终局缩略图（后台渲染、缓存有上限）
 - `ui/GuessScreen.kt` — 猜一选训练：随机对局、棋谱库出题、错题本

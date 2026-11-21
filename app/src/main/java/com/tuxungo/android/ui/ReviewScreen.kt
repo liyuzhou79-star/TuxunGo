@@ -507,6 +507,7 @@ fun ReviewScreen(
         @Suppress("UNUSED_EXPRESSION")
         branchVersion
         if (branch != null) {
+            BoardFrame(framed = !settings.boardFill) {
             BoardView(
                 game = branch,
                 enabled = !branchBusy,
@@ -534,6 +535,7 @@ fun ReviewScreen(
                     }
                 }
             )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(
@@ -612,6 +614,7 @@ fun ReviewScreen(
                 )
             }
         } else {
+            BoardFrame(framed = !settings.boardFill) {
             BoardView(
                 game = replayGame,
                 enabled = false,
@@ -636,6 +639,7 @@ fun ReviewScreen(
                 markedDead = emptySet(),
                 flipped = perspective == Stone.WHITE
             ) { _, _ -> }
+            }
             Spacer(modifier = Modifier.height(4.dp))
 
             Row {
@@ -891,7 +895,7 @@ fun ReviewScreen(
                 )
                 if (summary != null) {
                     Spacer(modifier = Modifier.height(10.dp))
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    GameCard(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
                                 text = "整局讲评",
@@ -951,7 +955,7 @@ fun ReviewScreen(
                 }
             }
             analyzing -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                GameCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("正在补算缺失的手数…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -978,7 +982,7 @@ fun ReviewScreen(
                 OutlinedButton(onClick = { startAnalysis(60) }) { Text("重新分析") }
             }
             missingTurns.size > 30 -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                GameCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("这局棋还没有逐手数据", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(6.dp))

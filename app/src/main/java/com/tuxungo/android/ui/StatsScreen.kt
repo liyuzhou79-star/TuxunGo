@@ -83,7 +83,7 @@ fun StatsScreen(onBack: () -> Unit) {
                 TSUMEGO_PROBLEMS.size
             )
         }
-        Card(modifier = Modifier.fillMaxWidth()) {
+        GameCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "棋力自测",
@@ -121,7 +121,7 @@ fun StatsScreen(onBack: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(12.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        GameCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "对局总览", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -145,7 +145,7 @@ fun StatsScreen(onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(12.dp))
 
         if (finished.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = "胜负分布", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -163,7 +163,7 @@ fun StatsScreen(onBack: () -> Unit) {
         }
 
         if (recent.size >= 2) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = "最近对局手数", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -194,7 +194,7 @@ fun StatsScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        GameCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "训练进度", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))

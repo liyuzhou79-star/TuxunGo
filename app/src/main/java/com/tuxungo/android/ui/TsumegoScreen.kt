@@ -546,6 +546,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 androidx.compose.ui.unit.IntOffset(shakeX.value.toInt(), 0)
             }
         ) {
+        BoardFrame(framed = !settings.boardFill) {
         BoardView(
             game = game,
             enabled = !solved && !replyPending && !demoMode,
@@ -623,6 +624,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 }
             }
         )
+        }
         }
         Spacer(modifier = Modifier.height(10.dp))
 

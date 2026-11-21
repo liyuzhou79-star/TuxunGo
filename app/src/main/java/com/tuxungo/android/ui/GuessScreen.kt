@@ -568,6 +568,7 @@ fun GuessScreen(onBack: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(6.dp))
 
+        BoardFrame(framed = !settings.boardFill) {
         BoardView(
             game = game,
             enabled = phase == GuessPhase.GUESSING,
@@ -595,6 +596,7 @@ fun GuessScreen(onBack: () -> Unit) {
             }
         )
         Spacer(modifier = Modifier.height(10.dp))
+        }
 
         when (phase) {
             GuessPhase.GUESSING -> {

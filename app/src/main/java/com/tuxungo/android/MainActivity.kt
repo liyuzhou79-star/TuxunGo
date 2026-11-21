@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 文档补齐：新手指南和项目说明补上最近几版的新功能——SGF 导入、整局讲评、棋力自测、复盘形势判断明细，在指南里都能查到入口和用法（App 功能与上一版相同）",
+            whatsNew = "· 全 App 界面升级为游戏级质感：棋盘坐进胡桃木框、对局双方信息条换成真实棋子头像、主页与各页卡片统一深度与边框、主按钮改为渐变质感按钮——不是卡通风，也不是模板风，是正经游戏产品的样子（功能与上一版相同）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

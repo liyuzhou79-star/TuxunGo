@@ -2282,6 +2282,7 @@ fun GameScreen(
             showTerritory -> boostedOwnership(currentAnalysis?.ownershipBlack)
             else -> null
         }
+        BoardFrame(framed = !settings.boardFill) {
         BoardView(
             game = game,
             enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
@@ -2327,6 +2328,7 @@ fun GameScreen(
                     else -> pendingPoint = null
                 }
             }
+        }
         }
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -3820,29 +3822,21 @@ private fun PlayerCard(
                 colors.surfaceVariant
             }
         ),
-        border = if (active) BorderStroke(1.5.dp, colors.primary) else null
+        border = if (active) {
+            BorderStroke(1.5.dp, colors.primary)
+        } else {
+            BorderStroke(1.dp, colors.outline.copy(alpha = 0.5f))
+        },
+        elevation = androidx.compose.material3.CardDefaults
+            .cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .then(
-                        if (isBlack) {
-                            Modifier
-                        } else {
-                            Modifier.border(
-                                BorderStroke(1.dp, Color(0xFFB0A58F)),
-                                CircleShape
-                            )
-                        }
-                    )
-                    .background(
-                        if (isBlack) Color(0xFF1A1A1A) else Color.White,
-                        CircleShape
-                    )
-                    .size(20.dp)
+            StoneAvatar(
+                stone = if (isBlack) Stone.BLACK else Stone.WHITE,
+                size = 34.dp
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column {

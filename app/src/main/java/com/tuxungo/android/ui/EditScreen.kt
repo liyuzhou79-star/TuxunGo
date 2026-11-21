@@ -81,6 +81,7 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
             fontSize = 13.sp, color = Color.Gray
         )
         Spacer(modifier = Modifier.height(8.dp))
+        BoardFrame(framed = !settings.boardFill) {
         BoardView(
             game = game,
             enabled = true,
@@ -101,6 +102,7 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
             version++
         }
         if (stones.isNotEmpty() && !positionValid) {
+        }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "有棋块没有气（活不了），这样摆开不了局，请先调整。",

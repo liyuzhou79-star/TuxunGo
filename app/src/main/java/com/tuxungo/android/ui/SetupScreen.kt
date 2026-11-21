@@ -204,12 +204,16 @@ fun SetupScreen(
             .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        GameCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
             // The mascot. Five quick taps in a row open the
             // hidden lifetime-stats page (an easter egg).
             Mascot(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(64.dp)
                     .clickable {
                         val now = System.currentTimeMillis()
                         mascotTaps = if (now - lastMascotTap > 1500) {
@@ -237,6 +241,7 @@ fun SetupScreen(
                 )
             }
         }
+        }
         Spacer(modifier = Modifier.height(20.dp))
 
         if (showDetail) {
@@ -245,9 +250,8 @@ fun SetupScreen(
             Text(text = "对局设置", fontSize = 19.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
+        GameCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
         Column(modifier = Modifier.padding(16.dp)) {
         SetupSection(title = "对弈模式", expanded = secMode, onToggle = { secMode = !secMode }) {
@@ -516,35 +520,12 @@ fun SetupScreen(
         }
         Spacer(modifier = Modifier.height(20.dp))
 
-        val startInteraction = remember {
-            androidx.compose.foundation.interaction.MutableInteractionSource()
-        }
-        val startPressed by startInteraction.collectIsPressedAsState()
-        val startScale by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = if (startPressed) 0.98f else 1f,
-            label = "startButtonPress"
-        )
-        Button(
+        GameButton(
+            text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局",
             onClick = { startGame() },
-            colors = if (blocked) {
-                androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFC62828),
-                    contentColor = Color.White
-                )
-            } else {
-                androidx.compose.material3.ButtonDefaults.buttonColors()
-            },
-            interactionSource = startInteraction,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .graphicsLayer { scaleX = startScale; scaleY = startScale }
-        ) {
-            Text(
-                text = if (blocked) "开始对局（AI 不支持此棋盘）" else "开始对局",
-                fontSize = 17.sp
-            )
-        }
+            danger = blocked,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (showDetail) {
             Spacer(modifier = Modifier.height(10.dp))
             androidx.compose.material3.OutlinedButton(
