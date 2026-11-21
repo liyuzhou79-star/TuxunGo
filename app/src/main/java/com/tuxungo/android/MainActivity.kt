@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 本版给「检查更新」的版本号比较补上了自动化测试：2.10 比 2.9 新这种按数字逐段比较的规矩每次构建自动验，防止以后版本跳到两位数时误判",
+            whatsNew = "· 本版给 AI 定级的段位阶梯补上了自动化测试：Max、9 段到 1 段、1 级到 18 级的顺序和显示名每次构建自动验，个人统计里的「最高胜档」也靠这个顺序判定",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
