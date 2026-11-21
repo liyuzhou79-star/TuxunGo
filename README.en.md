@@ -61,6 +61,7 @@ vs AI games, or play a friend on the same phone.
 - Finished games are auto-saved to an "Auto-saved" folder, so a game is never lost for forgetting to collect it
 - Tap any record to review it; analysis results are cached; in review you can branch off and try alternative lines, analyse the branch, or save it as a new record
 - Export the whole library as a single SGF file in one tap — handy for backups, a new phone, or sharing with a friend
+- **SGF import**: bring SGF records in from a file or the clipboard (multi-game files, handicap games, setup positions and rectangular boards supported; variations follow the main line), and review games from other platforms — or professional games — with the AI
 
 ### Model library
 

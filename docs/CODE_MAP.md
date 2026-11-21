@@ -14,6 +14,7 @@
 
 - `app/src/main/java/com/tuxungo/android/go/GoGame.kt` — 规则核心：落子、提子、禁着点、全局同形禁着（positional superko）、停一手两次终局、认输/超时、中国规则数目（`score` / `scoreWithDead`）、死子确认后的定稿（`finishScoringWith`）
 - `go/Sgf.kt` — SGF 导出（含逐手胜率注释的复盘导出也在这里组装）
+- `go/SgfImport.kt` — SGF 导入：主线解析（多局/让子/摆子/矩形），导入前用 GoGame 逐手回放校验，对不上就截断并标记
 - `engine/GameReview.kt` — 复盘数据：逐手统计 `TurnStat` 的编解码、恶手/妙手/转折手判定（`ReviewMath`）
 
 ## 引擎层
@@ -58,12 +59,13 @@
 
 ## 单元测试（app/src/test/，每次构建全跑）
 
-共 12 个测试文件、61 个用例，钉住纯逻辑的对外行为：
+共 13 个测试文件、71 个用例，钉住纯逻辑的对外行为：
 
 - `go/GoGameTest`（11）— 落子/提子/禁着点/劫争等规则核心
 - `go/LoadPositionTest`（3）— 摆棋局面加载的合法性校验
 - `go/ScoringTest`（2）— 中国规则数目与死子定稿
 - `go/SgfTest`（7）— SGF 导出格式（尺寸/编码/停一手/让子/结果/注释转义）
+- `go/SgfImportTest`（10）— SGF 导入解析（主线/变化/多局/让子/摆子/矩形/回放截断/结果文案）
 - `engine/KataEngineVertexTest`（3）— GTP 顶点坐标转换（跳过 I、y 自上而下）
 - `engine/ModelHeaderTest`（8）— 模型文件头解析 + 死子判定（整块均值）+ 展示用归属加深
 - `engine/AnalysisMathTest`（4）— 胜率/归属的行棋方→黑方视角转换

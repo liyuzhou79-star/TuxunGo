@@ -214,6 +214,59 @@ fun LibraryScreen(
         games = LibraryStore.listGames(context)
     }
 
+    var showImportDialog by remember { mutableStateOf(false) }
+
+    /** Parse SGF text and save every game it contains. */
+    fun importSgfText(text: String) {
+        val parsed = com.tuxungo.android.go.SgfImport.parseAll(text)
+        if (parsed.isEmpty()) {
+            exportedNote = "没有读出可用的棋谱（格式不对，或棋盘尺寸不在 2–25 路）"
+            return
+        }
+        var truncated = 0
+        for (g in parsed) {
+            LibraryStore.saveGame(
+                context,
+                LibraryGame(
+                    id = "",
+                    folderId = null,
+                    title = g.title,
+                    createdAt = g.dateMillis ?: System.currentTimeMillis(),
+                    modeLabel = "导入棋谱",
+                    size = g.size,
+                    komi = g.komi,
+                    handicap = g.handicap,
+                    customStones = g.setupStones,
+                    startPlayer = g.startPlayer,
+                    moves = g.moves,
+                    resultText = g.resultText,
+                    statsCache = null
+                )
+            )
+            if (g.truncatedAt != null) truncated++
+        }
+        refresh()
+        exportedNote = if (truncated > 0) {
+            "已导入 ${parsed.size} 局，其中 $truncated 局有手顺对不上，已按能对上的部分存入"
+        } else {
+            "已导入 ${parsed.size} 局棋谱"
+        }
+    }
+
+    val importPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val bytes = context.contentResolver.openInputStream(uri)
+                ?.use { it.readBytes() } ?: error("读不到这个文件")
+            require(bytes.size <= 5 * 1024 * 1024) { "文件太大（超过 5 MB）" }
+            importSgfText(decodeSgfBytes(bytes))
+        }.onFailure {
+            exportedNote = "导入失败：${it.message ?: "未知错误"}"
+        }
+    }
+
     // Load off the main thread: a big library no longer stalls the
     // screen opening; skeleton cards show while it loads.
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -266,6 +319,7 @@ fun LibraryScreen(
         Row {
             TextButton(onClick = onBack) { Text("‹ 返回") }
             Spacer(modifier = Modifier.weight(1f))
+            TextButton(onClick = { showImportDialog = true }) { Text("导入") }
             TextButton(onClick = { exportAllSgf() }) { Text("导出全部") }
             TextButton(onClick = { showNewFolder = true }) { Text("新建文件夹") }
         }
@@ -411,6 +465,41 @@ fun LibraryScreen(
             }
         }
 
+        if (showImportDialog) {
+            AlertDialog(
+                onDismissRequest = { showImportDialog = false },
+                title = { Text("导入 SGF 棋谱") },
+                text = {
+                    Text(
+                        "从文件选一份 .sgf，或把 SGF 文本复制好从剪贴板导入。" +
+                            "一份文件里有多局会全部导入；变化图只取主线。",
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showImportDialog = false
+                        importPicker.launch(arrayOf("*/*"))
+                    }) { Text("从文件选择") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            showImportDialog = false
+                            val text = clipboard.getText()?.text.orEmpty()
+                            if (text.isBlank()) {
+                                exportedNote = "剪贴板是空的，先复制一份 SGF 文本"
+                            } else {
+                                importSgfText(text)
+                            }
+                        }) { Text("从剪贴板导入") }
+                        TextButton(onClick = { showImportDialog = false }) {
+                            Text("取消")
+                        }
+                    }
+                }
+            )
+        }
         if (exportedNote.isNotEmpty()) {
             Text(exportedNote, fontSize = 13.sp, color = Color(0xFF2F7CF6))
             Spacer(modifier = Modifier.height(4.dp))
@@ -853,4 +942,17 @@ private fun renderThumb(g: LibraryGame): android.graphics.Bitmap {
         }
     }
     return bmp
+}
+
+/** SGF files in the wild are UTF-8 or (from older Chinese tools) GBK. */
+private fun decodeSgfBytes(bytes: ByteArray): String {
+    val utf8 = java.nio.charset.Charset.forName("UTF-8")
+    return try {
+        utf8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            .decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+    } catch (e: Exception) {
+        String(bytes, java.nio.charset.Charset.forName("GBK"))
+    }
 }

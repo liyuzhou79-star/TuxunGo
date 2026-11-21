@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 「棋盘铺满屏幕」扩展到猜一选、死活题和摆棋页：打开这个设置后，训练页的棋盘也贴到屏幕边、自动隐藏坐标；新手指南补上深色模式与米黄棋盘的说明，并修正了猜先的旧文案",
+            whatsNew = "· 新增 SGF 导入：棋谱库右上角「导入」，可从文件选 .sgf 或从剪贴板粘贴；支持一份文件多局、让子局、摆子局面和矩形棋盘，变化图取主线；导入前会逐手校验，手顺对不上的棋谱会按能对上的部分存入并给出提示——在其他平台下的棋、下载的职业棋谱，都能导进来用 AI 复盘了",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
