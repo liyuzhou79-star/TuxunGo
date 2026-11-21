@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新手指南的「对弈与 AI」页补上了摆棋功能：主页的「摆棋（自己摆局面开局）」能自由摆残局或题目局面，摆好直接开局",
+            whatsNew = "· 新手指南补齐三处漏介绍：智能裁判与 AI 认输（对弈与 AI 页）、实体棋盘棋钟（欢迎页）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
