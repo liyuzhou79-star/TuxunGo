@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 本版给 SGF 导出补上了自动化测试：棋盘尺寸、落子编码、停一手、让子、摆棋开局、认输结果和注释转义都会在每次构建时自动验一遍，导出格式坏了会第一时间发现",
+            whatsNew = "· 本版给「检查更新」的版本号比较补上了自动化测试：2.10 比 2.9 新这种按数字逐段比较的规矩每次构建自动验，防止以后版本跳到两位数时误判",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

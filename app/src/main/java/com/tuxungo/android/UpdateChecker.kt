@@ -49,7 +49,7 @@ object UpdateChecker {
     }
 
     /** Dotted-version compare: is [a] strictly newer than [b]? */
-    private fun isNewer(a: String, b: String): Boolean {
+    internal fun isNewer(a: String, b: String): Boolean {
         val pa = a.split(".").map { it.toIntOrNull() ?: 0 }
         val pb = b.split(".").map { it.toIntOrNull() ?: 0 }
         for (i in 0 until maxOf(pa.size, pb.size)) {
