@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 设置 → 数据与更新的「版本更新」区现在会显示当前版本号，不用点检查更新也能先核对自己在用哪一版",
+            whatsNew = "· 本版把内置的 8 道死活题又逐项核对了一遍：题目数据和逐手验证过的正解完全一致，一道没错；自检脚本也进了仓库，改题前能先自查",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

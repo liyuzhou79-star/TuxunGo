@@ -8,6 +8,7 @@
 - `.github/workflows/build-debug.yaml` — 每次推送到 main 自动跑：编译 KataGo、跑单元测试、出带测试签名的 debug 包，并断言测试证书指纹
 - `.github/workflows/build-release.yaml` — 手动 dispatch（参数 `tag`，如 `v2.38.0`）：从 Secrets 还原正式签名、出正式包
 - `release-notes/` — 每版一份发布说明，文件名 `release-notes-<版本>.md`
+- `tools/check_tsumego_data.py` — 死活题数据自检：解析 App 内置 8 道题，与逐手验证过的参考数据逐项核对（改题目数据后先跑一遍）
 
 ## 规则与棋谱（纯 Kotlin，有单元测试）
 
