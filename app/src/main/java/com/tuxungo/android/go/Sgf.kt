@@ -19,7 +19,7 @@ object Sgf {
         comments: Map<Int, String> = emptyMap()
     ): String {
         val sb = StringBuilder()
-        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:2.48.0]")
+        sb.append("(;GM[1]FF[4]CA[UTF-8]AP[TuxunGo:2.49.0]")
         if (game.size.isSquare) sb.append("SZ[").append(game.size.width).append("]")
         else sb.append("SZ[").append(game.size.width).append(':').append(game.size.height).append("]")
         sb.append("KM[").append(game.komi).append("]")

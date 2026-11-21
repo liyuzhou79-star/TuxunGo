@@ -440,7 +440,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 本版给 AI 定级的段位阶梯补上了自动化测试：Max、9 段到 1 段、1 级到 18 级的顺序和显示名每次构建自动验，个人统计里的「最高胜档」也靠这个顺序判定",
+            whatsNew = "· 本版给个人统计里的定级战绩存取补上了自动化测试：战绩数据的解析容错每次构建自动验，个别数据损坏会被跳过、不会拖垮整个生涯页",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

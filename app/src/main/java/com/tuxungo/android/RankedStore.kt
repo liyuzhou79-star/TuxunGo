@@ -30,7 +30,7 @@ object RankedStore {
         return parse(prefs.getString(KEY, "") ?: "")
     }
 
-    private fun parse(text: String): MutableMap<String, IntArray> {
+    internal fun parse(text: String): MutableMap<String, IntArray> {
         val out = mutableMapOf<String, IntArray>()
         for (part in text.split(";")) {
             val kv = part.split("=")
