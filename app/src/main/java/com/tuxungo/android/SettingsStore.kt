@@ -21,6 +21,8 @@ data class AppSettings(
     val eveSpeed: String = "normal",
     /** Theme accent: sakura / matcha / indigo. */
     val accent: String = "sakura",
+    /** Appearance: system / light / dark. */
+    val themeMode: String = "system",
     /** Visits for the silent per-move background analysis during games. */
     val autoVisits: Int = 80,
     /** Keep the screen awake while a game is on screen. */
@@ -78,6 +80,12 @@ object SettingsStore {
         "sakura" to "樱花粉",
         "matcha" to "抹茶绿",
         "indigo" to "靛蓝"
+    )
+
+    val THEME_MODES = listOf(
+        "system" to "跟随系统",
+        "light" to "浅色",
+        "dark" to "深色"
     )
 
     val EVE_SPEEDS = listOf(
@@ -146,6 +154,7 @@ object SettingsStore {
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
             eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
             accent = p.getString("accent", "sakura") ?: "sakura",
+            themeMode = p.getString("themeMode", "system") ?: "system",
             autoVisits = p.getInt("autoVisits", 80),
             keepScreenOn = p.getBoolean("keepScreenOn", false),
             showMoveNumbers = p.getBoolean("showMoveNumbers", false),
@@ -175,6 +184,7 @@ object SettingsStore {
             .putBoolean("vibrationEnabled", s.vibrationEnabled)
             .putString("eveSpeed", s.eveSpeed)
             .putString("accent", s.accent)
+            .putString("themeMode", s.themeMode)
             .putInt("autoVisits", s.autoVisits)
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("showMoveNumbers", s.showMoveNumbers)

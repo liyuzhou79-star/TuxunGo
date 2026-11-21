@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -24,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.tooling.preview.Preview
 import com.tuxungo.android.go.Move
 import com.tuxungo.android.ui.EditScreen
@@ -94,12 +99,70 @@ private val IndigoColors = lightColorScheme(
     onError = Color.White
 )
 
+/** Sakura-pink palette, dark variant. */
+private val SakuraDarkColors = darkColorScheme(
+    primary = Color(0xFFF08FAD),
+    onPrimary = Color(0xFF4A0E24),
+    primaryContainer = Color(0xFF5E2A3C),
+    onPrimaryContainer = Color(0xFFFBDCE7),
+    secondary = Color(0xFFE5A3B8),
+    onSecondary = Color(0xFF3A1424),
+    background = Color(0xFF1C1417),
+    onBackground = Color(0xFFF3E4E9),
+    surface = Color(0xFF261B20),
+    onSurface = Color(0xFFF3E4E9),
+    surfaceVariant = Color(0xFF3A2A31),
+    onSurfaceVariant = Color(0xFFD8B7C2),
+    outline = Color(0xFF8A6472),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410)
+)
+
+/** Matcha-green palette, dark variant. */
+private val MatchaDarkColors = darkColorScheme(
+    primary = Color(0xFF9CC493),
+    onPrimary = Color(0xFF14300F),
+    primaryContainer = Color(0xFF2E4A2A),
+    onPrimaryContainer = Color(0xFFDCEBD8),
+    secondary = Color(0xFFA9C79F),
+    onSecondary = Color(0xFF1C2E18),
+    background = Color(0xFF141A12),
+    onBackground = Color(0xFFE2EDDC),
+    surface = Color(0xFF1D251B),
+    onSurface = Color(0xFFE2EDDC),
+    surfaceVariant = Color(0xFF2E3A2B),
+    onSurfaceVariant = Color(0xFFB9CCB2),
+    outline = Color(0xFF71856C),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410)
+)
+
+/** Indigo palette, dark variant. */
+private val IndigoDarkColors = darkColorScheme(
+    primary = Color(0xFFA9B8F0),
+    onPrimary = Color(0xFF16224F),
+    primaryContainer = Color(0xFF2E3D75),
+    onPrimaryContainer = Color(0xFFDDE3F7),
+    secondary = Color(0xFFB4C0EA),
+    onSecondary = Color(0xFF1E2A52),
+    background = Color(0xFF13141C),
+    onBackground = Color(0xFFE1E4F2),
+    surface = Color(0xFF1C1E29),
+    onSurface = Color(0xFFE1E4F2),
+    surfaceVariant = Color(0xFF2B2E3D),
+    onSurfaceVariant = Color(0xFFB9BED6),
+    outline = Color(0xFF6B7194),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410)
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Full-screen gesture navigation: draw edge to edge with
-        // transparent system bars (dark icons — the app is always
-        // light-themed), and pad the content by the safe-drawing
+        // transparent system bars (icon brightness follows the
+        // active light/dark appearance via a SideEffect in the
+        // content), and pad the content by the safe-drawing
         // insets below so nothing hides under the status bar, the
         // gesture bar or a display cutout.
         enableEdgeToEdge(
@@ -140,10 +203,26 @@ class MainActivity : ComponentActivity() {
             var accent by remember {
                 mutableStateOf(SettingsStore.load(this@MainActivity).accent)
             }
+            var themeMode by remember {
+                mutableStateOf(SettingsStore.load(this@MainActivity).themeMode)
+            }
+            val dark = when (themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemInDarkTheme()
+            }
             val colors = when (accent) {
-                "matcha" -> MatchaColors
-                "indigo" -> IndigoColors
-                else -> SakuraColors
+                "matcha" -> if (dark) MatchaDarkColors else MatchaColors
+                "indigo" -> if (dark) IndigoDarkColors else IndigoColors
+                else -> if (dark) SakuraDarkColors else SakuraColors
+            }
+            // System-bar icons follow the active appearance (the
+            // bars themselves stay transparent).
+            val view = LocalView.current
+            SideEffect {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
             }
             MaterialTheme(colorScheme = colors) {
                 Surface(
@@ -160,6 +239,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         TuxunGoApp(
                             onAccentChange = { accent = it },
+                            onThemeModeChange = { themeMode = it },
                             shortcut = intent?.getStringExtra("shortcut")
                         )
                     }
@@ -174,6 +254,7 @@ private enum class Screen { SETUP, MODELS, SETTINGS, EDIT, GAME, LIBRARY, REVIEW
 @Composable
 fun TuxunGoApp(
     onAccentChange: (String) -> Unit = {},
+    onThemeModeChange: (String) -> Unit = {},
     shortcut: String? = null
 ) {
     val context = LocalContext.current
@@ -385,7 +466,8 @@ fun TuxunGoApp(
         }
         Screen.SETTINGS -> SettingsScreen(
             onBack = { screen = Screen.SETUP },
-            onAccentChange = onAccentChange
+            onAccentChange = onAccentChange,
+            onThemeModeChange = onThemeModeChange
         )
         Screen.GUESS -> com.tuxungo.android.ui.GuessScreen(
             onBack = { screen = Screen.SETUP }
@@ -452,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新默认棋盘「米黄木纹」：浅米黄配细腻木纹，榧木实纹保留可选；设置新增「棋盘铺满屏幕」（棋盘贴到屏幕边、铺满时自动隐藏坐标）和「落子放大镜」开关（默认关）；形势判断着色更实：被一方围定的区域一眼看清归属；复盘新增自动播放（默认 1.2 秒一手，三档调速），分支探索改短名为「试下」；连续分析可只分析一方（双方 / 只黑 / 只白），落子再快也跟得上；修复点走势图闪退、形势判断开着时分析不显示、复盘棋盘方向相反三个问题；开始对局改为淡入过渡；开局设置页改为可折叠分组，选中项改为实心强调色；猜先改为点一下随机分黑白；吉祥物换上新笑脸；落子声换回最初版",
+            whatsNew = "· 新增深色模式：设置 → 外观可选跟随系统 / 浅色 / 深色，三套主题色（樱花粉、抹茶绿、靛蓝）都有对应的深色配色，状态栏图标也会跟着切换；棋盘和棋子保持原样，晚上看棋不刺眼",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

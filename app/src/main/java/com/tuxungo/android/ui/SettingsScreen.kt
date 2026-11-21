@@ -42,7 +42,8 @@ import com.tuxungo.android.SettingsStore
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onAccentChange: (String) -> Unit = {}
+    onAccentChange: (String) -> Unit = {},
+    onThemeModeChange: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var settings by remember { mutableStateOf(SettingsStore.load(context)) }
@@ -312,6 +313,26 @@ fun SettingsScreen(
         }
 
         if (page == "look") {
+        Text(text = "外观模式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((id, label) in SettingsStore.THEME_MODES) {
+                FilterChip(
+                    selected = settings.themeMode == id,
+                    onClick = {
+                        update(settings.copy(themeMode = id))
+                        onThemeModeChange(id)
+                    },
+                    label = { Text(label) }
+                )
+            }
+        }
+        Text(
+            text = "深色模式只改变界面配色，棋盘和棋子保持原样；晚上看棋不刺眼。",
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text(text = "主题色", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -629,6 +650,7 @@ fun SettingsScreen(
                             showResetConfirm = false
                             update(com.tuxungo.android.AppSettings())
                             onAccentChange("sakura")
+                            onThemeModeChange("system")
                         }
                     ) { Text("恢复默认") }
                 },
