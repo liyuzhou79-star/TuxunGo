@@ -5,9 +5,15 @@ import android.content.Context
 /** User-adjustable app settings, persisted in SharedPreferences. */
 data class AppSettings(
     val soundEnabled: Boolean = true,
-    val placeSound: String = "real",
+    val placeSound: String = "original",
     val captureSound: String = "real",
-    val boardSkin: String = "kaya",
+    val boardSkin: String = "beige",
+    /** Board stretches to the screen edges (coordinates hidden). */
+    val boardFill: Boolean = false,
+    /** Enlarged 5x5 placement magnifier while confirming a move. */
+    val magnifier: Boolean = false,
+    /** Continuous analysis scope: both / B / W (side to move). */
+    val autoAnalysisSide: String = "both",
     val confirmMove: Boolean = true,
     val showCoordinates: Boolean = true,
     val vibrationEnabled: Boolean = true,
@@ -47,6 +53,7 @@ object SettingsStore {
     private const val PREFS = "tuxungo_settings"
 
     val PLACE_SOUNDS = listOf(
+        "original" to "最初版（最早的落子声）",
         "real" to "真实录音（真棋盘落子·随机）",
         "classic" to "经典落子（仿主流棋盘）",
         "crisp" to "清脆",
@@ -55,6 +62,7 @@ object SettingsStore {
     )
 
     val CAPTURE_SOUNDS = listOf(
+        "original" to "最初版（最早的提子声）",
         "real" to "真实录音（真提子声·随机）",
         "double" to "提子双击",
         "heavy" to "提子沉稳"
@@ -99,7 +107,8 @@ object SettingsStore {
     }
 
     val BOARD_SKINS = listOf(
-        "kaya" to "榧木实纹（默认）",
+        "beige" to "米黄木纹（默认）",
+        "kaya" to "榧木实纹",
         "wood_light" to "榧木纹（浅）",
         "wood_dark" to "胡桃木（深）",
         "bamboo" to "竹黄",
@@ -110,11 +119,28 @@ object SettingsStore {
 
     fun load(context: Context): AppSettings {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // One-time 2.51 defaults: the beige board becomes the default
+        // skin (anyone still on a previous default — kaya / wood_light —
+        // is moved over once; an explicit later pick is respected) and
+        // the placement sound returns to the app's very first one.
+        if (!p.getBoolean("defaults251", false)) {
+            val e = p.edit()
+            val skin = p.getString("boardSkin", "kaya") ?: "kaya"
+            if (skin == "kaya" || skin == "wood_light") {
+                e.putString("boardSkin", "beige")
+            }
+            e.putString("placeSound", "original")
+            e.putBoolean("defaults251", true)
+            e.apply()
+        }
         return AppSettings(
             soundEnabled = p.getBoolean("soundEnabled", true),
-            placeSound = p.getString("placeSound", "real") ?: "real",
+            placeSound = p.getString("placeSound", "original") ?: "original",
             captureSound = p.getString("captureSound", "real") ?: "real",
-            boardSkin = p.getString("boardSkin", "kaya") ?: "kaya",
+            boardSkin = p.getString("boardSkin", "beige") ?: "beige",
+            boardFill = p.getBoolean("boardFill", false),
+            magnifier = p.getBoolean("magnifier", false),
+            autoAnalysisSide = p.getString("autoAnalysisSide", "both") ?: "both",
             confirmMove = p.getBoolean("confirmMove", true),
             showCoordinates = p.getBoolean("showCoordinates", true),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
@@ -141,6 +167,9 @@ object SettingsStore {
             .putString("placeSound", s.placeSound)
             .putString("captureSound", s.captureSound)
             .putString("boardSkin", s.boardSkin)
+            .putBoolean("boardFill", s.boardFill)
+            .putBoolean("magnifier", s.magnifier)
+            .putString("autoAnalysisSide", s.autoAnalysisSide)
             .putBoolean("confirmMove", s.confirmMove)
             .putBoolean("showCoordinates", s.showCoordinates)
             .putBoolean("vibrationEnabled", s.vibrationEnabled)
@@ -162,6 +191,7 @@ object SettingsStore {
     }
 
     fun placeSoundRes(id: String): Int = when (id) {
+        "original" -> R.raw.stone_place
         "crisp" -> R.raw.snd_place_crisp
         "wood" -> R.raw.snd_place_wood
         "soft" -> R.raw.snd_place_soft
@@ -169,6 +199,7 @@ object SettingsStore {
     }
 
     fun captureSoundRes(id: String): Int = when (id) {
+        "original" -> R.raw.stone_capture
         "heavy" -> R.raw.snd_capture_heavy
         else -> R.raw.snd_capture_double
     }

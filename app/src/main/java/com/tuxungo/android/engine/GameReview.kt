@@ -59,7 +59,11 @@ object ReviewMath {
      * the key move is the single biggest swing of the game.
      */
     fun marks(moves: List<Move>, turns: List<TurnStat>): List<MoveMark> {
-        if (turns.size < 2 || moves.isEmpty()) return emptyList()
+        // turns must be the DENSE per-turn list (index == turn, one
+        // entry per move plus the initial position). A sparse list
+        // (e.g. only the turns a live game happened to analyze) used
+        // to crash the caller with an index error — refuse instead.
+        if (turns.size != moves.size + 1 || moves.isEmpty()) return emptyList()
         val out = mutableListOf<MoveMark>()
         var keyMove = -1
         var keyAbs = -1.0

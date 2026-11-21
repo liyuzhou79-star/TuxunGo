@@ -551,6 +551,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
             enabled = !solved && !replyPending && !demoMode,
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
+            showMagnifier = settings.magnifier,
             preview = pending ?: hintPoint,
             onPointTap = { x, y ->
                 if (solved || replyPending || demoMode) return@BoardView

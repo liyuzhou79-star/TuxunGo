@@ -583,7 +583,21 @@ fun GameScreen(
         }
     }
 
-    fun runAnalysis(deep: Boolean, visitsOverride: Int? = null, onDone: (() -> Unit)? = null) {
+    fun runAnalysis(
+        deep: Boolean,
+        visitsOverride: Int? = null,
+        onDone: (() -> Unit)? = null,
+        userInitiated: Boolean = false
+    ) {
+        if (userInitiated && judgment != null) {
+            // A manual analysis request wins the board: close the
+            // judgment view so the candidates and the analysis panel
+            // can actually show. (Previously they stayed hidden
+            // behind the judgment overlay and the tap looked like
+            // it did nothing until judgment was closed by hand.)
+            judgment = null
+            judgmentKey = -1
+        }
         if (analyzing || aiThinking) {
             onDone?.invoke()
             return
@@ -939,15 +953,30 @@ fun GameScreen(
     // Continuous analysis: once switched on in the analysis
     // panel, every new position is analyzed automatically so
     // the user can keep playing with guidance, no re-tapping.
-    LaunchedEffect(version, aiThinking, continuousAnalysis, focusMode) {
+    // `analyzing` is one of the keys on purpose: when a fast move
+    // lands mid-analysis, the in-flight run is cancelled, and the
+    // moment it winds down this effect fires again for the new
+    // position — previously nothing re-triggered it and the user
+    // had to tap 分析 by hand. The scope can be limited to one
+    // colour (only that side's turns get analyzed).
+    var autoSide by remember { mutableStateOf(settings.autoAnalysisSide) }
+    LaunchedEffect(
+        version, aiThinking, analyzing, continuousAnalysis, focusMode, autoSide
+    ) {
         if (!continuousAnalysis || focusMode || game.finished) {
             return@LaunchedEffect
         }
         if (bothAi && eveRunning) return@LaunchedEffect
         if (analysisKey == game.moves.size) return@LaunchedEffect
-        delay(600)
+        val sideOk = when (autoSide) {
+            "B" -> game.current == Stone.BLACK
+            "W" -> game.current == Stone.WHITE
+            else -> true
+        }
+        if (!sideOk) return@LaunchedEffect
+        delay(250)
         if (!analyzing && !aiThinking && !game.finished) {
-            runAnalysis(deep = false)
+            runAnalysis(deep = false, visitsOverride = 200)
         }
     }
 
@@ -1540,6 +1569,18 @@ fun GameScreen(
     val anyHumanSide = !takeoverBlack || !takeoverWhite
     val analysisAllowed = !analyzing && !aiThinking && !bothAi || (bothAi && !eveRunning && !analyzing && !aiThinking)
     val judgmentActive = judgment != null && judgmentKey == game.moves.size
+    // Judgment / territory overlay: sharpen the engine's cautious
+    // ownership for display, so settled enclosed regions read deep
+    // instead of pale (display only — scoring never uses this).
+    fun boostedOwnership(src: DoubleArray?): DoubleArray? {
+        if (src == null) return null
+        val stonesNow = Array(game.size.area) { i ->
+            game.stoneAt(i % game.size.width, i / game.size.width)
+        }
+        return TerritoryEstimate.displayOwnership(
+            src, stonesNow, game.size.width, game.size.height
+        )
+    }
     val status = when {
         finished && game.timeoutBy != null ->
             "对局结束：${if (game.timeoutBy == Stone.BLACK) "黑" else "白"}方超时"
@@ -1648,8 +1689,8 @@ fun GameScreen(
             val fsOwnership = when {
                 focusMode -> null
                 scoringMode -> null
-                judgmentActive -> judgment?.ownershipBlack
-                showTerritory -> fsA?.ownershipBlack
+                judgmentActive -> boostedOwnership(judgment?.ownershipBlack)
+                showTerritory -> boostedOwnership(fsA?.ownershipBlack)
                 else -> null
             }
             BoardView(
@@ -1657,6 +1698,9 @@ fun GameScreen(
                 enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
                 skin = BoardSkin.fromId(settings.boardSkin),
                 showCoordinates = false,
+                showMagnifier = settings.magnifier,
+                edgeToEdge = settings.boardFill,
+                parentPadding = 2.dp,
                 territoryThreshold = 0.5,
                 candidates = if (!focusMode && !judgmentActive && !scoringMode) {
                     fsA?.candidates?.mapNotNull { cand ->
@@ -1764,7 +1808,7 @@ fun GameScreen(
                             modifier = Modifier.weight(1f)
                         ) { Text("关闭分析") }
                         else -> Button(
-                            onClick = { runAnalysis(false) },
+                            onClick = { runAnalysis(false, userInitiated = true) },
                             enabled = analysisAllowed && !finished,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -2171,15 +2215,18 @@ fun GameScreen(
         val selected = currentAnalysis?.candidates?.getOrNull(selectedCandidate)
         val displayOwnership = when {
             scoringMode -> null
-            judgmentActive -> judgment?.ownershipBlack
-            showTerritory -> currentAnalysis?.ownershipBlack
+            judgmentActive -> boostedOwnership(judgment?.ownershipBlack)
+            showTerritory -> boostedOwnership(currentAnalysis?.ownershipBlack)
             else -> null
         }
         BoardView(
             game = game,
             enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates,
+            showCoordinates = settings.showCoordinates && !settings.boardFill,
+            showMagnifier = settings.magnifier,
+            edgeToEdge = settings.boardFill,
+            parentPadding = 2.dp,
             territoryThreshold = 0.5,
             candidates = if (!focusMode && !judgmentActive && !scoringMode) {
                 currentAnalysis?.candidates?.mapNotNull { cand ->
@@ -2418,6 +2465,39 @@ fun GameScreen(
                         Text(if (analysisExpanded) "收起" else "展开")
                     }
                 }
+                if (continuousAnalysis) {
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = "分析范围", fontSize = 12.sp, color = Color.Gray)
+                        FilterChip(
+                            selected = autoSide == "both",
+                            onClick = {
+                                autoSide = "both"
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "both"))
+                            },
+                            label = { Text("双方") }
+                        )
+                        FilterChip(
+                            selected = autoSide == "B",
+                            onClick = {
+                                autoSide = "B"
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "B"))
+                            },
+                            label = { Text("只黑") }
+                        )
+                        FilterChip(
+                            selected = autoSide == "W",
+                            onClick = {
+                                autoSide = "W"
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "W"))
+                            },
+                            label = { Text("只白") }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
                 val wr = currentAnalysis.rootWinrateBlack
                 Row(modifier = Modifier.fillMaxWidth().height(14.dp)) {
                     Box(
@@ -2518,7 +2598,7 @@ fun GameScreen(
                         onClick = { showTerritory = !showTerritory },
                         label = { Text("地盘显示") }
                     )
-                    OutlinedButton(onClick = { runAnalysis(deep = true) }, enabled = !analyzing) {
+                    OutlinedButton(onClick = { runAnalysis(deep = true, userInitiated = true) }, enabled = !analyzing) {
                         Text("深度分析")
                     }
                     if (selected != null && !bothAi) {
@@ -2550,13 +2630,13 @@ fun GameScreen(
                     Text(text = "换个深度重算", fontSize = 12.sp, color = Color.Gray)
                     FilterChip(
                         selected = false,
-                        onClick = { runAnalysis(deep = false, visitsOverride = 150) },
+                        onClick = { runAnalysis(deep = false, visitsOverride = 150, userInitiated = true) },
                         enabled = !analyzing,
                         label = { Text("快速") }
                     )
                     FilterChip(
                         selected = false,
-                        onClick = { runAnalysis(deep = false, visitsOverride = 400) },
+                        onClick = { runAnalysis(deep = false, visitsOverride = 400, userInitiated = true) },
                         enabled = !analyzing,
                         label = { Text("标准") }
                     )
@@ -2636,7 +2716,7 @@ fun GameScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("关闭分析") }
                     else -> OutlinedButton(
-                        onClick = { runAnalysis(deep = false) },
+                        onClick = { runAnalysis(deep = false, userInitiated = true) },
                         enabled = analysisAllowed && !finished,
                         modifier = Modifier.weight(1f)
                     ) {
@@ -3060,7 +3140,17 @@ fun GameScreen(
     }
 
     if (showTrendDialog) {
-        val turns = liveStats.values.sortedBy { it.turn }
+        // The chart and ReviewMath.marks index turns by move number
+        // (dense list, index == turn). Live stats are sparse — only
+        // the turns that got analyzed — so densify by carrying the
+        // last known stat forward (earliest one backward for turn 0)
+        // instead of feeding the sparse list in and crashing.
+        val sortedStats = liveStats.values.sortedBy { it.turn }
+        var carry = sortedStats.firstOrNull()
+        val turns = (0..game.moves.size).map { t ->
+            liveStats[t]?.let { carry = it }
+            (carry ?: sortedStats.first()).copy(turn = t)
+        }
         AlertDialog(
             onDismissRequest = { showTrendDialog = false },
             title = { Text("局势走势") },
@@ -3069,7 +3159,7 @@ fun GameScreen(
                     WinrateChart(
                         turns = turns,
                         perspective = Stone.BLACK,
-                        ply = turns.lastOrNull()?.turn ?: 0,
+                        ply = game.moves.size,
                         marks = com.tuxungo.android.engine.ReviewMath.marks(
                             game.moves, turns
                         ),

@@ -58,18 +58,18 @@
 
 ## 单元测试（app/src/test/，每次构建全跑）
 
-共 12 个测试文件、58 个用例，钉住纯逻辑的对外行为：
+共 12 个测试文件、61 个用例，钉住纯逻辑的对外行为：
 
 - `go/GoGameTest`（11）— 落子/提子/禁着点/劫争等规则核心
 - `go/LoadPositionTest`（3）— 摆棋局面加载的合法性校验
 - `go/ScoringTest`（2）— 中国规则数目与死子定稿
 - `go/SgfTest`（7）— SGF 导出格式（尺寸/编码/停一手/让子/结果/注释转义）
 - `engine/KataEngineVertexTest`（3）— GTP 顶点坐标转换（跳过 I、y 自上而下）
-- `engine/ModelHeaderTest`（6）— 模型文件头解析 + 死子判定（整块均值）
+- `engine/ModelHeaderTest`（8）— 模型文件头解析 + 死子判定（整块均值）+ 展示用归属加深
 - `engine/AnalysisMathTest`（4）— 胜率/归属的行棋方→黑方视角转换
 - `engine/SideAiStoreTest`（4）— 定级阶梯 RANKS 的构成、顺序与显示名
 - `GameStoreTest`（2）— 对局存档编解码
-- `ReviewMathTest`（8）— 逐手统计编解码、恶手/妙手判定、棋谱库手顺编码
+- `ReviewMathTest`（9）— 逐手统计编解码、恶手/妙手判定、棋谱库手顺编码、稀疏统计拒绝
 - `UpdateCheckerTest`（4）— 检查更新的版本号逐段数字比较
 - `RankedStoreTest`（4）— 定级战绩文本解析的容错
 - 另有仓库脚本 `tools/check_tsumego_data.py` — 死活题数据与验证副本逐项核对（手动跑）

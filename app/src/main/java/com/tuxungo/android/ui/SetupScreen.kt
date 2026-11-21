@@ -111,7 +111,13 @@ fun SetupScreen(
     // start button and entry cards. Everything adjustable lives on
     // the detail page behind the settings card.
     var showDetail by remember { mutableStateOf(false) }
-    var showNigiri by remember { mutableStateOf(false) }
+    var nigiriResult by remember { mutableStateOf("") }
+    // Collapsible detail-page sections: only the mode section
+    // starts open, the rest expand when needed.
+    var secMode by remember { mutableStateOf(true) }
+    var secClock by remember { mutableStateOf(clockMinutes > 0) }
+    var secBoard by remember { mutableStateOf(false) }
+    var secHandicap by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(
         mode, width, height, handicapText, komiText, humanStone, aiVisits,
@@ -244,8 +250,7 @@ fun SetupScreen(
             shape = RoundedCornerShape(16.dp)
         ) {
         Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "对弈模式", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
+        SetupSection(title = "对弈模式", expanded = secMode, onToggle = { secMode = !secMode }) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ModeOption(
                 title = "人对人",
@@ -307,16 +312,16 @@ fun SetupScreen(
             Text(text = "你执子", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = humanStone == com.tuxungo.android.go.Stone.BLACK, onClick = { humanStone = com.tuxungo.android.go.Stone.BLACK }, label = { Text("执黑") })
-                FilterChip(selected = humanStone == com.tuxungo.android.go.Stone.WHITE, onClick = { humanStone = com.tuxungo.android.go.Stone.WHITE }, label = { Text("执白") })
+                SetupChip(selected = humanStone == com.tuxungo.android.go.Stone.BLACK, onClick = { humanStone = com.tuxungo.android.go.Stone.BLACK }, label = { Text("执黑") })
+                SetupChip(selected = humanStone == com.tuxungo.android.go.Stone.WHITE, onClick = { humanStone = com.tuxungo.android.go.Stone.WHITE }, label = { Text("执白") })
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = "AI 难度", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = aiVisits == 50, onClick = { aiVisits = 50 }, label = { Text("简单") })
-                FilterChip(selected = aiVisits == 200, onClick = { aiVisits = 200 }, label = { Text("中等") })
-                FilterChip(selected = aiVisits == 800, onClick = { aiVisits = 800 }, label = { Text("困难") })
+                SetupChip(selected = aiVisits == 50, onClick = { aiVisits = 50 }, label = { Text("简单") })
+                SetupChip(selected = aiVisits == 200, onClick = { aiVisits = 200 }, label = { Text("中等") })
+                SetupChip(selected = aiVisits == 800, onClick = { aiVisits = 800 }, label = { Text("困难") })
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = "AI 棋力定级", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -354,27 +359,27 @@ fun SetupScreen(
             Text(text = "系列赛（表演赛）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = seriesTarget == 0, onClick = { seriesTarget = 0 }, label = { Text("不开启") })
-                FilterChip(selected = seriesTarget == 2, onClick = { seriesTarget = 2 }, label = { Text("三局两胜") })
-                FilterChip(selected = seriesTarget == 3, onClick = { seriesTarget = 3 }, label = { Text("五局三胜") })
+                SetupChip(selected = seriesTarget == 0, onClick = { seriesTarget = 0 }, label = { Text("不开启") })
+                SetupChip(selected = seriesTarget == 2, onClick = { seriesTarget = 2 }, label = { Text("三局两胜") })
+                SetupChip(selected = seriesTarget == 3, onClick = { seriesTarget = 3 }, label = { Text("五局三胜") })
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "开启后两个 AI 交换黑白连打多局，先赢满局数的一方夺冠，每局结束自动开下一局。双方用哪个模型、各自多强，在对局里的 AI 托管面板分别设置。",
                 fontSize = 12.sp, color = Color.Gray
             )
-            Spacer(modifier = Modifier.height(24.dp))
         }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "用时（棋钟）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
+        SetupSection(title = "用时（棋钟）", expanded = secClock, onToggle = { secClock = !secClock }) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = clockMinutes == 0, onClick = { clockMinutes = 0 }, label = { Text("不限时") })
-            FilterChip(selected = clockMinutes == 5, onClick = { clockMinutes = 5 }, label = { Text("5 分钟") })
-            FilterChip(selected = clockMinutes == 10, onClick = { clockMinutes = 10 }, label = { Text("10 分钟") })
-            FilterChip(selected = clockMinutes == 20, onClick = { clockMinutes = 20 }, label = { Text("20 分钟") })
-            FilterChip(selected = clockMinutes == 30, onClick = { clockMinutes = 30 }, label = { Text("30 分钟") })
-            FilterChip(selected = clockMinutes == 60, onClick = { clockMinutes = 60 }, label = { Text("60 分钟") })
+            SetupChip(selected = clockMinutes == 0, onClick = { clockMinutes = 0 }, label = { Text("不限时") })
+            SetupChip(selected = clockMinutes == 5, onClick = { clockMinutes = 5 }, label = { Text("5 分钟") })
+            SetupChip(selected = clockMinutes == 10, onClick = { clockMinutes = 10 }, label = { Text("10 分钟") })
+            SetupChip(selected = clockMinutes == 20, onClick = { clockMinutes = 20 }, label = { Text("20 分钟") })
+            SetupChip(selected = clockMinutes == 30, onClick = { clockMinutes = 30 }, label = { Text("30 分钟") })
+            SetupChip(selected = clockMinutes == 60, onClick = { clockMinutes = 60 }, label = { Text("60 分钟") })
         }
         if (clockMinutes > 0) {
             Spacer(modifier = Modifier.height(6.dp))
@@ -384,7 +389,7 @@ fun SetupScreen(
             ) {
                 Text(text = "读秒次数", fontSize = 13.sp, color = Color.Gray)
                 for (n in listOf(3, 5)) {
-                    FilterChip(
+                    SetupChip(
                         selected = byoyomiPeriods == n,
                         onClick = { byoyomiPeriods = n },
                         label = { Text("$n 次") }
@@ -397,15 +402,15 @@ fun SetupScreen(
                 fontSize = 12.sp, color = Color.Gray
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "棋盘大小", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
+        SetupSection(title = "棋盘大小", expanded = secBoard, onToggle = { secBoard = !secBoard }) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = width == 19 && height == 19, onClick = { width = 19; height = 19 }, label = { Text("19×19") })
-            FilterChip(selected = width == 13 && height == 13, onClick = { width = 13; height = 13 }, label = { Text("13×13") })
-            FilterChip(selected = width == 9 && height == 9, onClick = { width = 9; height = 9 }, label = { Text("9×9") })
-            FilterChip(selected = width == 13 && height == 9, onClick = { width = 13; height = 9 }, label = { Text("13×9") })
+            SetupChip(selected = width == 19 && height == 19, onClick = { width = 19; height = 19 }, label = { Text("19×19") })
+            SetupChip(selected = width == 13 && height == 13, onClick = { width = 13; height = 13 }, label = { Text("13×13") })
+            SetupChip(selected = width == 9 && height == 9, onClick = { width = 9; height = 9 }, label = { Text("9×9") })
+            SetupChip(selected = width == 13 && height == 9, onClick = { width = 13; height = 9 }, label = { Text("13×9") })
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(text = "宽：$width 路", fontSize = 14.sp)
@@ -428,10 +433,10 @@ fun SetupScreen(
             text = if (aiSupported) "KataGo 官方支持范围内" else "超出 KataGo 支持范围（7–19 路）：AI 下不了，人对人可以下",
             fontSize = 13.sp, color = if (aiSupported) Color.Gray else Color(0xFFC62828)
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "让子与贴目（自己填）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
+        SetupSection(title = "让子与贴目", expanded = secHandicap, onToggle = { secHandicap = !secHandicap }) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             androidx.compose.material3.OutlinedTextField(
                 value = handicapText,
@@ -466,21 +471,45 @@ fun SetupScreen(
         )
         }
         }
+        }
         if (mode != GameMode.EVE) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = "猜先", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(text = "猜先（随机）", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "按围棋的老规矩决定谁执黑：一方抓一把白子，另一方猜单双，猜中者执黑。",
+                        text = "不用真的抓子猜单双：点一下，黑白立刻随机分好，开局直接生效。",
                         fontSize = 13.sp, color = Color.Gray
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     androidx.compose.material3.OutlinedButton(
-                        onClick = { showNigiri = true },
+                        onClick = {
+                            val stone = if (kotlin.random.Random.nextBoolean()) {
+                                com.tuxungo.android.go.Stone.BLACK
+                            } else {
+                                com.tuxungo.android.go.Stone.WHITE
+                            }
+                            if (mode == GameMode.PVE) {
+                                humanStone = stone
+                                nigiriResult = if (stone == com.tuxungo.android.go.Stone.BLACK) {
+                                    "分好了：你执黑（先行）"
+                                } else {
+                                    "分好了：你执白（后行）"
+                                }
+                            } else {
+                                nigiriResult = "分好了：本局黑白随机决定，黑方先行"
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("开始猜先") }
+                    ) { Text("随机分黑白") }
+                    if (nigiriResult.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = nigiriResult,
+                            fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                        )
+                    }
                 }
             }
         }
@@ -611,14 +640,6 @@ fun SetupScreen(
         }
     }
 
-    if (showNigiri) {
-        NigiriDialog(
-            mode = mode,
-            onDismiss = { showNigiri = false },
-            onPveResult = { stone -> humanStone = stone }
-        )
-    }
-
     if (showEgg) {
         EggStatsDialog(onDismiss = { showEgg = false })
     }
@@ -648,6 +669,70 @@ fun SetupScreen(
 
 /** Selectable mode card on the setup screen. */
 @Composable
+/** A collapsible section of the detail page: tap the header to
+ *  fold it away, so the page is not one long wall of options. */
+@Composable
+private fun SetupSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(vertical = 6.dp)
+    ) {
+        Text(
+            text = title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = if (expanded) "▾" else "▸",
+            fontSize = 16.sp, color = Color.Gray
+        )
+    }
+    androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+        Column {
+            Spacer(modifier = Modifier.height(6.dp))
+            content()
+        }
+    }
+}
+
+/** The setup page's option chip: the selected one is a solid
+ *  accent block with white text, so the current choice is obvious
+ *  at a glance (the stock chip's pale tint was easy to miss). */
+@Composable
+private fun SetupChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: @Composable () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = label,
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            containerColor = colors.surface,
+            labelColor = colors.onSurface,
+            selectedContainerColor = colors.primary,
+            selectedLabelColor = colors.onPrimary
+        ),
+        border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = colors.outline.copy(alpha = 0.55f),
+            selectedBorderColor = colors.primary,
+            borderWidth = 1.dp,
+            selectedBorderWidth = 1.5.dp
+        )
+    )
+}
+
 private fun ModeOption(
     title: String,
     desc: String,
@@ -675,9 +760,9 @@ private fun ModeOption(
             }
         ),
         border = if (selected) {
-            BorderStroke(1.5.dp, colors.primary)
+            BorderStroke(2.dp, colors.primary)
         } else {
-            null
+            BorderStroke(1.dp, colors.outline.copy(alpha = 0.45f))
         }
     ) {
         Box {
@@ -717,127 +802,6 @@ private fun ModeOption(
     }
 }
 
-
-/**
- * Nigiri （猜先）: one side grabs a handful of white stones, the other
- * guesses odd or even; a correct guess takes Black. Against the AI
- * the app grabs and the user guesses, and the result is applied to
- * the "you play" colour. Between two humans it is a pass-the-phone
- * ceremony and only announces who takes Black.
- */
-@Composable
-private fun NigiriDialog(
-    mode: GameMode,
-    onDismiss: () -> Unit,
-    onPveResult: (com.tuxungo.android.go.Stone) -> Unit
-) {
-    val count = remember { kotlin.random.Random.nextInt(1, 11) }
-    var phase by remember { mutableIntStateOf(0) }
-    var guessedOdd by remember { mutableStateOf<Boolean?>(null) }
-    val isOdd = count % 2 == 1
-    val guesserWon = guessedOdd != null && guessedOdd == isOdd
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("猜先") },
-        text = {
-            Column {
-                when {
-                    phase == 0 && mode == GameMode.PVE -> {
-                        Text(
-                            "AI 已经抓了一把白子捂在手里。猜猜是单数还是双数：猜中了你执黑，猜错了你执白。",
-                            fontSize = 14.sp
-                        )
-                    }
-                    phase == 0 -> {
-                        Text(
-                            "玩家一先抓一把白子（自己心里有数就行），然后把手机递给玩家二来猜。",
-                            fontSize = 14.sp
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { phase = 1 },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("抓好了，递给玩家二") }
-                    }
-                    phase == 1 -> {
-                        Text(
-                            "玩家二猜一猜：玩家一抓的子是单数还是双数？猜中了玩家二执黑，猜错了玩家一执黑。",
-                            fontSize = 14.sp
-                        )
-                    }
-                    else -> {
-                        // Reveal: draw the grabbed stones.
-                        val rows = (1..count).chunked(5)
-                        for (row in rows) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                for (i in row) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(Color.White, CircleShape)
-                                            .border(1.dp, Color(0xFF9A9A9A), CircleShape)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                        }
-                        Text(
-                            text = "一共 $count 子，是${if (isOdd) "单" else "双"}数。",
-                            fontSize = 14.sp, fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (mode == GameMode.PVE) {
-                                if (guesserWon) "猜中了！你执黑。" else "猜错了，你执白。"
-                            } else {
-                                if (guesserWon) "玩家二猜中了，玩家二执黑。" else "玩家二猜错了，玩家一执黑。"
-                            },
-                            fontSize = 14.sp, color = Color(0xFF2F7CF6)
-                        )
-                    }
-                }
-                if (phase == 1 || (phase == 0 && mode == GameMode.PVE)) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                guessedOdd = true
-                                phase = 2
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("猜单数") }
-                        Button(
-                            onClick = {
-                                guessedOdd = false
-                                phase = 2
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("猜双数") }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (phase == 2) {
-                Button(onClick = {
-                    if (mode == GameMode.PVE) {
-                        onPveResult(
-                            if (guesserWon) {
-                                com.tuxungo.android.go.Stone.BLACK
-                            } else {
-                                com.tuxungo.android.go.Stone.WHITE
-                            }
-                        )
-                    }
-                    onDismiss()
-                }) { Text(if (mode == GameMode.PVE) "就这样，回去开局" else "知道了") }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
 
 /** One label/value row of the easter-egg stats page. */
 @Composable

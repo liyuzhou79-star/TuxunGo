@@ -195,6 +195,36 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Text(text = "棋盘铺满屏幕", fontSize = 15.sp)
+                Text(text = "棋盘边贴到屏幕边（铺满时不显示坐标）", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.boardFill,
+                onCheckedChange = { update(settings.copy(boardFill = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = "落子放大镜", fontSize = 15.sp)
+                Text(text = "待确认落子时，角上放大周围 5×5", fontSize = 12.sp, color = Color.Gray)
+            }
+            Switch(
+                checked = settings.magnifier,
+                onCheckedChange = { update(settings.copy(magnifier = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
                 Text(text = "显示手数", fontSize = 15.sp)
                 Text(text = "在棋子上标出第几手落的", fontSize = 12.sp, color = Color.Gray)
             }

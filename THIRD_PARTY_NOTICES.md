@@ -19,9 +19,10 @@ is distributed by the KataGo training project.
 
 ## Board face texture
 
-The default board face texture (`assets/board/kaya_real.jpg`) is
-derived from "Oak Veneer 01" by Jenelle van Heerden, published by
+The board face textures (`assets/board/kaya_real.jpg` and
+`assets/board/beige.jpg`) are derived from "Oak Veneer 01" by
+Jenelle van Heerden, published by
 [Poly Haven](https://polyhaven.com/a/oak_veneer_01) under the CC0
-1.0 Universal public domain dedication. It was resized and
-recompressed for use as a board surface; the grid and stones are
-drawn by the app itself.
+1.0 Universal public domain dedication. They were resized,
+recompressed and (for the beige variant) recoloured for use as a
+board surface; the grid and stones are drawn by the app itself.

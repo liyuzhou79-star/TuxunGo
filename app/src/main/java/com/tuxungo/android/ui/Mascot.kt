@@ -16,7 +16,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,39 +54,68 @@ fun Mascot(modifier: Modifier = Modifier) {
             radius = r,
             center = Offset(cx, cy)
         )
-        // Glossy highlight
+        // Glossy highlight (softened: the old hard white blob
+        // fought with the eyes for attention).
         drawOval(
-            color = Color.White.copy(alpha = 0.85f),
+            color = Color.White.copy(alpha = 0.50f),
             topLeft = Offset(cx - r * 0.52f, cy - r * 0.78f),
             size = Size(r * 0.52f, r * 0.30f)
         )
-        // Eyes
+        // Eyes: tall white ovals, centred pupils, two highlights —
+        // a rounder, friendlier face than the old thin smile arc.
         for (ex in listOf(cx - r * 0.34f, cx + r * 0.34f)) {
-            drawCircle(Color.White, radius = r * 0.21f, center = Offset(ex, cy - r * 0.05f))
-            drawCircle(Color(0xFF141414), radius = r * 0.11f, center = Offset(ex, cy - r * 0.10f))
-            drawCircle(Color.White, radius = r * 0.04f, center = Offset(ex - r * 0.03f, cy - r * 0.16f))
+            val ey = cy - r * 0.08f
+            drawOval(
+                color = Color.White,
+                topLeft = Offset(ex - r * 0.155f, ey - r * 0.185f),
+                size = Size(r * 0.31f, r * 0.37f)
+            )
+            drawCircle(
+                Color(0xFF141414), radius = r * 0.075f,
+                center = Offset(ex, ey - r * 0.02f)
+            )
+            drawCircle(
+                Color.White, radius = r * 0.028f,
+                center = Offset(ex - r * 0.02f, ey - r * 0.055f)
+            )
+            drawCircle(
+                Color.White, radius = r * 0.012f,
+                center = Offset(ex + r * 0.025f, ey + r * 0.01f)
+            )
         }
-        // Smile
-        drawArc(
-            color = Color.White,
-            startAngle = 15f,
-            sweepAngle = 150f,
-            useCenter = false,
-            topLeft = Offset(cx - r * 0.30f, cy + r * 0.08f),
-            size = Size(r * 0.60f, r * 0.44f),
-            style = Stroke(width = r * 0.09f)
-        )
-        // Cheeks
-        drawCircle(
-            Color(0xFFF48FB1).copy(alpha = 0.55f),
-            radius = r * 0.15f,
-            center = Offset(cx - r * 0.68f, cy + r * 0.28f)
-        )
-        drawCircle(
-            Color(0xFFF48FB1).copy(alpha = 0.55f),
-            radius = r * 0.15f,
-            center = Offset(cx + r * 0.68f, cy + r * 0.28f)
-        )
+        // Open smile with a little tongue.
+        val mouthW = r * 0.30f
+        val mouthY = cy + r * 0.16f
+        val mouthH = r * 0.24f
+        val mouthPath = Path().apply {
+            moveTo(cx - mouthW, mouthY)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(
+                    cx - mouthW, mouthY - mouthH,
+                    cx + mouthW, mouthY + mouthH
+                ),
+                startAngleDegrees = 0f,
+                sweepAngleDegrees = 180f,
+                forceMoveTo = false
+            )
+            close()
+        }
+        drawPath(mouthPath, Color(0xFF402020))
+        clipPath(mouthPath) {
+            drawOval(
+                color = Color(0xFFF48FB1),
+                topLeft = Offset(cx - r * 0.11f, mouthY + r * 0.10f),
+                size = Size(r * 0.22f, r * 0.135f)
+            )
+        }
+        // Cheeks: soft ovals.
+        for (side in listOf(-1f, 1f)) {
+            drawOval(
+                color = Color(0xFFF48FB1).copy(alpha = 0.55f),
+                topLeft = Offset(cx + side * r * 0.68f - r * 0.14f, cy + r * 0.20f),
+                size = Size(r * 0.28f, r * 0.18f)
+            )
+        }
         // White stone buddy, bottom right
         val bx = s * 0.82f
         val by = s * 0.80f
@@ -106,6 +137,16 @@ fun Mascot(modifier: Modifier = Modifier) {
         )
         drawCircle(Color(0xFF263238), radius = br * 0.13f, center = Offset(bx - br * 0.32f, by - br * 0.05f))
         drawCircle(Color(0xFF263238), radius = br * 0.13f, center = Offset(bx + br * 0.32f, by - br * 0.05f))
+        // The buddy gets a tiny smile of its own.
+        drawArc(
+            color = Color(0xFF263238),
+            startAngle = 15f,
+            sweepAngle = 150f,
+            useCenter = false,
+            topLeft = Offset(bx - br * 0.30f, by + br * 0.02f),
+            size = Size(br * 0.60f, br * 0.40f),
+            style = Stroke(width = br * 0.07f)
+        )
     }
 }
 

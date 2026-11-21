@@ -573,6 +573,7 @@ fun GuessScreen(onBack: () -> Unit) {
             enabled = phase == GuessPhase.GUESSING,
             skin = BoardSkin.fromId(settings.boardSkin),
             showCoordinates = settings.showCoordinates,
+            showMagnifier = settings.magnifier,
             candidates = candidates,
             pvGhost = pvGhost,
             humanPoint = if (phase == GuessPhase.REVEALED) {

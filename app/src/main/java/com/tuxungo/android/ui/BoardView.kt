@@ -16,6 +16,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -43,7 +45,7 @@ data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
 /** Board face designs, selectable in settings. */
 enum class BoardSkin {
-    KAYA, WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
+    BEIGE, KAYA, WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
 
     companion object {
         fun fromId(id: String): BoardSkin = when (id) {
@@ -53,10 +55,35 @@ enum class BoardSkin {
             "moon" -> MOON
             "obsidian" -> OBSIDIAN
             "wood_light" -> WOOD_LIGHT
-            else -> KAYA
+            "kaya" -> KAYA
+            else -> BEIGE
         }
     }
 }
+
+/**
+ * "Board fills the screen" mode: the board's parent column keeps a
+ * small horizontal padding for its other content; this widens just
+ * the board by that padding on both sides and shifts it back, so
+ * the wooden face reaches the screen edges while everything else
+ * keeps its margins. The board stays square — proportions are
+ * never distorted.
+ */
+fun Modifier.stretchToParent(enabled: Boolean, parentPadding: Dp): Modifier =
+    if (!enabled) {
+        this
+    } else {
+        this.layout { measurable, constraints ->
+            val extra = (parentPadding * 2).roundToPx()
+            val w = constraints.maxWidth + extra
+            val placeable = measurable.measure(
+                constraints.copy(minWidth = w, maxWidth = w)
+            )
+            layout(w, placeable.height) {
+                placeable.place(-extra / 2, 0)
+            }
+        }
+    }
 
 private val GridInk = Color(0xFF4A2E14)
 private val GridInkOnDark = Color(0xFFF0DCAE)
@@ -101,6 +128,13 @@ fun BoardView(
     territoryIntensity: Float = 1.0f,
     /** Render the board rotated 180 degrees (White's point of view). */
     flipped: Boolean = false,
+    /** Placement magnifier (enlarged 5x5 corner inset while a point
+     *  is previewed). Off by default; a settings toggle turns it on. */
+    showMagnifier: Boolean = false,
+    /** Stretch the board face to the screen edges, compensating the
+     *  parent column's horizontal padding. */
+    edgeToEdge: Boolean = false,
+    parentPadding: Dp = 0.dp,
     onPointTap: (Int, Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -115,6 +149,7 @@ fun BoardView(
     }
     val texture: ImageBitmap? = remember(skin) {
         val asset = when (skin) {
+            BoardSkin.BEIGE -> "board/beige.jpg"
             BoardSkin.KAYA -> "board/kaya_real.jpg"
             BoardSkin.WOOD_LIGHT -> "board/wood_light.jpg"
             BoardSkin.WOOD_DARK -> "board/wood_dark.jpg"
@@ -154,6 +189,7 @@ fun BoardView(
     )
     Canvas(
         modifier = Modifier
+            .stretchToParent(edgeToEdge, parentPadding)
             .fillMaxWidth()
             .aspectRatio(1f)
             .pointerInput(game, enabled, showCoordinates, flipped) {
@@ -210,6 +246,7 @@ fun BoardView(
         )
         val corner = CornerRadius(s * 0.014f, s * 0.014f)
         val edgeColor = when (skin) {
+            BoardSkin.BEIGE -> Color(0xFFC49A58)
             BoardSkin.KAYA -> Color(0xFF9C7434)
             BoardSkin.WOOD_LIGHT -> Color(0xFFB0823F)
             BoardSkin.WOOD_DARK -> Color(0xFF2E1B0E)
@@ -615,7 +652,7 @@ fun BoardView(
         // confirm preview), show an enlarged 5x5 neighbourhood in
         // the corner farthest from the point, so on dense boards
         // the exact spot and its surroundings are easy to verify.
-        if (preview != null) {
+        if (preview != null && showMagnifier) {
             val (pvx, pvy) = preview
             val magSize = minOf(size.width, size.height) * 0.38f
             val mCell = magSize / 5f

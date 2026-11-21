@@ -266,16 +266,28 @@ fun TuxunGoApp(
     androidx.compose.animation.AnimatedContent(
         targetState = screen,
         transitionSpec = {
-            (androidx.compose.animation.fadeIn(
-                animationSpec = androidx.compose.animation.core.tween(220)
-            ) + androidx.compose.animation.slideInHorizontally(
-                animationSpec = androidx.compose.animation.core.tween(220)
-            ) { it / 8 }) togetherWith
-                (androidx.compose.animation.fadeOut(
-                    animationSpec = androidx.compose.animation.core.tween(180)
-                ) + androidx.compose.animation.slideOutHorizontally(
-                    animationSpec = androidx.compose.animation.core.tween(180)
-                ) { -it / 8 })
+            // Entering or leaving a game fades only: the sideways
+            // slide made starting a game feel like the board was
+            // being pushed in from the side, which read as "off".
+            // Secondary pages keep the gentle slide.
+            if (targetState == Screen.GAME || initialState == Screen.GAME) {
+                androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(260)
+                ) togetherWith androidx.compose.animation.fadeOut(
+                    animationSpec = androidx.compose.animation.core.tween(200)
+                )
+            } else {
+                (androidx.compose.animation.fadeIn(
+                    animationSpec = androidx.compose.animation.core.tween(220)
+                ) + androidx.compose.animation.slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(220)
+                ) { it / 8 }) togetherWith
+                    (androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    ) + androidx.compose.animation.slideOutHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(180)
+                    ) { -it / 8 })
+            }
         },
         label = "screen"
     ) { targetScreen ->
@@ -440,7 +452,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 质量收尾：单元测试补齐到 12 个文件 58 个用例（规则、数目、SGF、定级、版本比较、战绩存取全覆盖），代码地图新增测试总览；死活题 8 道也已逐项复核无误",
+            whatsNew = "· 新默认棋盘「米黄木纹」：浅米黄配细腻木纹，榧木实纹保留可选；设置新增「棋盘铺满屏幕」（棋盘贴到屏幕边、铺满时自动隐藏坐标）和「落子放大镜」开关（默认关）；形势判断着色更实：被一方围定的区域一眼看清归属；复盘新增自动播放（默认 1.2 秒一手，三档调速），分支探索改短名为「试下」；连续分析可只分析一方（双方 / 只黑 / 只白），落子再快也跟得上；修复点走势图闪退、形势判断开着时分析不显示、复盘棋盘方向相反三个问题；开始对局改为淡入过渡；开局设置页改为可折叠分组，选中项改为实心强调色；猜先改为点一下随机分黑白；吉祥物换上新笑脸；落子声换回最初版",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

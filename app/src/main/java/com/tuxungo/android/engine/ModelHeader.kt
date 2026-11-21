@@ -138,6 +138,72 @@ object TerritoryEstimate {
     }
 
     /**
+     * Display-only ownership sharpening for the judgment / territory
+     * overlay. The engine's per-point ownership is deliberately
+     * cautious: an empty region fully enclosed by one colour still
+     * reads lukewarm because an invasion is conceivable, so settled
+     * corners render pale or blank. For DISPLAY, a connected empty
+     * region bordered by stones of a single colour whose mean
+     * ownership already leans that way is pushed decisively toward
+     * that colour — how a human judges "this corner is White's".
+     * Points leaning the other way (a genuine invasion spot) keep
+     * their raw value, and regions touching both colours are
+     * untouched. Scoring and dead-stone logic never use this.
+     */
+    fun displayOwnership(
+        ownership: DoubleArray,
+        stones: Array<Stone?>,
+        width: Int,
+        height: Int
+    ): DoubleArray {
+        val n = minOf(ownership.size, stones.size, width * height)
+        val out = ownership.copyOf()
+        val visited = BooleanArray(n)
+        for (i in 0 until n) {
+            if (stones[i] != null || visited[i]) continue
+            val region = mutableListOf<Int>()
+            val stack = ArrayDeque<Int>()
+            stack.add(i)
+            visited[i] = true
+            var borderBlack = false
+            var borderWhite = false
+            var sum = 0.0
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                region.add(cur)
+                sum += ownership[cur]
+                for (nb in neighbors(cur, width, height)) {
+                    val s = stones[nb]
+                    if (s == Stone.BLACK) {
+                        borderBlack = true
+                    } else if (s == Stone.WHITE) {
+                        borderWhite = true
+                    } else if (!visited[nb]) {
+                        visited[nb] = true
+                        stack.add(nb)
+                    }
+                }
+            }
+            if (borderBlack == borderWhite) continue
+            val mean = sum / region.size
+            val target = when {
+                borderBlack && mean > 0.15 -> maxOf(0.85, mean)
+                borderWhite && mean < -0.15 -> minOf(-0.85, mean)
+                else -> continue
+            }
+            for (idx in region) {
+                val v = ownership[idx]
+                if (target > 0 && v >= -0.1) {
+                    out[idx] = maxOf(v, target * 0.9 + v * 0.1)
+                } else if (target < 0 && v <= 0.1) {
+                    out[idx] = minOf(v, target * 0.9 + v * 0.1)
+                }
+            }
+        }
+        return out
+    }
+
+    /**
      * Counts territory (empty points plus dead stones' points),
      * Chinese-scoring style. Dead groups come from [deadStones];
      * their points are then treated as empty. Each connected empty

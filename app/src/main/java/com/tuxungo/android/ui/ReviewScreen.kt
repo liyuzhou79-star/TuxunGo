@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -96,15 +97,12 @@ fun ReviewScreen(
     val reviewPrefs = remember {
         context.getSharedPreferences("review_prefs", android.content.Context.MODE_PRIVATE)
     }
-    var perspective by remember {
-        mutableStateOf(
-            if (reviewPrefs.getString("perspective", "B") == "W") {
-                Stone.WHITE
-            } else {
-                Stone.BLACK
-            }
-        )
-    }
+    // Review always opens the way the game was played (Black at
+    // the bottom), matching the live game board. A persisted
+    // white-perspective choice used to flip every later review
+    // upside down; the perspective chips below still switch for
+    // the current session only.
+    var perspective by remember { mutableStateOf(Stone.BLACK) }
     var ply by remember {
         mutableIntStateOf(
             if (initialPly in 0..totalMoves) initialPly else totalMoves
@@ -169,6 +167,21 @@ fun ReviewScreen(
     // current ply. The main line is never touched.
     var branchGame by remember { mutableStateOf<GoGame?>(null) }
     var showBranchExitConfirm by remember { mutableStateOf(false) }
+    // Autoplay: step through the game hands-free at a chosen pace
+    // (default 1.2 s per move). Any manual navigation stops it.
+    var autoPlaying by remember { mutableStateOf(false) }
+    var autoSpeedMs by remember {
+        mutableIntStateOf(reviewPrefs.getInt("autoMs", 1200))
+    }
+    LaunchedEffect(autoPlaying, ply, autoSpeedMs) {
+        if (!autoPlaying) return@LaunchedEffect
+        if (branchGame != null || ply >= totalMoves) {
+            autoPlaying = false
+            return@LaunchedEffect
+        }
+        delay(autoSpeedMs.toLong())
+        if (autoPlaying) scrubTo(ply + 1)
+    }
 
     /** Leaving with an unsaved trial branch open asks first. */
     fun requestReviewExit() {
@@ -381,8 +394,8 @@ fun ReviewScreen(
         branchBasePly = ply
         branchPending = null
         branchResult = null
-        branchInfo = "试下模式：点棋盘落子（点两下确认），可以悔棋、停一手；" +
-            "点「分析这条分支」看这个局面的胜率和 AI 一选。主线棋谱不受影响。"
+        branchInfo = "试下：点棋盘落子（点两下确认），可悔棋、停一手；" +
+            "点「分析这条分支」看胜率和 AI 一选。主线棋谱不受影响。"
     }
 
     fun exitBranch() {
@@ -496,7 +509,9 @@ fun ReviewScreen(
                 game = branch,
                 enabled = !branchBusy,
                 skin = BoardSkin.fromId(settings.boardSkin),
-                showCoordinates = settings.showCoordinates,
+                showCoordinates = settings.showCoordinates && !settings.boardFill,
+                edgeToEdge = settings.boardFill,
+                parentPadding = 12.dp,
                 territoryThreshold = 0.5,
                 candidates = branchMarks,
                 ownership = null,
@@ -528,7 +543,7 @@ fun ReviewScreen(
                     onClick = {
                         PositionShare.share(
                             context, branch,
-                            "复盘试下 · 从第 $branchBasePly 手分叉"
+                            "试下 · 第 $branchBasePly 手起"
                         )
                     }
                 ) { Text("分享局面") }
@@ -599,7 +614,9 @@ fun ReviewScreen(
                 game = replayGame,
                 enabled = false,
                 skin = BoardSkin.fromId(settings.boardSkin),
-                showCoordinates = settings.showCoordinates,
+                showCoordinates = settings.showCoordinates && !settings.boardFill,
+                edgeToEdge = settings.boardFill,
+                parentPadding = 12.dp,
                 territoryThreshold = 0.5,
                 candidates = bestMark,
                 ownership = if (territoryPly == ply) territory else null,
@@ -623,7 +640,7 @@ fun ReviewScreen(
                 RepeatStepButton(
                     text = "上一手",
                     enabled = ply > 0,
-                    onStep = { ply = (ply - 1).coerceAtLeast(0) }
+                    onStep = { autoPlaying = false; ply = (ply - 1).coerceAtLeast(0) }
                 )
                 Text(
                     "第 $ply / $totalMoves 手",
@@ -635,21 +652,41 @@ fun ReviewScreen(
                 RepeatStepButton(
                     text = "下一手",
                     enabled = ply < totalMoves,
-                    onStep = { ply = (ply + 1).coerceAtMost(totalMoves) }
+                    onStep = { autoPlaying = false; ply = (ply + 1).coerceAtMost(totalMoves) }
                 )
             }
             Slider(
                 value = ply.toFloat(),
-                onValueChange = { ply = it.roundToInt() },
+                onValueChange = { autoPlaying = false; ply = it.roundToInt() },
                 valueRange = 0f..totalMoves.coerceAtLeast(1).toFloat()
             )
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { autoPlaying = !autoPlaying },
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (autoPlaying) "暂停" else "自动播放") }
+                for ((ms, label) in listOf(600 to "0.6 秒", 1200 to "1.2 秒", 2000 to "2.0 秒")) {
+                    FilterChip(
+                        selected = autoSpeedMs == ms,
+                        onClick = {
+                            autoSpeedMs = ms
+                            reviewPrefs.edit().putInt("autoMs", ms).apply()
+                        },
+                        label = { Text(label) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
                     onClick = { enterBranch() },
                     modifier = Modifier.weight(1f)
-                ) { Text("从这手试下（分支探索）") }
+                ) { Text("试下") }
                 OutlinedButton(
                     onClick = {
                         val stat = turns?.getOrNull(ply)
@@ -759,19 +796,13 @@ fun ReviewScreen(
         Row {
             FilterChip(
                 selected = perspective == Stone.BLACK,
-                onClick = {
-                    perspective = Stone.BLACK
-                    reviewPrefs.edit().putString("perspective", "B").apply()
-                },
+                onClick = { perspective = Stone.BLACK },
                 label = { Text("黑方视角") }
             )
             Spacer(modifier = Modifier.padding(start = 8.dp))
             FilterChip(
                 selected = perspective == Stone.WHITE,
-                onClick = {
-                    perspective = Stone.WHITE
-                    reviewPrefs.edit().putString("perspective", "W").apply()
-                },
+                onClick = { perspective = Stone.WHITE },
                 label = { Text("白方视角") }
             )
             Spacer(modifier = Modifier.padding(start = 8.dp))
@@ -822,7 +853,7 @@ fun ReviewScreen(
                     ply = ply,
                     marks = marks,
                     showLead = showLead,
-                    onSeek = { scrubTo(it) }
+                    onSeek = { autoPlaying = false; scrubTo(it) }
                 )
                 ChartLegend()
             }

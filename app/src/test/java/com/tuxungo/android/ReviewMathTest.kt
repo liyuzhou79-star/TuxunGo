@@ -141,4 +141,19 @@ class ReviewMathTest {
         val back = LibraryStore.decodeMoves(LibraryStore.encodeMoves(moves))
         assertEquals(moves, back)
     }
+
+    @Test
+    fun marksRefusesSparseTurns() {
+        // A live game's recorded stats are sparse (only the turns
+        // that got analyzed, no turn-0 entry). marks() indexes turns
+        // by move number, so it must refuse a non-dense list instead
+        // of crashing the caller (the in-game trend dialog did).
+        val moves = listOf(
+            Move(Stone.BLACK, 3, 3),
+            Move(Stone.WHITE, 4, 4),
+            Move(Stone.BLACK, 5, 5)
+        )
+        val sparse = listOf(stat(1, 0.6), stat(3, 0.4))
+        assertTrue(ReviewMath.marks(moves, sparse).isEmpty())
+    }
 }
