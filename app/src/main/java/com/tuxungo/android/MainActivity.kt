@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 复盘的「看这步的领地」现在同时给出这一步的形势判断明细：按同一份领地数据估算死子、用中国规则数一遍——黑白双方的活子、空、贴目和领先目数，一行看清，不用再切回对局页",
+            whatsNew = "· 文档补齐：新手指南和项目说明补上最近几版的新功能——SGF 导入、整局讲评、棋力自测、复盘形势判断明细，在指南里都能查到入口和用法（App 功能与上一版相同）",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
