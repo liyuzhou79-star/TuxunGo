@@ -39,9 +39,10 @@ class SgfTest {
         val sgf = Sgf.export(g)
         assertTrue(sgf.contains("HA[2]"))
         assertTrue(sgf.contains("AB"))
-        // Standard two-stone points: (15,3)=pd and (3,15)=dp.
-        assertTrue(sgf.contains("[pd]"))
-        assertTrue(sgf.contains("[dp]"))
+        // Two-stone handicap sits on the main diagonal: (3,3)=dd
+        // and (15,15)=pp (GoGame.handicapPoints corners order).
+        assertTrue(sgf.contains("[dd]"))
+        assertTrue(sgf.contains("[pp]"))
     }
 
     @Test
