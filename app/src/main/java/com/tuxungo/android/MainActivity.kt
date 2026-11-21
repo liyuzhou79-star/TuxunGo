@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 新增 SGF 导入：棋谱库右上角「导入」，可从文件选 .sgf 或从剪贴板粘贴；支持一份文件多局、让子局、摆子局面和矩形棋盘，变化图取主线；导入前会逐手校验，手顺对不上的棋谱会按能对上的部分存入并给出提示——在其他平台下的棋、下载的职业棋谱，都能导进来用 AI 复盘了",
+            whatsNew = "· 形势判断提速：改为自适应两段判断——先用少量计算快速估算，局面已经定型就直接出结果（大多数中后盘局面会明显变快，强力模型下尤其明显）；只有还在争夺中、归属不清的局面，才自动接着按设置里的计算量深入再算一遍，精度不打折",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

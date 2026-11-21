@@ -816,7 +816,15 @@ fun GameScreen(
         val sideSnapshot = game.current
         val moveCount = movesSnapshot.size
         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        analysisRunner.submit({
+        val provHandler: (AnalysisResult) -> Unit = { prov ->
+            mainHandler.post {
+                if (token == analysisToken && game.moves.size == moveCount) {
+                    judgment = prov
+                    judgmentKey = moveCount
+                }
+            }
+        }
+        fun judgeEngine(): AnalysisEngine {
             var eng = analysisEngine
             if (eng == null || !eng.isAlive) {
                 val model = ModelStore.resolveActiveFile(context)
@@ -828,31 +836,86 @@ fun GameScreen(
                 )
                 analysisEngine = eng
             }
-            eng.analyze(
+            return eng
+        }
+        // Stage 2 (only when needed): the full-depth pass.
+        fun judgeDeep() {
+            analysisRunner.submit({
+                judgeEngine().analyze(
+                    size = game.size,
+                    komi = game.komi,
+                    initialStones = baseStones,
+                    initialPlayer = basePlayer,
+                    moves = movesSnapshot,
+                    sideToMove = sideSnapshot,
+                    maxVisits = settings.judgeVisits,
+                    onProvisional = provHandler
+                )
+            }) { result ->
+                judging = false
+                if (token != analysisToken) return@submit
+                result.onSuccess { res ->
+                    if (game.moves.size == moveCount && judgment != null) {
+                        judgment = res
+                        judgmentKey = moveCount
+                    }
+                }
+            }
+        }
+        // Stage 1: a quick pass. Settled positions are already
+        // decisive at this depth, so the answer lands fast and the
+        // deep pass never runs; murky positions deepen on their own.
+        analysisRunner.submit({
+            judgeEngine().analyze(
                 size = game.size,
                 komi = game.komi,
                 initialStones = baseStones,
                 initialPlayer = basePlayer,
                 moves = movesSnapshot,
                 sideToMove = sideSnapshot,
-                maxVisits = settings.judgeVisits,
-                onProvisional = { prov ->
-                    mainHandler.post {
-                        if (token == analysisToken && game.moves.size == moveCount) {
-                            judgment = prov
-                            judgmentKey = moveCount
-                        }
-                    }
-                }
+                maxVisits = minOf(settings.judgeVisits, 200),
+                onProvisional = provHandler
             )
         }) { result ->
-            judging = false
-            if (token != analysisToken) return@submit
+            if (token != analysisToken) {
+                judging = false
+                return@submit
+            }
+            var deepen = false
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
                     judgment = res
                     judgmentKey = moveCount
+                    if (settings.judgeVisits > 200) {
+                        // Same clarity measure the panel shows: the
+                        // share of empty points still undecided.
+                        var empty = 0
+                        var unclear = 0
+                        for (y in 0 until game.size.height) {
+                            for (x in 0 until game.size.width) {
+                                if (game.stoneAt(x, y) != null) continue
+                                empty++
+                                val mag = kotlin.math.abs(
+                                    res.ownershipBlack.getOrElse(
+                                        y * game.size.width + x
+                                    ) { 0.0 }
+                                )
+                                if (mag < 0.5) unclear++
+                            }
+                        }
+                        val share = if (empty > 0) {
+                            unclear.toDouble() / empty
+                        } else {
+                            0.0
+                        }
+                        deepen = share > 0.15
+                    }
                 }
+            }
+            if (deepen) {
+                judgeDeep()
+            } else {
+                judging = false
             }
         }
     }
