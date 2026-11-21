@@ -53,6 +53,7 @@ import com.tuxungo.android.engine.KataEngine
 import com.tuxungo.android.engine.MarkKind
 import com.tuxungo.android.engine.ModelStore
 import com.tuxungo.android.engine.MoveMark
+import com.tuxungo.android.engine.TerritoryEstimate
 import com.tuxungo.android.engine.ReviewMath
 import com.tuxungo.android.engine.TurnStat
 import com.tuxungo.android.go.GoGame
@@ -843,6 +844,34 @@ fun ReviewScreen(
                     fontSize = 12.sp, color = Color.Gray
                 )
             }
+        }
+        if (territory != null && territoryPly == ply) {
+            // The same ownership also yields a counted score for
+            // this exact position — no extra engine work, just the
+            // app's usual dead-stone estimate + Chinese scoring.
+            val own = territory!!
+            val stonesArr = Array(current.size.area) { i ->
+                replayGame.stoneAt(
+                    i % current.size.width, i / current.size.width
+                )
+            }
+            val dead = TerritoryEstimate.deadStones(
+                own, stonesArr, current.size.width, current.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
+            )
+            val s = replayGame.scoreWithDead(dead)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "这手的形势判断：黑 活子 ${s.blackStones} + 空 " +
+                    "${s.blackTerritory} · 白 活子 ${s.whiteStones} + 空 " +
+                    "${s.whiteTerritory} + 贴目 ${fmtNum(s.komi)} → " +
+                    if (s.lead > 0) {
+                        "黑领先约 ${fmtNum(s.lead)} 目"
+                    } else {
+                        "白领先约 ${fmtNum(-s.lead)} 目"
+                    },
+                fontSize = 12.sp, color = Color.Gray
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
 

@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 个人统计页新增「棋力自测」：根据你的定级对局战绩（赢过哪一档 AI、全胜还会往上估）和死活题完成度，给出一个大致的棋力区间，并把依据逐条列清；还没有定级记录时，会提示先去打一盘定级局",
+            whatsNew = "· 复盘的「看这步的领地」现在同时给出这一步的形势判断明细：按同一份领地数据估算死子、用中国规则数一遍——黑白双方的活子、空、贴目和领先目数，一行看清，不用再切回对局页",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
