@@ -2,6 +2,7 @@ package com.tuxungo.android.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -856,6 +857,69 @@ fun ReviewScreen(
                     onSeek = { autoPlaying = false; scrubTo(it) }
                 )
                 ChartLegend()
+                val summary = ReviewMath.gameSummary(
+                    current.moves, turns!!, current.size
+                )
+                if (summary != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "整局讲评",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            if (summary.turningPoint > 0) {
+                                val tpStone = current.moves[
+                                    summary.turningPoint - 1
+                                ].stone
+                                Text(
+                                    text = "转折点：第 ${summary.turningPoint} 手" +
+                                        "（${if (tpStone == Stone.BLACK) "黑" else "白"}），" +
+                                        "黑方胜率 ${fmtPct(summary.turningBeforeBlack)}" +
+                                        " → ${fmtPct(summary.turningAfterBlack)}",
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                            if (summary.blunders.isEmpty()) {
+                                Text(
+                                    text = "全场没有大恶手，双方发挥稳定。",
+                                    fontSize = 13.sp, color = Color.Gray
+                                )
+                            } else {
+                                for (b in summary.blunders) {
+                                    Text(
+                                        text = "恶手：第 ${b.moveNumber} 手" +
+                                            "（${if (b.stone == Stone.BLACK) "黑" else "白"}）" +
+                                            "胜率 −${fmtNum(b.dropPercent)}%" +
+                                            if (b.bestText.isNotEmpty()) {
+                                                "，AI 会下 ${b.bestText}"
+                                            } else {
+                                                ""
+                                            } + "（点此跳转）",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFC62828),
+                                        modifier = Modifier
+                                            .clickable {
+                                                autoPlaying = false
+                                                scrubTo(b.moveNumber - 1)
+                                            }
+                                            .padding(vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "全场统计：黑方恶手 ${summary.blackBlunders} 次" +
+                                    " · 白方恶手 ${summary.whiteBlunders} 次" +
+                                    " · 妙手 ${summary.brilliantCount} 次",
+                                fontSize = 12.sp, color = Color.Gray
+                            )
+                        }
+                    }
+                }
             }
             analyzing -> {
                 Card(modifier = Modifier.fillMaxWidth()) {

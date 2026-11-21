@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 形势判断提速：改为自适应两段判断——先用少量计算快速估算，局面已经定型就直接出结果（大多数中后盘局面会明显变快，强力模型下尤其明显）；只有还在争夺中、归属不清的局面，才自动接着按设置里的计算量深入再算一遍，精度不打折",
+            whatsNew = "· 复盘新增「整局讲评」卡：复盘分析完成后，胜率图下方会自动生成一页讲评——本局转折点在哪一手、胜率摆动了多少；最严重的几步恶手逐条列出（丢了多少胜率、AI 当时更想下哪），点任意一条直接跳到那一手；还有双方恶手和妙手的总账",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

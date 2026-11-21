@@ -103,6 +103,84 @@ object ReviewMath {
         return out.sortedBy { it.moveNumber }
     }
 
+    /** One blunder entry for the whole-game summary card. */
+    data class BlunderLine(
+        val moveNumber: Int,
+        val stone: Stone,
+        /** Win rate the mover gave away, in percent points (> 0). */
+        val dropPercent: Double,
+        /** The engine's top choice as a GTP vertex, "" when unknown. */
+        val bestText: String
+    )
+
+    /** Whole-game summary shown as the review commentary card. */
+    data class GameSummary(
+        /** Move number of the largest win-rate swing (0 = none). */
+        val turningPoint: Int,
+        /** Black win rate (0..1) just before / after that move. */
+        val turningBeforeBlack: Double,
+        val turningAfterBlack: Double,
+        /** Up to three worst blunders, worst first. */
+        val blunders: List<BlunderLine>,
+        val blackBlunders: Int,
+        val whiteBlunders: Int,
+        val brilliantCount: Int
+    )
+
+    /**
+     * Builds the commentary-card summary from the same marks the
+     * chart shows — no extra engine work, just aggregation.
+     */
+    fun gameSummary(
+        moves: List<Move>,
+        turns: List<TurnStat>,
+        size: BoardSize
+    ): GameSummary? {
+        if (turns.size != moves.size + 1 || moves.isEmpty()) return null
+        val allMarks = marks(moves, turns)
+        val key = allMarks.firstOrNull { it.kind == MarkKind.KEY }
+        val blunderMarks = allMarks.filter { it.kind == MarkKind.BLUNDER }
+        val lines = blunderMarks
+            .sortedBy { it.deltaPercent }
+            .take(3)
+            .map { mk ->
+                val stat = turns[mk.moveNumber - 1]
+                val bestText = when {
+                    stat.bestIsPass -> "停一手"
+                    stat.bestMove != null ->
+                        KataEngine.toVertex(stat.bestMove!!, size)
+                    else -> ""
+                }
+                BlunderLine(
+                    moveNumber = mk.moveNumber,
+                    stone = moves[mk.moveNumber - 1].stone,
+                    dropPercent = -mk.deltaPercent,
+                    bestText = bestText
+                )
+            }
+        return GameSummary(
+            turningPoint = key?.moveNumber ?: 0,
+            turningBeforeBlack = if (key != null) {
+                turns[key.moveNumber - 1].winrateBlack
+            } else {
+                0.0
+            },
+            turningAfterBlack = if (key != null) {
+                turns[key.moveNumber].winrateBlack
+            } else {
+                0.0
+            },
+            blunders = lines,
+            blackBlunders = blunderMarks.count {
+                moves[it.moveNumber - 1].stone == Stone.BLACK
+            },
+            whiteBlunders = blunderMarks.count {
+                moves[it.moveNumber - 1].stone == Stone.WHITE
+            },
+            brilliantCount = allMarks.count { it.kind == MarkKind.BRILLIANT }
+        )
+    }
+
     /** "wr,lead,bestX,bestY,gap;..." — best is -1,-1 for pass / unknown. */
     fun encodeTurns(turns: List<TurnStat>): String =
         turns.joinToString(";") { t ->

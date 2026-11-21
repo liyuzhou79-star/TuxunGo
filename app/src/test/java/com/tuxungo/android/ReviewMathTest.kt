@@ -7,6 +7,7 @@ import com.tuxungo.android.go.BoardSize
 import com.tuxungo.android.go.Move
 import com.tuxungo.android.go.Stone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -155,5 +156,45 @@ class ReviewMathTest {
         )
         val sparse = listOf(stat(1, 0.6), stat(3, 0.4))
         assertTrue(ReviewMath.marks(moves, sparse).isEmpty())
+    }
+
+    @Test
+    fun summaryFindsTurningPointAndBlunder() {
+        val moves = listOf(
+            Move(Stone.BLACK, 3, 3),
+            Move(Stone.WHITE, 15, 15),
+            Move(Stone.BLACK, 3, 15)
+        )
+        val turns = listOf(
+            stat(0, 0.50),
+            stat(1, 0.52, best = Move(Stone.WHITE, 2, 2)),
+            stat(2, 0.75),
+            stat(3, 0.74)
+        )
+        val s = ReviewMath.gameSummary(moves, turns, BoardSize(19, 19))!!
+        // White's move 2 hands Black 23 points of win rate: it is
+        // both the game's only blunder and its turning point.
+        assertEquals(2, s.turningPoint)
+        assertEquals(0.52, s.turningBeforeBlack, 0.001)
+        assertEquals(0.75, s.turningAfterBlack, 0.001)
+        assertEquals(1, s.blunders.size)
+        assertEquals(2, s.blunders[0].moveNumber)
+        assertEquals(Stone.WHITE, s.blunders[0].stone)
+        assertEquals(23.0, s.blunders[0].dropPercent, 0.001)
+        assertEquals("C17", s.blunders[0].bestText)
+        assertEquals(0, s.blackBlunders)
+        assertEquals(1, s.whiteBlunders)
+        assertEquals(0, s.brilliantCount)
+    }
+
+    @Test
+    fun summaryRefusesSparseOrEmpty() {
+        val moves = listOf(Move(Stone.BLACK, 3, 3))
+        assertNull(
+            ReviewMath.gameSummary(moves, listOf(stat(0, 0.5)), BoardSize(19, 19))
+        )
+        assertNull(
+            ReviewMath.gameSummary(emptyList(), emptyList(), BoardSize(19, 19))
+        )
     }
 }
