@@ -573,7 +573,7 @@ fun GuessScreen(onBack: () -> Unit) {
             game = game,
             enabled = phase == GuessPhase.GUESSING,
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates && !settings.boardFill,
+            showCoordinates = settings.showCoordinates,
             showMagnifier = settings.magnifier,
             edgeToEdge = settings.boardFill,
             parentPadding = 8.dp,

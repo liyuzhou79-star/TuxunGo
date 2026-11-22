@@ -673,14 +673,20 @@ fun BoardView(
             val discR = r * radiusFactor * marksAnim.value
             // Soft drop shadow so the disc lifts off the board.
             drawCircle(
-                Color.Black.copy(alpha = 0.30f),
+                Color.Black.copy(alpha = 0.16f),
                 radius = discR,
                 center = Offset(center.x, center.y + r * 0.07f)
             )
-            // Body: radial gradient lit from the top-left.
+            // Body: semi-transparent radial gradient lit from the
+            // top-left (2.64.0: the user asked for translucent marks
+            // so the board and stones ghost through a little).
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(light, base, dark),
+                    colors = listOf(
+                        light.copy(alpha = 0.85f),
+                        base.copy(alpha = 0.78f),
+                        dark.copy(alpha = 0.85f)
+                    ),
                     center = Offset(
                         center.x - discR * 0.38f, center.y - discR * 0.38f
                     ),
@@ -698,14 +704,14 @@ fun BoardView(
             )
             // Gloss highlight, top-left.
             drawCircle(
-                Color.White.copy(alpha = 0.38f),
+                Color.White.copy(alpha = 0.30f),
                 radius = discR * 0.30f,
                 center = Offset(
                     center.x - discR * 0.36f, center.y - discR * 0.40f
                 )
             )
             drawCircle(
-                Color.White.copy(alpha = 0.14f),
+                Color.White.copy(alpha = 0.10f),
                 radius = discR * 0.52f,
                 center = Offset(
                     center.x - discR * 0.30f, center.y - discR * 0.34f
@@ -742,14 +748,16 @@ fun BoardView(
                 center = center
             )
             drawCircle(
-                Color.Black.copy(alpha = 0.30f),
+                Color.Black.copy(alpha = 0.16f),
                 radius = baseR,
                 center = Offset(center.x, center.y + r * 0.07f)
             )
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C)
+                        Color(0xFFFFAB91).copy(alpha = 0.88f),
+                        Color(0xFFF4511E).copy(alpha = 0.82f),
+                        Color(0xFFBF360C).copy(alpha = 0.88f)
                     ),
                     center = Offset(
                         center.x - baseR * 0.38f, center.y - baseR * 0.38f
@@ -852,19 +860,27 @@ fun BoardView(
             val badgeCenter = Offset(
                 center.x + r * 0.55f, center.y - r * 0.55f
             )
+            // Solid red disc (2.64.0: the user asked for the badge
+            // in solid red), white calligraphy on top.
             drawCircle(
-                Color.White.copy(alpha = 0.88f),
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFE57373), Color(0xFFC62828), Color(0xFF8E1414)),
+                    center = Offset(
+                        badgeCenter.x - r * 0.16f, badgeCenter.y - r * 0.16f
+                    ),
+                    radius = r * 0.7f
+                ),
                 radius = r * 0.47f,
                 center = badgeCenter
             )
             drawCircle(
-                Color(0xFFB71C1C).copy(alpha = 0.75f),
+                Color(0xFF7F1010).copy(alpha = 0.8f),
                 radius = r * 0.47f,
                 center = badgeCenter,
                 style = Stroke(width = maxOf(1.2f, r * 0.045f))
             )
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.rgb(183, 28, 28)
+                color = android.graphics.Color.WHITE
                 textSize = r * 0.8f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isAntiAlias = true

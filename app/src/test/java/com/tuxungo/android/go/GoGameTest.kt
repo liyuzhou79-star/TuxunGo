@@ -86,13 +86,17 @@ class GoGameTest {
     }
 
     @Test
-    fun twoPassesFinishTheGame() {
+    fun twoPassesDoNotFinishTheGame() {
+        // 2.64.0: the user asked for the both-pass auto-finish to
+        // be removed — a pass is just a pass, the game ends only
+        // via scoring, resign, timeout or the referee.
         val g = game()
         assertTrue(g.play(4, 4))
         assertTrue(g.pass())
         assertFalse(g.finished)
         assertTrue(g.pass())
-        assertTrue(g.finished)
+        assertFalse(g.finished)
+        assertTrue(g.play(0, 0))
     }
 
     @Test

@@ -224,7 +224,10 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         undoStack.add(UndoEntry(move, emptyList(), consecutivePasses))
         consecutivePasses++
         current = current.other()
-        if (consecutivePasses >= 2) finished = true
+        // 2.64.0: two passes in a row no longer finish the game
+        // (the user asked for that auto-finish to be removed). The
+        // counter stays for the AI-vs-AI path in GameScreen, which
+        // still needs a way to wrap a game up.
         return true
     }
 

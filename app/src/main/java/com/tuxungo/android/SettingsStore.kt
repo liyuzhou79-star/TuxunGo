@@ -9,7 +9,7 @@ data class AppSettings(
     val captureSound: String = "real",
     val boardSkin: String = "beige",
     /** Board stretches to the screen edges (coordinates hidden). */
-    val boardFill: Boolean = false,
+    val boardFill: Boolean = true,
     /** Enlarged 5x5 placement magnifier while confirming a move. */
     val magnifier: Boolean = false,
     /** Continuous analysis scope: both / B / W (side to move). */
@@ -19,7 +19,7 @@ data class AppSettings(
     /** Show only the AI's top three candidate moves on the board. */
     val topThreeOnly: Boolean = false,
     val confirmMove: Boolean = true,
-    val showCoordinates: Boolean = true,
+    val showCoordinates: Boolean = false,
     val vibrationEnabled: Boolean = true,
     /** AI-vs-AI spectating pace: fast / normal / slow. */
     val eveSpeed: String = "normal",
@@ -157,18 +157,28 @@ object SettingsStore {
             e.putBoolean("defaults251", true)
             e.apply()
         }
+        // 2.64.0 defaults: the game board goes full-width with no
+        // walnut surround and coordinates default off (both stay
+        // available in Settings). Applied once per install.
+        if (!p.getBoolean("defaults264", false)) {
+            val e = p.edit()
+            e.putBoolean("boardFill", true)
+            e.putBoolean("showCoordinates", false)
+            e.putBoolean("defaults264", true)
+            e.apply()
+        }
         return AppSettings(
             soundEnabled = p.getBoolean("soundEnabled", true),
             placeSound = p.getString("placeSound", "original") ?: "original",
             captureSound = p.getString("captureSound", "real") ?: "real",
             boardSkin = p.getString("boardSkin", "beige") ?: "beige",
-            boardFill = p.getBoolean("boardFill", false),
+            boardFill = p.getBoolean("boardFill", true),
             magnifier = p.getBoolean("magnifier", false),
             autoAnalysisSide = p.getString("autoAnalysisSide", "both") ?: "both",
             humanMarks = p.getBoolean("humanMarks", false),
             topThreeOnly = p.getBoolean("topThreeOnly", false),
             confirmMove = p.getBoolean("confirmMove", true),
-            showCoordinates = p.getBoolean("showCoordinates", true),
+            showCoordinates = p.getBoolean("showCoordinates", false),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
             eveSpeed = p.getString("eveSpeed", "normal") ?: "normal",
             accent = p.getString("accent", "sakura") ?: "sakura",

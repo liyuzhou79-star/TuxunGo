@@ -12,7 +12,7 @@
 
 ## 规则与棋谱（纯 Kotlin，有单元测试）
 
-- `app/src/main/java/com/tuxungo/android/go/GoGame.kt` — 规则核心：落子、提子、禁着点、全局同形禁着（positional superko）、停一手两次终局、认输/超时、中国规则数目（`score` / `scoreWithDead`）、死子确认后的定稿（`finishScoringWith`）
+- `app/src/main/java/com/tuxungo/android/go/GoGame.kt` — 规则核心：落子、提子、禁着点、全局同形禁着（positional superko）、停一手（2.64.0 起双停不自动终局，AI 对 AI 由 GameScreen 收官）、认输/超时、中国规则数目（`score` / `scoreWithDead`）、死子确认后的定稿（`finishScoringWith`）
 - `go/Sgf.kt` — SGF 导出（含逐手胜率注释的复盘导出也在这里组装）
 - `go/SgfImport.kt` — SGF 导入：主线解析（多局/让子/摆子/矩形），导入前用 GoGame 逐手回放校验，对不上就截断并标记
 - `engine/GameReview.kt` — 复盘数据：逐手统计 `TurnStat` 的编解码（含故意失误标记位）、恶手/妙手/转折手/故意失误判定、整局讲评汇总、定局手推导（`ReviewMath`）
@@ -41,7 +41,7 @@
 - `MainActivity.kt` — 导航总调度、主题、首次启动引导与「本版更新」、桌面长按快捷入口、空闲预热分析引擎
 - `ui/SetupScreen.kt` — 主页：开局设置、最近棋谱、每日一题卡；连点吉祥物五次打开个人统计页
 - `ui/GameScreen.kt` — 对局页（全项目最大的文件）：对局驱动、AI 托管、分析/形势判断/数目、智能裁判、AI 认输、走势小图、表演赛解说流、系列赛、结果弹窗都在这里
-- `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选圈标记（AI 紫/白圈、人类橙红圈、重叠发光圈）、定局「绝」字书法徽章、落子放大镜、手数、涟漪与落子沉降动画
+- `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选标记（AI 紫/白半透明圆点、人类橙红圆点、重叠发光点）、选中点悬浮标签在 GameScreen、定局「绝」字书法徽章、落子放大镜、手数、涟漪与落子沉降动画
 - `ui/GameUi.kt` — 游戏级视觉组件（2.60.0）：渐变质感按钮 GameButton、深度卡片 GameCard、棋盘胡桃木框 BoardFrame、棋子头像 StoneAvatar、几何图标 GameIcon
 - `ui/ReviewScreen.kt` — 复盘：走势图、逐手回放、分支试下、领地归属图（按手数缓存）
 - `ui/LibraryScreen.kt` — 棋谱库：搜索/筛选/多选、终局缩略图（后台渲染、缓存有上限）

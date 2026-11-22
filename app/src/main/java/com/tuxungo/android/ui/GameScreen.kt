@@ -16,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -217,6 +218,9 @@ fun GameScreen(
     var humanMarks by remember { mutableStateOf(settings.humanMarks) }
     var topThreeOnly by remember { mutableStateOf(settings.topThreeOnly) }
     var trendHidden by remember { mutableStateOf(false) }
+    // Trend charts show ONE side at a time (2.64.0, user's pick):
+    // the strip and the dialog share this switch.
+    var trendSideBlack by remember { mutableStateOf(true) }
     var judgmentKey by remember { mutableIntStateOf(-1) }
     var judging by remember { mutableStateOf(false) }
     // ---- AI resign proposals + the smart referee ----
@@ -508,6 +512,13 @@ fun GameScreen(
                         else -> game.play(aiMove.x, aiMove.y) || game.pass()
                     }
                     if (applied) {
+                        // Both-pass auto-finish is gone for human
+                        // games (2.64.0), but an AI-vs-AI game still
+                        // needs a way to end: a double pass there
+                        // finishes it and the scoring effect wraps up.
+                        if (bothAi && game.consecutivePasses >= 2) {
+                            game.finished = true
+                        }
                         version++
                         resultDismissed = false
                         pendingPoint = null
@@ -1988,7 +1999,7 @@ fun GameScreen(
                             "对局 · 第 ${game.moves.size} 手 · " +
                                 if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
                         )
-                    }) { Text("分享") }
+                    }) { Text("分享", maxLines = 1, softWrap = false) }
                     TextButton(onClick = { focusMode = !focusMode }) {
                     Text(if (focusMode) "退出专注" else "专注")
                 }
@@ -2111,7 +2122,7 @@ fun GameScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("分析中…")
+                            Text("分析中…", maxLines = 1, softWrap = false)
                         }
                         analysisFreshFs -> Button(
                             onClick = {
@@ -2123,7 +2134,7 @@ fun GameScreen(
                                 if (!judgmentActive) showTerritory = false
                             },
                             modifier = Modifier.weight(1f)
-                        ) { Text("关闭分析") }
+                        ) { Text("关闭分析", maxLines = 1, softWrap = false) }
                         else -> Button(
                             onClick = { runAnalysis(false, userInitiated = true) },
                             enabled = analysisAllowed && !finished,
@@ -2134,7 +2145,7 @@ fun GameScreen(
                                 tint = Color.White
                             )
                             Spacer(modifier = Modifier.width(5.dp))
-                            Text("AI 分析")
+                            Text("AI 分析", maxLines = 1, softWrap = false)
                         }
                     }
                     val judgmentFreshFs = judgment != null && judgmentKey == game.moves.size
@@ -2149,12 +2160,12 @@ fun GameScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("判断中…")
+                            Text("判断中…", maxLines = 1, softWrap = false)
                         }
                         judgmentFreshFs -> Button(
                             onClick = { judgment = null; judgmentKey = -1 },
                             modifier = Modifier.weight(1f)
-                        ) { Text("关闭形式判断") }
+                        ) { Text("关闭形势判断", maxLines = 1, softWrap = false) }
                         else -> Button(
                             onClick = { runJudgment() },
                             enabled = analysisAllowed && !finished,
@@ -2165,7 +2176,7 @@ fun GameScreen(
                                 tint = Color.White
                             )
                             Spacer(modifier = Modifier.width(5.dp))
-                            Text("形式判断")
+                            Text("形势判断", maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -2191,35 +2202,41 @@ fun GameScreen(
                         },
                         enabled = !finished && humanTurn,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         AppIcon(AppIconKind.PASS, Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("停一手")
+                        Text("停一手", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = { doUndo() },
                         enabled = game.moves.isNotEmpty() &&
                             (!bothAi || !eveRunning),
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         AppIcon(AppIconKind.UNDO, Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("悔棋")
+                        Text("悔棋", maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = { showResignConfirm = true },
                         enabled = !finished && anyHumanSide,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         AppIcon(AppIconKind.FLAG, Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("认输")
+                        Text("认输", maxLines = 1, softWrap = false)
                     }
                 }
             }
             if (analyzing || judging) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { cancelAnalysis() }) { Text("取消分析") }
+                    TextButton(onClick = { cancelAnalysis() }) { Text("取消分析", maxLines = 1, softWrap = false) }
                 }
             }
         }
@@ -2256,7 +2273,7 @@ fun GameScreen(
                     "对局 · 第 ${game.moves.size} 手 · " +
                         if (game.current == Stone.BLACK) "黑方行棋" else "白方行棋"
                 )
-            }) { Text("分享") }
+            }) { Text("分享", maxLines = 1, softWrap = false) }
             if (config.oneColor) {
                 TextButton(onClick = { showTrueColors = !showTrueColors }) {
                     Text(if (showTrueColors) "一色" else "显色")
@@ -2267,7 +2284,7 @@ fun GameScreen(
                     Text("结果")
                 }
             }
-            TextButton(onClick = { fullscreen = true }) { Text("全屏") }
+            TextButton(onClick = { fullscreen = true }) { Text("全屏", maxLines = 1, softWrap = false) }
         }
         // Player cards: who plays each side, captures and that
         // side's remaining clock. The side to move is tinted and
@@ -2289,6 +2306,14 @@ fun GameScreen(
             ModelStore.list(context).firstOrNull { it.id == sideWhite.modelId }
                 ?.displayName ?: "轻量模型"
         }
+        // Sticky score snapshot for the strip above the board and
+        // the player cards: while a fresh analysis is still running,
+        // the last computed numbers stay on screen (in fast AI-vs-AI
+        // games they used to vanish before they could be read); they
+        // are replaced only when new data actually lands.
+        var stickyScore by remember {
+            mutableStateOf<Triple<Float, Int, Double>?>(null)
+        }
         fun sideTitle(stone: Stone): String {
             val base = when {
                 isEve -> if (stone == Stone.BLACK) blackModelName else whiteModelName
@@ -2309,9 +2334,12 @@ fun GameScreen(
         }
         fun sideDetail(stone: Stone): String {
             val parts = mutableListOf<String>()
-            parts += "提子 ${
-                if (stone == Stone.BLACK) game.capturesByBlack else game.capturesByWhite
-            }"
+            val ss = stickyScore
+            parts += if (stone == Stone.BLACK) {
+                "目数 ${ss?.second ?: 0}"
+            } else {
+                "目数 ${formatNum(ss?.third ?: game.komi)}"
+            }
             if (clockEnabled) {
                 parts += if (stone == Stone.BLACK) {
                     fmtSide(clockBlackMainMs, clockBlackPeriods, clockBlackPeriodMs)
@@ -2366,11 +2394,40 @@ fun GameScreen(
             autoKey == game.moves.size -> autoResult
             else -> null
         }
+        LaunchedEffect(liveRes) {
+            val res = liveRes ?: return@LaunchedEffect
+            val stonesArr = Array(game.size.area) { i ->
+                game.stoneAt(i % game.size.width, i / game.size.width)
+            }
+            val est = TerritoryEstimate.estimate(
+                res.ownershipBlack, stonesArr,
+                game.size.width, game.size.height, 0.5
+            )
+            val deadLive = TerritoryEstimate.deadStones(
+                res.ownershipBlack, stonesArr,
+                game.size.width, game.size.height,
+                SettingsStore.deadGroupMean(settings.deadStrictness)
+            )
+            var aliveB = 0
+            var aliveW = 0
+            for (i in stonesArr.indices) {
+                val st = stonesArr[i] ?: continue
+                if (i !in deadLive) {
+                    if (st == Stone.BLACK) aliveB++ else aliveW++
+                }
+            }
+            stickyScore = Triple(
+                res.rootWinrateBlack.toFloat(),
+                est.blackTerritory + aliveB,
+                est.whiteTerritory + aliveW + game.komi
+            )
+        }
         // Mini win-rate bar: always occupies its strip so the board
         // does not shift when data arrives.
         Box(modifier = Modifier.fillMaxWidth().height(6.dp)) {
-            if (!focusMode && liveRes != null) {
-                val wr = liveRes.rootWinrateBlack.toFloat().coerceIn(0.02f, 0.98f)
+            if (!focusMode && (liveRes != null || stickyScore != null)) {
+                val wr = (liveRes?.rootWinrateBlack?.toFloat()
+                    ?: stickyScore!!.first).coerceIn(0.02f, 0.98f)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Box(
                         modifier = Modifier
@@ -2416,6 +2473,11 @@ fun GameScreen(
                     text = "形势：黑约 ${blackTotal} 目 · 白约 ${formatNum(whiteTotal)} 目 · 黑胜率 ${formatPercent(liveRes.rootWinrateBlack)}（点开详情）",
                     fontSize = 12.sp, color = Color.Gray,
                     modifier = Modifier.clickable { showScoreDetail = true }
+                )
+            } else if (!focusMode && stickyScore != null) {
+                Text(
+                    text = "形势：黑约 ${stickyScore!!.second} 目 · 白约 ${formatNum(stickyScore!!.third)} 目 · 黑胜率 ${formatPercent(stickyScore!!.first.toDouble())}",
+                    fontSize = 12.sp, color = Color.Gray
                 )
             } else if (!focusMode) {
                 Text(
@@ -2498,6 +2560,8 @@ fun GameScreen(
                 Button(
                     onClick = { onReview(buildLibraryGame()) },
                     modifier = Modifier.weight(1f)
+                ,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                 ) { Text("查看复盘") }
                 OutlinedButton(
                     onClick = { showSaveToLibrary = true },
@@ -2545,6 +2609,8 @@ fun GameScreen(
             ) {
                 MiniTrend(
                     stats = liveStats.values.sortedBy { it.turn },
+                    sideBlack = trendSideBlack,
+                    onSideChange = { trendSideBlack = it },
                     onHide = { trendHidden = true },
                     modifier = Modifier.fillMaxWidth()
                         .clickable { showTrendDialog = true }
@@ -2561,12 +2627,31 @@ fun GameScreen(
             showTerritory -> boostedOwnership(currentAnalysis?.ownershipBlack)
             else -> null
         }
+        // Floating rank pill: when the point the player has
+        // selected (first tap of tap-to-confirm) is one of the AI's
+        // top three choices, a small pill floats over the top of
+        // the board naming the rank — not a dialog, it never blocks
+        // the board and tapping is untouched. The decided move gets
+        // a solid red pill. Ranks beyond three stay silent.
+        val pendingMark = if (pendingPoint != null && !focusMode &&
+            !judgmentActive && !scoringMode
+        ) {
+            shownCandidates(currentAnalysis, topThreeOnly).firstOrNull {
+                it.x == pendingPoint!!.first && it.y == pendingPoint!!.second
+            }
+        } else {
+            null
+        }
+        val pendingDecided = pendingMark?.rank == 1 &&
+            currentAnalysis != null && analysisKey == game.moves.size &&
+            decidedFor(currentAnalysis, game)
+        Box {
         BoardFrame(framed = !settings.boardFill) {
         BoardView(
             game = game,
             enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates && !settings.boardFill,
+            showCoordinates = settings.showCoordinates,
             showMagnifier = settings.magnifier,
             edgeToEdge = settings.boardFill,
             parentPadding = 2.dp,
@@ -2610,6 +2695,51 @@ fun GameScreen(
             }
         }
         }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = pendingMark != null && (pendingMark!!.rank <= 3 || pendingDecided),
+                enter = androidx.compose.animation.fadeIn(tween(160)) +
+                    androidx.compose.animation.slideInVertically(tween(200)) { -it / 2 },
+                exit = androidx.compose.animation.fadeOut(tween(120)) +
+                    androidx.compose.animation.slideOutVertically(tween(160)) { -it / 2 },
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopCenter)
+                    .padding(top = 10.dp)
+            ) {
+                val rank = pendingMark?.rank ?: 1
+                val pillColor = when {
+                    pendingDecided -> Color(0xFFC62828)
+                    rank == 1 -> Color(0xFF8E24AA)
+                    else -> Color.White
+                }
+                Box(
+                    modifier = Modifier
+                        .background(
+                            pillColor,
+                            androidx.compose.foundation.shape.RoundedCornerShape(50)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = if (pendingDecided) {
+                            "绝"
+                        } else {
+                            when (rank) {
+                                1 -> "一选"
+                                2 -> "二选"
+                                else -> "三选"
+                            }
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (!pendingDecided && rank >= 2) {
+                            Color(0xFF37474F)
+                        } else {
+                            Color.White
+                        }
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
         // ---- Scoring panel (dead-stone marking) ----
@@ -2639,6 +2769,8 @@ fun GameScreen(
                         clearAnalysis()
                     },
                     modifier = Modifier.weight(1f)
+                ,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                 ) { Text("确认数目") }
                 OutlinedButton(
                     onClick = {
@@ -2649,6 +2781,8 @@ fun GameScreen(
                         }
                     },
                     modifier = Modifier.weight(1f)
+                ,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                 ) { Text(if (game.finished) "取消" else "取消，继续下") }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -2873,6 +3007,58 @@ fun GameScreen(
                         fontSize = 13.sp, color = Color(0xFFC62828)
                     )
                 }
+                currentAnalysis.candidates.forEachIndexed { idx, cand ->
+                    val isSel = idx == selectedCandidate
+                    Text(
+                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
+                        fontSize = 14.sp,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSel) Rose else Color.Unspecified,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedCandidate = idx }
+                            .padding(vertical = 3.dp)
+                    )
+                }
+                if (selected != null && selected.pvText.isNotEmpty()) {
+                    Text(
+                        text = "变化：${selected.pvText}（棋盘上半透明子为变化顺序）",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
+                androidx.compose.material3.HorizontalDivider()
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = showTerritory,
+                        onClick = { showTerritory = !showTerritory },
+                        label = { Text("地盘显示") }
+                    )
+                    OutlinedButton(onClick = { runAnalysis(deep = true, userInitiated = true) }, enabled = !analyzing) {
+                        Text("深度分析")
+                    }
+                    if (selected != null && !bothAi) {
+                        Button(
+                            onClick = {
+                                val cand = selected
+                                val capsBefore = totalCaptures()
+                                val applied = when {
+                                    cand.move == null -> game.pass()
+                                    else -> game.play(cand.move.x, cand.move.y)
+                                }
+                                if (applied) {
+                                    version++
+                                    resultDismissed = false
+                                    pendingPoint = null
+                                    onStonePlayed(totalCaptures() > capsBefore)
+                                    clearAnalysis()
+                                }
+                            },
+                            enabled = !finished && humanTurn && !aiThinking
+                        ) { Text("就下这步") }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 if (analysisExpanded) {
                 Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -2983,10 +3169,6 @@ fun GameScreen(
                 }
                 val topCand = currentAnalysis.candidates.firstOrNull()
                 if (topCand != null) {
-                    Text(
-                        text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
-                        fontSize = 13.sp, color = Color.Gray
-                    )
                     val tactical = remember(currentAnalysis, game.moves.size) {
                         tacticalLine(game, topCand)
                     }
@@ -3021,58 +3203,6 @@ fun GameScreen(
                 }
                 androidx.compose.material3.HorizontalDivider()
                 Spacer(modifier = Modifier.height(6.dp))
-                currentAnalysis.candidates.forEachIndexed { idx, cand ->
-                    val isSel = idx == selectedCandidate
-                    Text(
-                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
-                        fontSize = 14.sp,
-                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSel) Rose else Color.Unspecified,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedCandidate = idx }
-                            .padding(vertical = 3.dp)
-                    )
-                }
-                if (selected != null && selected.pvText.isNotEmpty()) {
-                    Text(
-                        text = "变化：${selected.pvText}（棋盘上半透明子为变化顺序）",
-                        fontSize = 12.sp, color = Color.Gray
-                    )
-                }
-                androidx.compose.material3.HorizontalDivider()
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = showTerritory,
-                        onClick = { showTerritory = !showTerritory },
-                        label = { Text("地盘显示") }
-                    )
-                    OutlinedButton(onClick = { runAnalysis(deep = true, userInitiated = true) }, enabled = !analyzing) {
-                        Text("深度分析")
-                    }
-                    if (selected != null && !bothAi) {
-                        Button(
-                            onClick = {
-                                val cand = selected
-                                val capsBefore = totalCaptures()
-                                val applied = when {
-                                    cand.move == null -> game.pass()
-                                    else -> game.play(cand.move.x, cand.move.y)
-                                }
-                                if (applied) {
-                                    version++
-                                    resultDismissed = false
-                                    pendingPoint = null
-                                    onStonePlayed(totalCaptures() > capsBefore)
-                                    clearAnalysis()
-                                }
-                            },
-                            enabled = !finished && humanTurn && !aiThinking
-                        ) { Text("就下这步") }
-                    }
-                }
-                Spacer(modifier = Modifier.height(6.dp))
                 if (analysisStatus.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = analysisStatus, fontSize = 12.sp, color = Color.Gray)
@@ -3097,28 +3227,34 @@ fun GameScreen(
                 },
                 enabled = !finished && humanTurn,
                 modifier = Modifier.weight(1f)
+            ,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 AppIcon(AppIconKind.PASS, Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("停一手")
+                Text("停一手", maxLines = 1, softWrap = false)
             }
             OutlinedButton(
                 onClick = { doUndo() },
                 enabled = game.moves.isNotEmpty() && (!bothAi || !eveRunning),
                 modifier = Modifier.weight(1f)
+            ,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 AppIcon(AppIconKind.UNDO, Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("悔棋")
+                Text("悔棋", maxLines = 1, softWrap = false)
             }
             OutlinedButton(
                 onClick = { showResignConfirm = true },
                 enabled = !finished && anyHumanSide,
                 modifier = Modifier.weight(1f)
+            ,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 AppIcon(AppIconKind.FLAG, Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("认输")
+                Text("认输", maxLines = 1, softWrap = false)
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -3130,13 +3266,15 @@ fun GameScreen(
                         onClick = {},
                         enabled = false,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(14.dp),
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("分析中…")
+                        Text("分析中…", maxLines = 1, softWrap = false)
                     }
                     analysisFresh -> Button(
                         onClick = {
@@ -3148,15 +3286,19 @@ fun GameScreen(
                             if (!judgmentActive) showTerritory = false
                         },
                         modifier = Modifier.weight(1f)
-                    ) { Text("关闭分析") }
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                    ) { Text("关闭分析", maxLines = 1, softWrap = false) }
                     else -> OutlinedButton(
                         onClick = { runAnalysis(deep = false, userInitiated = true) },
                         enabled = analysisAllowed && !finished,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         AppIcon(AppIconKind.CHART, Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("AI 分析")
+                        Text("AI 分析", maxLines = 1, softWrap = false)
                     }
                 }
                 val judgmentFresh = judgment != null && judgmentKey == game.moves.size
@@ -3165,26 +3307,32 @@ fun GameScreen(
                         onClick = {},
                         enabled = false,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(14.dp),
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("判断中…")
+                        Text("判断中…", maxLines = 1, softWrap = false)
                     }
                     judgmentFresh -> Button(
                         onClick = { judgment = null; judgmentKey = -1 },
                         modifier = Modifier.weight(1f)
-                    ) { Text("关闭形式判断") }
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                    ) { Text("关闭形势判断", maxLines = 1, softWrap = false) }
                     else -> OutlinedButton(
                         onClick = { runJudgment() },
                         enabled = !analyzing && !aiThinking && !finished,
                         modifier = Modifier.weight(1f)
+                    ,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         AppIcon(AppIconKind.JUDGE, Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("形式判断")
+                        Text("形势判断", maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -3194,15 +3342,17 @@ fun GameScreen(
                     (!finished || (game.resignedBy == null &&
                         game.timeoutBy == null && game.scoringDead == null)),
                 modifier = Modifier.weight(1f)
+            ,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 AppIcon(AppIconKind.STATS, Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(5.dp))
-                Text(if (scoringBusy) "判定中…" else "终局数目")
+                Text(if (scoringBusy) "判定中…" else "终局数目", maxLines = 1, softWrap = false)
             }
         }
         if (analyzing || judging) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { cancelAnalysis() }) { Text("取消分析") }
+                TextButton(onClick = { cancelAnalysis() }) { Text("取消分析", maxLines = 1, softWrap = false) }
             }
         }
         if ((takeoverBlack || takeoverWhite) && !isPve && !isEve) {
@@ -3594,7 +3744,7 @@ fun GameScreen(
                     showResignConfirm = false
                     version++
                     resultDismissed = false
-                }) { Text("认输") }
+                }) { Text("认输", maxLines = 1, softWrap = false) }
             },
             dismissButton = {
                 TextButton(onClick = { showResignConfirm = false }) { Text("取消") }
@@ -3625,7 +3775,6 @@ fun GameScreen(
             liveStats[t]?.let { carry = it }
             (carry ?: sortedStats.first()).copy(turn = t)
         }
-        var trendLeadBlack by remember { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { showTrendDialog = false },
             title = { Text("局势走势") },
@@ -3633,7 +3782,7 @@ fun GameScreen(
                 Column {
                     WinrateChart(
                         turns = turns,
-                        perspective = if (trendLeadBlack) {
+                        perspective = if (trendSideBlack) {
                             Stone.BLACK
                         } else {
                             Stone.WHITE
@@ -3643,48 +3792,52 @@ fun GameScreen(
                             game.moves, turns
                         ),
                         showLead = true,
-                        dualWinrate = true,
+                        winSide = if (trendSideBlack) {
+                            Stone.BLACK
+                        } else {
+                            Stone.WHITE
+                        },
                         onSeek = {}
                     )
                     Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Text("目差看", fontSize = 12.sp, color = Color.Gray)
+                        Text("看", fontSize = 12.sp, color = Color.Gray)
                         Text(
                             "黑", fontSize = 13.sp,
-                            fontWeight = if (trendLeadBlack) {
+                            fontWeight = if (trendSideBlack) {
                                 FontWeight.Bold
                             } else {
                                 FontWeight.Normal
                             },
-                            color = if (trendLeadBlack) {
+                            color = if (trendSideBlack) {
                                 Color(0xFF37474F)
                             } else {
                                 Color.Gray
                             },
                             modifier = Modifier.clickable {
-                                trendLeadBlack = true
+                                trendSideBlack = true
                             }.padding(horizontal = 6.dp)
                         )
                         Text(
                             "白", fontSize = 13.sp,
-                            fontWeight = if (!trendLeadBlack) {
+                            fontWeight = if (!trendSideBlack) {
                                 FontWeight.Bold
                             } else {
                                 FontWeight.Normal
                             },
-                            color = if (!trendLeadBlack) {
+                            color = if (!trendSideBlack) {
                                 Color(0xFF37474F)
                             } else {
                                 Color.Gray
                             },
                             modifier = Modifier.clickable {
-                                trendLeadBlack = false
+                                trendSideBlack = false
                             }.padding(horizontal = 6.dp)
                         )
                     }
                     Text(
-                        "黑线是黑方胜率，白线是白方胜率，绿点是五五开的交点，黄线是目数差（可切换看黑/白）。完整的可拖动走势图在复盘页。",
+                        "图里只画选中一方的胜率线，绿点是五五开的交点，黄线是目数差（同一方视角）。完整的可拖动走势图在复盘页。",
                         fontSize = 12.sp, color = Color.Gray
                     )
                 }
@@ -3845,12 +3998,13 @@ fun GameScreen(
  */
 private fun MiniTrend(
     stats: List<com.tuxungo.android.engine.TurnStat>,
+    sideBlack: Boolean,
+    onSideChange: (Boolean) -> Unit,
     onHide: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (stats.size < 2) return
     val last = stats.last()
-    var leadBlack by remember { mutableStateOf(true) }
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -3862,24 +4016,27 @@ private fun MiniTrend(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                "黑 ${formatPercent(last.winrateBlack)} · 白 " +
-                    formatPercent(1.0 - last.winrateBlack),
+                if (sideBlack) {
+                    "黑胜率 ${formatPercent(last.winrateBlack)}"
+                } else {
+                    "白胜率 ${formatPercent(1.0 - last.winrateBlack)}"
+                },
                 fontSize = 11.sp, color = Color.Gray
             )
             Spacer(modifier = Modifier.weight(1f))
-            Text("目差看", fontSize = 11.sp, color = Color.Gray)
+            Text("看", fontSize = 11.sp, color = Color.Gray)
             Text(
                 "黑", fontSize = 12.sp,
-                fontWeight = if (leadBlack) FontWeight.Bold else FontWeight.Normal,
-                color = if (leadBlack) Color(0xFF37474F) else Color.Gray,
-                modifier = Modifier.clickable { leadBlack = true }
+                fontWeight = if (sideBlack) FontWeight.Bold else FontWeight.Normal,
+                color = if (sideBlack) Color(0xFF37474F) else Color.Gray,
+                modifier = Modifier.clickable { onSideChange(true) }
                     .padding(horizontal = 4.dp)
             )
             Text(
                 "白", fontSize = 12.sp,
-                fontWeight = if (!leadBlack) FontWeight.Bold else FontWeight.Normal,
-                color = if (!leadBlack) Color(0xFF37474F) else Color.Gray,
-                modifier = Modifier.clickable { leadBlack = false }
+                fontWeight = if (!sideBlack) FontWeight.Bold else FontWeight.Normal,
+                color = if (!sideBlack) Color(0xFF37474F) else Color.Gray,
+                modifier = Modifier.clickable { onSideChange(false) }
                     .padding(horizontal = 4.dp)
             )
             TextButton(onClick = onHide) {
@@ -3928,10 +4085,10 @@ private fun MiniTrend(
                 path.lineTo(xFor(values.lastIndex), yOf(values.last()))
                 return path
             }
-            // Dominance bands: either side at 75% or more.
+            // Dominance band: the shown side at 75% or more.
             for (i in 1 until denseWr.size) {
                 val wr = denseWr[i]
-                if (wr >= 0.75 || wr <= 0.25) {
+                if (if (sideBlack) wr >= 0.75 else wr <= 0.25) {
                     drawRect(
                         Color(0xFF43A047).copy(alpha = 0.13f),
                         topLeft = Offset(xFor(i - 1), 0f),
@@ -3948,24 +4105,26 @@ private fun MiniTrend(
                 15.0, denseLead.maxOfOrNull { kotlin.math.abs(it) } ?: 15.0
             )
             val leadPath = smoothPath(denseLead) { lead ->
-                val shown = if (leadBlack) lead else -lead
+                val shown = if (sideBlack) lead else -lead
                 midY - (shown / maxAbsLead).toFloat() * (size.height * 0.46f)
             }
             drawPath(leadPath, Color(0xFFE6A817), style = Stroke(width = 2f))
-            // White's win-rate line: grey halo first, then white.
-            val whitePath = smoothPath(denseWr) { wr ->
-                size.height * wr.toFloat()
+            // Only the chosen side's win-rate line (2.64.0).
+            if (sideBlack) {
+                val blackPath = smoothPath(denseWr) { wr ->
+                    size.height * (1f - wr.toFloat())
+                }
+                drawPath(blackPath, Color(0xFF212121), style = Stroke(width = 2.5f))
+            } else {
+                val whitePath = smoothPath(denseWr) { wr ->
+                    size.height * wr.toFloat()
+                }
+                drawPath(
+                    whitePath, Color(0xFF78909C).copy(alpha = 0.65f),
+                    style = Stroke(width = 4.5f)
+                )
+                drawPath(whitePath, Color.White, style = Stroke(width = 2.5f))
             }
-            drawPath(
-                whitePath, Color(0xFF78909C).copy(alpha = 0.65f),
-                style = Stroke(width = 4.5f)
-            )
-            drawPath(whitePath, Color.White, style = Stroke(width = 2.5f))
-            // Black's win-rate line.
-            val blackPath = smoothPath(denseWr) { wr ->
-                size.height * (1f - wr.toFloat())
-            }
-            drawPath(blackPath, Color(0xFF212121), style = Stroke(width = 2.5f))
             // 50/50 crossing dots on the middle line.
             for (ci in AnalysisMath.winrateCrossings(denseWr)) {
                 drawCircle(
@@ -3977,9 +4136,13 @@ private fun MiniTrend(
                     center = Offset(xFor(ci), midY)
                 )
             }
-            // Current turn: purple vertical + dot on Black's line.
+            // Current turn: purple vertical + dot on the shown line.
             val lastX = xFor(denseWr.lastIndex)
-            val lastY = size.height * (1f - denseWr.last().toFloat())
+            val lastY = if (sideBlack) {
+                size.height * (1f - denseWr.last().toFloat())
+            } else {
+                size.height * denseWr.last().toFloat()
+            }
             drawLine(
                 Color(0xFF6A1B9A).copy(alpha = 0.55f),
                 Offset(lastX, 0f), Offset(lastX, size.height), strokeWidth = 1.5f
@@ -4002,8 +4165,11 @@ private fun MiniTrend(
                     Text(label, fontSize = 10.sp, color = Color.Gray)
                 }
             }
-            legendSwatch(Color(0xFF212121), "黑胜率")
-            legendSwatch(Color(0xFFB0BEC5), "白胜率")
+            if (sideBlack) {
+                legendSwatch(Color(0xFF212121), "黑胜率")
+            } else {
+                legendSwatch(Color(0xFFB0BEC5), "白胜率")
+            }
             legendSwatch(Color(0xFFE6A817), "目差")
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Box(

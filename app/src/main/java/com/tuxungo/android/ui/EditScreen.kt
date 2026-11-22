@@ -86,7 +86,7 @@ fun EditScreen(width: Int, height: Int, onStart: (GameConfig) -> Unit, onBack: (
             game = game,
             enabled = true,
             skin = BoardSkin.fromId(settings.boardSkin),
-            showCoordinates = settings.showCoordinates && !settings.boardFill,
+            showCoordinates = settings.showCoordinates,
             edgeToEdge = settings.boardFill,
             parentPadding = 8.dp
         ) { x, y ->

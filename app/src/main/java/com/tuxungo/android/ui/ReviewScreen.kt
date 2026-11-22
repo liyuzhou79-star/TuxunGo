@@ -540,7 +540,7 @@ fun ReviewScreen(
                 game = branch,
                 enabled = !branchBusy,
                 skin = BoardSkin.fromId(settings.boardSkin),
-                showCoordinates = settings.showCoordinates && !settings.boardFill,
+                showCoordinates = settings.showCoordinates,
                 edgeToEdge = settings.boardFill,
                 parentPadding = 12.dp,
                 territoryThreshold = 0.5,
@@ -647,7 +647,7 @@ fun ReviewScreen(
                 game = replayGame,
                 enabled = false,
                 skin = BoardSkin.fromId(settings.boardSkin),
-                showCoordinates = settings.showCoordinates && !settings.boardFill,
+                showCoordinates = settings.showCoordinates,
                 edgeToEdge = settings.boardFill,
                 parentPadding = 12.dp,
                 territoryThreshold = 0.5,
@@ -1232,7 +1232,7 @@ fun WinrateChart(
     ply: Int,
     marks: List<MoveMark>,
     showLead: Boolean = true,
-    dualWinrate: Boolean = false,
+    winSide: Stone? = null,
     onSeek: (Int) -> Unit
 ) {
     val total = (turns.size - 1).coerceAtLeast(1)
@@ -1241,10 +1241,12 @@ fun WinrateChart(
     val greenFill = Color(0xFF43A047).copy(alpha = 0.30f)
     val gridColor = Color.Gray.copy(alpha = 0.35f)
     val cursorColor = Color(0xFF6A1B9A)
-    // In dual mode both win-rate lines are drawn (Black's dark,
-    // White's mirrored), so the win-rate geometry always follows
-    // Black's perspective and [perspective] only steers the lead.
-    val wrPerspective = if (dualWinrate) Stone.BLACK else perspective
+    // Single-side mode (winSide != null, used by the in-game trend
+    // dialog since 2.64.0): only that side's win-rate line is drawn
+    // and all win-rate geometry follows it; [perspective] steers
+    // the lead line. Review keeps winSide null (red line, caller's
+    // perspective).
+    val wrPerspective = winSide ?: perspective
 
     fun seek(x: Float, w: Float) {
         if (w <= 0f) return
@@ -1321,29 +1323,26 @@ fun WinrateChart(
             drawPath(leadPath, leadColor, style = Stroke(width = 2.5f))
         }
 
-        // Win-rate line(s). Dual mode draws both sides: White's
-        // mirrored line (grey halo under white) and Black's dark
-        // line, with dots where they cross at 50/50.
-        if (dualWinrate) {
-            val whitePath = Path()
+        // Win-rate line. Single-side mode draws only the chosen
+        // side's line (Black dark, White with a grey halo), with
+        // dots where it crosses 50/50.
+        if (winSide != null) {
+            val sidePath = Path()
             for (t in turns.indices) {
                 val x = xOf(t)
-                val y = yWr(1.0 - ReviewMath.winrateFor(turns[t], Stone.BLACK))
-                if (t == 0) whitePath.moveTo(x, y) else whitePath.lineTo(x, y)
+                val y = yWr(ReviewMath.winrateFor(turns[t], winSide))
+                if (t == 0) sidePath.moveTo(x, y) else sidePath.lineTo(x, y)
             }
-            drawPath(
-                whitePath, Color(0xFF78909C).copy(alpha = 0.65f),
-                style = Stroke(width = 5.5f)
-            )
-            drawPath(whitePath, Color.White, style = Stroke(width = 3f))
-            val blackPath = Path()
-            for (t in turns.indices) {
-                val x = xOf(t)
-                val y = yWr(ReviewMath.winrateFor(turns[t], Stone.BLACK))
-                if (t == 0) blackPath.moveTo(x, y) else blackPath.lineTo(x, y)
+            if (winSide == Stone.WHITE) {
+                drawPath(
+                    sidePath, Color(0xFF78909C).copy(alpha = 0.65f),
+                    style = Stroke(width = 5.5f)
+                )
+                drawPath(sidePath, Color.White, style = Stroke(width = 3f))
+            } else {
+                drawPath(sidePath, Color(0xFF212121), style = Stroke(width = 3f))
             }
-            drawPath(blackPath, Color(0xFF212121), style = Stroke(width = 3f))
-            val series = turns.map { ReviewMath.winrateFor(it, Stone.BLACK) }
+            val series = turns.map { ReviewMath.winrateFor(it, winSide) }
             for (ci in AnalysisMath.winrateCrossings(series)) {
                 drawCircle(
                     Color(0xFF2E7D32), radius = 6f,
