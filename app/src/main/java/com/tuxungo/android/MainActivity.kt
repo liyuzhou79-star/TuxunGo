@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 分析标记改回实心：紫色、白色、橙红色的实心圆点，带渐变和高光，像小玻璃珠落在棋盘上；人类一选和 AI 一选撞在同一点时，那个点会发光\n· 形势判断和 AI 分析面板整理了：都收进卡片里，默认只留最要紧的几行（胜负结论、胜率、一句话点评），其余明细点「展开」才看；开关和候选列表之间加了分隔，删掉了重复的深度重算按钮，下方不再乱成一团"",
+            whatsNew = "· 分析标记改回实心：紫色、白色、橙红色的实心圆点，带渐变和高光，像小玻璃珠落在棋盘上；人类一选和 AI 一选撞在同一点时，那个点会发光\n· 形势判断和 AI 分析面板整理了：都收进卡片里，默认只留最要紧的几行（胜负结论、胜率、一句话点评），其余明细点「展开」才看；开关和候选列表之间加了分隔，删掉了重复的深度重算按钮，下方不再乱成一团",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
