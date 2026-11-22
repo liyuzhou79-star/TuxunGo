@@ -12,8 +12,8 @@ android {
         applicationId = "com.tuxungo.android"
         minSdk = 29
         targetSdk = 35
-        versionCode = 950
-        versionName = "2.64.0"
+        versionCode = 960
+        versionName = "2.65.0"
     }
 
     // Release signing is injected by CI from repository secrets (the

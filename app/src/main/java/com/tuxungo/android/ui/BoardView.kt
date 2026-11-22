@@ -645,170 +645,80 @@ fun BoardView(
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${i + 1}", center.x, baseline, paint)
         }
-        // Candidate markers (2.63.0 rings, changed to solid discs
-        // in 2.63.1 — the user found the hollow rings ugly): glossy
-        // filled discs with a radial gradient, a soft shadow and a
-        // small top-left highlight, so they read like little glass
-        // tokens on the board. The AI's first choice is a large
-        // purple disc, second/third are white medium discs, the rest
-        // smaller white discs; the human model's picks are orange-red
-        // in the same sizes. When the human top and the AI top land
-        // on the same point, one glowing, gently pulsing orange disc
-        // replaces both. The rank number sits in the middle.
-        val aiTopMark = candidates.firstOrNull { it.rank == 1 }
-        val humanTopMark = humanMarks.firstOrNull { it.rank == 1 }
-        val topOverlap = aiTopMark != null && humanTopMark != null &&
-            aiTopMark.x == humanTopMark.x && aiTopMark.y == humanTopMark.y
-
-        fun androidx.compose.ui.graphics.drawscope.DrawScope.discMark(
-            mark: CandidateMark,
-            light: Color,
-            base: Color,
-            dark: Color,
-            rim: Color,
+        // Candidate markers (2.65.0: the whole style was rebuilt
+        // at the user's demand — no gradients, no gloss, no glow,
+        // no shadows: flat matte printed discs, one flat colour
+        // and a crisp thin edge, like markers printed on a real
+        // board). Colour code, shared with the floating pill:
+        //   human top choice        -> purple
+        //   AI top choice           -> light yellow
+        //   both tops on one point  -> orange
+        //   every other rank        -> white
+        // When an AI mark and a human mark share a point, the
+        // higher-priority colour wins and is the only one drawn:
+        // both-tops > human top > AI top > the better white rank.
+        fun androidx.compose.ui.graphics.drawscope.DrawScope.flatMark(
+            x: Int,
+            y: Int,
+            fill: Color,
+            edge: Color,
+            numberColor: Int,
             radiusFactor: Float,
-            numberColor: Int
+            label: String
         ) {
-            val center = Offset(px(mark.x), py(mark.y))
+            val center = Offset(px(x), py(y))
             val discR = r * radiusFactor * marksAnim.value
-            // Soft drop shadow so the disc lifts off the board.
+            drawCircle(fill, radius = discR, center = center)
             drawCircle(
-                Color.Black.copy(alpha = 0.16f),
-                radius = discR,
-                center = Offset(center.x, center.y + r * 0.07f)
-            )
-            // Body: semi-transparent radial gradient lit from the
-            // top-left (2.64.0: the user asked for translucent marks
-            // so the board and stones ghost through a little).
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        light.copy(alpha = 0.85f),
-                        base.copy(alpha = 0.78f),
-                        dark.copy(alpha = 0.85f)
-                    ),
-                    center = Offset(
-                        center.x - discR * 0.38f, center.y - discR * 0.38f
-                    ),
-                    radius = discR * 1.5f
-                ),
-                radius = discR,
-                center = center
-            )
-            // Thin darker rim for a finished edge.
-            drawCircle(
-                rim,
+                edge,
                 radius = discR,
                 center = center,
-                style = Stroke(width = maxOf(1.2f, r * 0.045f))
-            )
-            // Gloss highlight, top-left.
-            drawCircle(
-                Color.White.copy(alpha = 0.30f),
-                radius = discR * 0.30f,
-                center = Offset(
-                    center.x - discR * 0.36f, center.y - discR * 0.40f
-                )
-            )
-            drawCircle(
-                Color.White.copy(alpha = 0.10f),
-                radius = discR * 0.52f,
-                center = Offset(
-                    center.x - discR * 0.30f, center.y - discR * 0.34f
-                )
+                style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
             val paint = android.graphics.Paint().apply {
                 color = numberColor
-                textSize = r * 0.68f * marksAnim.value
+                textSize = r * 0.72f * marksAnim.value
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true
-                setShadowLayer(r * 0.08f, 0f, r * 0.03f, 0x66000000)
             }
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText(
-                "${mark.rank}", center.x, baseline, paint
+                label, center.x, baseline, paint
             )
         }
 
-        if (topOverlap && aiTopMark != null) {
-            // The glowing agreement disc: soft pulsing glow layers
-            // under a solid glossy orange disc.
-            val center = Offset(px(aiTopMark.x), py(aiTopMark.y))
-            val baseR = r * 0.98f * marksAnim.value
-            drawCircle(
-                Color(0xFFFF8A00).copy(alpha = 0.15f * markPulse),
-                radius = baseR * (1.22f + 0.08f * markPulse),
-                center = center
-            )
-            drawCircle(
-                Color(0xFFFF6D00).copy(alpha = 0.30f * markPulse),
-                radius = baseR * 1.10f,
-                center = center
-            )
-            drawCircle(
-                Color.Black.copy(alpha = 0.16f),
-                radius = baseR,
-                center = Offset(center.x, center.y + r * 0.07f)
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFFFAB91).copy(alpha = 0.88f),
-                        Color(0xFFF4511E).copy(alpha = 0.82f),
-                        Color(0xFFBF360C).copy(alpha = 0.88f)
-                    ),
-                    center = Offset(
-                        center.x - baseR * 0.38f, center.y - baseR * 0.38f
-                    ),
-                    radius = baseR * 1.5f
-                ),
-                radius = baseR,
-                center = center
-            )
-            drawCircle(
-                Color.White.copy(alpha = 0.38f),
-                radius = baseR * 0.30f,
-                center = Offset(
-                    center.x - baseR * 0.36f, center.y - baseR * 0.40f
+        val aiByPoint = candidates.associateBy { it.x to it.y }
+        val humanByPoint = humanMarks.associateBy { it.x to it.y }
+        for (pt in (aiByPoint.keys + humanByPoint.keys)) {
+            val ai = aiByPoint[pt]
+            val hu = humanByPoint[pt]
+            when {
+                ai?.rank == 1 && hu?.rank == 1 -> flatMark(
+                    pt.first, pt.second,
+                    Color(0xFFF57C00), Color(0xFFE65100),
+                    android.graphics.Color.WHITE, 0.95f, "1"
                 )
-            )
-            val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = r * 0.7f
-                textAlign = android.graphics.Paint.Align.CENTER
-                isFakeBoldText = true
-                isAntiAlias = true
-                setShadowLayer(r * 0.08f, 0f, r * 0.03f, 0x66000000)
-            }
-            val metrics = paint.fontMetrics
-            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
-            drawContext.canvas.nativeCanvas.drawText(
-                "1", center.x, baseline, paint
-            )
-        }
-        for (mark in candidates) {
-            if (topOverlap && mark.rank == 1) continue
-            when (mark.rank) {
-                1 -> discMark(
-                    mark,
-                    Color(0xFFCE93D8), Color(0xFF8E24AA), Color(0xFF4A148C),
-                    Color(0xFF4A148C).copy(alpha = 0.65f),
-                    0.95f, android.graphics.Color.WHITE
+                hu?.rank == 1 -> flatMark(
+                    pt.first, pt.second,
+                    Color(0xFF7B1FA2), Color(0xFF4A148C),
+                    android.graphics.Color.WHITE, 0.95f, "1"
                 )
-                2, 3 -> discMark(
-                    mark,
-                    Color(0xFFFFFFFF), Color(0xFFF1F3F4), Color(0xFFB0BEC5),
-                    Color(0xFF78909C).copy(alpha = 0.8f),
-                    0.78f, android.graphics.Color.rgb(38, 50, 56)
+                ai?.rank == 1 -> flatMark(
+                    pt.first, pt.second,
+                    Color(0xFFFFE082), Color(0xFFC49000),
+                    android.graphics.Color.rgb(78, 52, 46), 0.95f, "1"
                 )
-                else -> discMark(
-                    mark,
-                    Color(0xFFFFFFFF), Color(0xFFF1F3F4), Color(0xFFB0BEC5),
-                    Color(0xFF78909C).copy(alpha = 0.8f),
-                    0.62f, android.graphics.Color.rgb(38, 50, 56)
-                )
+                else -> {
+                    val rank = minOf(ai?.rank ?: 99, hu?.rank ?: 99)
+                    flatMark(
+                        pt.first, pt.second,
+                        Color(0xFFFFFFFF), Color(0xFF90A4AE),
+                        android.graphics.Color.rgb(55, 71, 79),
+                        if (rank <= 3) 0.80f else 0.68f, "$rank"
+                    )
+                }
             }
         }
         // Human-style favourite: a blue double ring, no number — the
@@ -829,25 +739,6 @@ fun BoardView(
                 style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
         }
-        // Human-style top moves: orange-red discs in the same
-        // sizes as the AI's, so both systems can share the board.
-        for (mark in humanMarks) {
-            if (topOverlap && mark.rank == 1) continue
-            when (mark.rank) {
-                1 -> discMark(
-                    mark,
-                    Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C),
-                    Color(0xFFBF360C).copy(alpha = 0.65f),
-                    0.95f, android.graphics.Color.WHITE
-                )
-                else -> discMark(
-                    mark,
-                    Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C),
-                    Color(0xFFBF360C).copy(alpha = 0.65f),
-                    0.78f, android.graphics.Color.WHITE
-                )
-            }
-        }
 
         // 「绝」 badge: once the game is sealed, the sealing stone
         // keeps a small calligraphy 「绝」 at its top-right corner
@@ -860,16 +751,9 @@ fun BoardView(
             val badgeCenter = Offset(
                 center.x + r * 0.55f, center.y - r * 0.55f
             )
-            // Solid red disc (2.64.0: the user asked for the badge
-            // in solid red), white calligraphy on top.
+            // Flat solid red disc, white calligraphy on top.
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFE57373), Color(0xFFC62828), Color(0xFF8E1414)),
-                    center = Offset(
-                        badgeCenter.x - r * 0.16f, badgeCenter.y - r * 0.16f
-                    ),
-                    radius = r * 0.7f
-                ),
+                Color(0xFFC62828),
                 radius = r * 0.47f,
                 center = badgeCenter
             )

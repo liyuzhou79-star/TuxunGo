@@ -2628,12 +2628,13 @@ fun GameScreen(
             else -> null
         }
         // Floating rank pill: when the point the player has
-        // selected (first tap of tap-to-confirm) is one of the AI's
-        // top three choices, a small pill floats over the top of
-        // the board naming the rank — not a dialog, it never blocks
-        // the board and tapping is untouched. The decided move gets
-        // a solid red pill. Ranks beyond three stay silent.
-        val pendingMark = if (pendingPoint != null && !focusMode &&
+        // selected (first tap of tap-to-confirm) carries one of the
+        // board's marks, a small pill floats over the top of the
+        // board naming it, in the same colour as the board mark —
+        // not a dialog, it never blocks the board and tapping is
+        // untouched. The decided move gets a solid red pill. White
+        // ranks beyond three stay silent.
+        val pendingAi = if (pendingPoint != null && !focusMode &&
             !judgmentActive && !scoringMode
         ) {
             shownCandidates(currentAnalysis, topThreeOnly).firstOrNull {
@@ -2642,7 +2643,30 @@ fun GameScreen(
         } else {
             null
         }
-        val pendingDecided = pendingMark?.rank == 1 &&
+        val pendingHu = if (pendingPoint != null && !focusMode &&
+            !judgmentActive && !scoringMode && humanMarks
+        ) {
+            humanMarksOf(currentAnalysis).firstOrNull {
+                it.x == pendingPoint!!.first && it.y == pendingPoint!!.second
+            }
+        } else {
+            null
+        }
+        // Same priority as the board marks (2.65.0): both tops on
+        // one point > human top > AI top > the better white rank.
+        // kind: 1 = both tops, 2 = human top, 3 = AI top, 0 = white.
+        val pendingKind = when {
+            pendingAi?.rank == 1 && pendingHu?.rank == 1 -> 1
+            pendingHu?.rank == 1 -> 2
+            pendingAi?.rank == 1 -> 3
+            else -> 0
+        }
+        val pendingRank = if (pendingKind != 0) {
+            1
+        } else {
+            minOf(pendingAi?.rank ?: 99, pendingHu?.rank ?: 99)
+        }
+        val pendingDecided = pendingAi?.rank == 1 &&
             currentAnalysis != null && analysisKey == game.moves.size &&
             decidedFor(currentAnalysis, game)
         Box {
@@ -2696,7 +2720,7 @@ fun GameScreen(
         }
         }
             androidx.compose.animation.AnimatedVisibility(
-                visible = pendingMark != null && (pendingMark!!.rank <= 3 || pendingDecided),
+                visible = pendingRank <= 3,
                 enter = androidx.compose.animation.fadeIn(tween(160)) +
                     androidx.compose.animation.slideInVertically(tween(200)) { -it / 2 },
                 exit = androidx.compose.animation.fadeOut(tween(120)) +
@@ -2705,10 +2729,11 @@ fun GameScreen(
                     .align(androidx.compose.ui.Alignment.TopCenter)
                     .padding(top = 10.dp)
             ) {
-                val rank = pendingMark?.rank ?: 1
                 val pillColor = when {
                     pendingDecided -> Color(0xFFC62828)
-                    rank == 1 -> Color(0xFF8E24AA)
+                    pendingKind == 1 -> Color(0xFFF57C00)
+                    pendingKind == 2 -> Color(0xFF7B1FA2)
+                    pendingKind == 3 -> Color(0xFFFFE082)
                     else -> Color.White
                 }
                 Box(
@@ -2720,21 +2745,21 @@ fun GameScreen(
                         .padding(horizontal = 16.dp, vertical = 7.dp)
                 ) {
                     Text(
-                        text = if (pendingDecided) {
-                            "绝"
-                        } else {
-                            when (rank) {
-                                1 -> "一选"
-                                2 -> "二选"
-                                else -> "三选"
-                            }
+                        text = when {
+                            pendingDecided -> "绝"
+                            pendingKind == 1 -> "双一选"
+                            pendingKind == 2 -> "人类一选"
+                            pendingKind == 3 -> "一选"
+                            pendingRank == 2 -> "二选"
+                            else -> "三选"
                         },
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (!pendingDecided && rank >= 2) {
-                            Color(0xFF37474F)
-                        } else {
-                            Color.White
+                        color = when {
+                            pendingDecided || pendingKind == 1 ||
+                                pendingKind == 2 -> Color.White
+                            pendingKind == 3 -> Color(0xFF4E342E)
+                            else -> Color(0xFF37474F)
                         }
                     )
                 }
@@ -3187,7 +3212,7 @@ fun GameScreen(
                             hv == topCand?.vertex ->
                                 "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（和 AI 一选相同）"
                             humanMarks ->
-                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（棋盘上橙色 1 号）"
+                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（棋盘上紫色 1 号）"
                             else ->
                                 "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}"
                         },
@@ -3197,7 +3222,7 @@ fun GameScreen(
                 if (currentAnalysis.humanSecondVertex.isNotEmpty()) {
                     Text(
                         text = "人类二选：${currentAnalysis.humanSecondVertex} · 真人概率约 ${formatPercent(currentAnalysis.humanSecondProb)}" +
-                            if (humanMarks) "（棋盘上橙色 2 号）" else "",
+                            if (humanMarks) "（棋盘上白色 2 号）" else "",
                         fontSize = 13.sp, color = Color(0xFF2F7CF6)
                     )
                 }
