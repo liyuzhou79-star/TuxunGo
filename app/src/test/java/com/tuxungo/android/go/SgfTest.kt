@@ -59,6 +59,9 @@ class SgfTest {
         val g = GoGame(BoardSize(19, 19), 7.5)
         assertTrue(g.pass())
         assertTrue(g.pass())
+        // 2.64.0: passes alone no longer finish a game; the wrap-up
+        // (AI-vs-AI double pass, or a confirmed count) marks it.
+        g.markFinished()
         assertTrue(g.finished)
         val sgf = Sgf.export(g)
         // Empty board: White wins by the 7.5 komi.
