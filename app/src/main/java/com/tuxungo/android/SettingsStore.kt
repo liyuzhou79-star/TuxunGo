@@ -14,6 +14,10 @@ data class AppSettings(
     val magnifier: Boolean = false,
     /** Continuous analysis scope: both / B / W (side to move). */
     val autoAnalysisSide: String = "both",
+    /** Show the human-style model's top two moves as orange marks. */
+    val humanMarks: Boolean = false,
+    /** Show only the AI's top three candidate moves on the board. */
+    val topThreeOnly: Boolean = false,
     val confirmMove: Boolean = true,
     val showCoordinates: Boolean = true,
     val vibrationEnabled: Boolean = true,
@@ -149,6 +153,8 @@ object SettingsStore {
             boardFill = p.getBoolean("boardFill", false),
             magnifier = p.getBoolean("magnifier", false),
             autoAnalysisSide = p.getString("autoAnalysisSide", "both") ?: "both",
+            humanMarks = p.getBoolean("humanMarks", false),
+            topThreeOnly = p.getBoolean("topThreeOnly", false),
             confirmMove = p.getBoolean("confirmMove", true),
             showCoordinates = p.getBoolean("showCoordinates", true),
             vibrationEnabled = p.getBoolean("vibrationEnabled", true),
@@ -179,6 +185,8 @@ object SettingsStore {
             .putBoolean("boardFill", s.boardFill)
             .putBoolean("magnifier", s.magnifier)
             .putString("autoAnalysisSide", s.autoAnalysisSide)
+            .putBoolean("humanMarks", s.humanMarks)
+            .putBoolean("topThreeOnly", s.topThreeOnly)
             .putBoolean("confirmMove", s.confirmMove)
             .putBoolean("showCoordinates", s.showCoordinates)
             .putBoolean("vibrationEnabled", s.vibrationEnabled)

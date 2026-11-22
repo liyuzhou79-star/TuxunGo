@@ -121,6 +121,13 @@ fun BoardView(
     /** The human-style model's favourite point: drawn as a blue ring
      *  so it reads differently from the AI's numbered discs. */
     humanPoint: Pair<Int, Int>? = null,
+    /** The human-style model's top moves as ranked marks: drawn as
+     *  orange discs (rank 1 filled, rank 2 ringed), distinct from
+     *  both the AI's discs and the blue humanPoint ring. */
+    humanMarks: List<CandidateMark> = emptyList(),
+    /** The AI judges the game already decided: the rank-1 candidate
+     *  disc gains an outer ring and a red 「绝」 badge. */
+    decidedFirst: Boolean = false,
     /** Territory colouring starts at this ownership strength: points
      *  weaker than this stay uncoloured, so early-game boards do not
      *  speckle. Adjustable in the judgment settings. */
@@ -629,6 +636,41 @@ fun BoardView(
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
+            if (mark.rank == 1 && decidedFirst) {
+                // 「绝」: the AI calls the game decided — an extra ring
+                // around the top disc plus a red badge character.
+                drawCircle(
+                    Color(0xFFC62828),
+                    radius = discR * 1.30f,
+                    center = center,
+                    style = Stroke(width = maxOf(2.5f, r * 0.10f))
+                )
+                // Offset far enough that the badge stays clear even
+                // when an orange human disc covers this same point.
+                val badgeCenter = Offset(
+                    center.x + discR * 1.25f,
+                    center.y - discR * 1.25f
+                )
+                drawCircle(Color.White, radius = r * 0.52f, center = badgeCenter)
+                drawCircle(
+                    Color(0xFFC62828),
+                    radius = r * 0.52f,
+                    center = badgeCenter,
+                    style = Stroke(width = maxOf(1.5f, r * 0.05f))
+                )
+                val juePaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(198, 40, 40)
+                    textSize = r * 0.78f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isFakeBoldText = true
+                    isAntiAlias = true
+                }
+                val jm = juePaint.fontMetrics
+                val jBase = badgeCenter.y - (jm.ascent + jm.descent) / 2f
+                drawContext.canvas.nativeCanvas.drawText(
+                    "绝", badgeCenter.x, jBase, juePaint
+                )
+            }
         }
         // Human-style favourite: a blue double ring, no number — the
         // "where a human would play" marker, distinct from the AI's
@@ -647,6 +689,45 @@ fun BoardView(
                 center = center,
                 style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
+        }
+        // Human-style top moves: orange discs in the same visual
+        // language as the AI's ranked discs — rank 1 filled orange
+        // with a white number, rank 2 a white disc with an orange
+        // ring and number — so both systems can share the board.
+        for (mark in humanMarks) {
+            val center = Offset(px(mark.x), py(mark.y))
+            val discR = r * if (mark.rank == 1) 0.80f else 0.72f
+            drawCircle(
+                Color.Black.copy(alpha = 0.28f),
+                radius = discR,
+                center = Offset(center.x + r * 0.06f, center.y + r * 0.10f)
+            )
+            drawCircle(Color.White.copy(alpha = 0.95f), radius = discR * 1.13f, center = center)
+            if (mark.rank == 1) {
+                drawCircle(Color(0xFFEF6C00), radius = discR, center = center)
+            } else {
+                drawCircle(Color.White, radius = discR, center = center)
+                drawCircle(
+                    Color(0xFFEF6C00),
+                    radius = discR,
+                    center = center,
+                    style = Stroke(width = maxOf(2.5f, r * 0.11f))
+                )
+            }
+            val paint = android.graphics.Paint().apply {
+                color = if (mark.rank == 1) {
+                    android.graphics.Color.WHITE
+                } else {
+                    android.graphics.Color.rgb(239, 108, 0)
+                }
+                textSize = r * 0.95f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isFakeBoldText = true
+                isAntiAlias = true
+            }
+            val metrics = paint.fontMetrics
+            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
         }
 
         // Placement magnifier: while a point is selected (tap-to-

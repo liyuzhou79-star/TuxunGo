@@ -36,6 +36,31 @@ object AnalysisMath {
         if (sideToMove == Stone.BLACK) return raw.copyOf()
         return DoubleArray(raw.size) { i -> -raw[i] }
     }
+
+    /**
+     * True when the AI considers the game effectively decided — the
+     * 「绝」 mark on the top move. Deliberately strict, so it stays
+     * rare: the win rate must be beyond 99% for one side, the score
+     * lead at least 10 points, the game past its opening stretch
+     * (a sixth of the board's points played) and the position no
+     * longer wide open (at most four fifths of the points still
+     * empty) — in practice this lands in the endgame, when the
+     * remaining moves cannot plausibly swing the lead.
+     */
+    fun isDecided(
+        winrateBlack: Double,
+        scoreLeadBlack: Double,
+        movesPlayed: Int,
+        emptyPoints: Int,
+        area: Int
+    ): Boolean {
+        if (area <= 0) return false
+        if (winrateBlack < 0.99 && winrateBlack > 0.01) return false
+        if (kotlin.math.abs(scoreLeadBlack) < 10.0) return false
+        if (movesPlayed < area / 6) return false
+        if (emptyPoints > area * 4 / 5) return false
+        return true
+    }
 }
 
 data class Candidate(
@@ -66,7 +91,14 @@ data class AnalysisResult(
      *  no human model is loaded. */
     val humanTopVertex: String = "",
     /** How likely a top human player is to play that move, 0..1. */
-    val humanTopProb: Double = 0.0
+    val humanTopProb: Double = 0.0,
+    /** The human-style model's second favourite board move (null when
+     *  it prefers to pass overall, or when no human model is loaded). */
+    val humanSecondMove: Move? = null,
+    /** GTP vertex of the human second favourite, "" when unavailable. */
+    val humanSecondVertex: String = "",
+    /** How likely a top human player is to play that move, 0..1. */
+    val humanSecondProb: Double = 0.0
 )
 
 /**
@@ -159,10 +191,12 @@ class AnalysisEngine private constructor(
         sideToMove: Stone,
         maxVisits: Int,
         timeoutSeconds: Long = 120,
-        onProvisional: ((AnalysisResult) -> Unit)? = null
+        onProvisional: ((AnalysisResult) -> Unit)? = null,
+        includeHuman: Boolean = true
     ): AnalysisResult {
         check(isAlive) { "分析引擎未运行。${diagnostics()}" }
         val id = "q${nextId++}"
+        currentQueryId = id
         val query = JSONObject()
         query.put("id", id)
         query.put("rules", "chinese")
@@ -179,7 +213,7 @@ class AnalysisEngine private constructor(
             // with isDuringSearch=true carry the same shape).
             query.put("reportDuringSearchEvery", 0.3)
         }
-        if (humanEnabled) {
+        if (humanEnabled && includeHuman) {
             query.put(
                 "overrideSettings",
                 JSONObject().put("humanSLProfile", "rank_9d")
@@ -235,7 +269,35 @@ class AnalysisEngine private constructor(
                 }
                 continue
             }
+            currentQueryId = null
             return parseResult(resp, size, sideToMove)
+        }
+    }
+
+    @Volatile
+    private var currentQueryId: String? = null
+
+    /**
+     * Asks the engine to stop the in-flight query early; analyze()
+     * then returns the best result found so far instead of running
+     * to its full visit count (protocol support verified locally
+     * against v1.15.3: a final response for the query id arrives
+     * promptly after the terminate action). Used when the board has
+     * already moved on and the running result would be discarded
+     * anyway. Safe to call when nothing is running.
+     */
+    fun interrupt() {
+        val id = currentQueryId ?: return
+        try {
+            synchronized(input) {
+                val msg = JSONObject()
+                msg.put("id", id)
+                msg.put("action", "terminate")
+                input.write(msg.toString())
+                input.newLine()
+                input.flush()
+            }
+        } catch (_: Exception) {
         }
     }
 
@@ -436,20 +498,30 @@ class AnalysisEngine private constructor(
         // KataGo ownership is side-to-move perspective; store Black's.
         val ownership = AnalysisMath.ownershipToBlack(rawOwnership, sideToMove)
 
-        // Human-style favourite: argmax of the human policy array
-        // (board points in row-major order from the top, pass last).
+        // Human-style favourites: the two highest board points of the
+        // human policy array (row-major order from the top, pass last).
         var humanTopMove: Move? = null
         var humanTopVertex = ""
         var humanTopProb = 0.0
+        var humanSecondMove: Move? = null
+        var humanSecondVertex = ""
+        var humanSecondProb = 0.0
         val humanArr = resp.optJSONArray("humanPolicy")
         if (humanArr != null && humanArr.length() >= size.area) {
             var bestIdx = -1
             var bestVal = 0.0
+            var secondIdx = -1
+            var secondVal = 0.0
             for (i in 0 until size.area) {
                 val v = humanArr.optDouble(i, 0.0)
                 if (v > bestVal) {
+                    secondIdx = bestIdx
+                    secondVal = bestVal
                     bestVal = v
                     bestIdx = i
+                } else if (v > secondVal) {
+                    secondVal = v
+                    secondIdx = i
                 }
             }
             val passProb = if (humanArr.length() > size.area) {
@@ -466,6 +538,16 @@ class AnalysisEngine private constructor(
                 humanTopMove = move
                 humanTopVertex = KataEngine.toVertex(move, size)
                 humanTopProb = bestVal
+                if (secondIdx >= 0 && secondVal > 0.001) {
+                    val second = Move(
+                        sideToMove,
+                        secondIdx % size.width,
+                        secondIdx / size.width
+                    )
+                    humanSecondMove = second
+                    humanSecondVertex = KataEngine.toVertex(second, size)
+                    humanSecondProb = secondVal
+                }
             } else if (passProb > 0.001) {
                 humanTopVertex = "pass"
                 humanTopProb = passProb
@@ -473,7 +555,8 @@ class AnalysisEngine private constructor(
         }
         return AnalysisResult(
             sideToMove, rootWrB, rootLeadB, candidates, ownership,
-            humanTopMove, humanTopVertex, humanTopProb
+            humanTopMove, humanTopVertex, humanTopProb,
+            humanSecondMove, humanSecondVertex, humanSecondProb
         )
     }
 
@@ -502,7 +585,7 @@ class AnalysisEngine private constructor(
                 """
                 logFile = analysis.log
                 numSearchThreads = 6
-                nnMaxBatchSize = 16
+                nnMaxBatchSize = 32
                 numAnalysisThreads = 1
                 """.trimIndent() + "\n"
             )

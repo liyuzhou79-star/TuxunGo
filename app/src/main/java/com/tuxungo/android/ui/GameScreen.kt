@@ -50,6 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,6 +60,7 @@ import com.tuxungo.android.GameStore
 import com.tuxungo.android.R
 import com.tuxungo.android.SettingsStore
 import com.tuxungo.android.engine.AnalysisEngine
+import com.tuxungo.android.engine.AnalysisMath
 import com.tuxungo.android.engine.AnalysisResult
 import com.tuxungo.android.engine.EngineAssets
 import com.tuxungo.android.engine.EngineRunner
@@ -208,6 +211,11 @@ fun GameScreen(
     var judgment by remember { mutableStateOf<AnalysisResult?>(null) }
     var continuousAnalysis by remember { mutableStateOf(false) }
     var analysisExpanded by remember { mutableStateOf(false) }
+    // Display toggles for the analysis overlays (persisted, mirrored
+    // from settings like autoSide is).
+    var humanMarks by remember { mutableStateOf(settings.humanMarks) }
+    var topThreeOnly by remember { mutableStateOf(settings.topThreeOnly) }
+    var trendHidden by remember { mutableStateOf(false) }
     var judgmentKey by remember { mutableIntStateOf(-1) }
     var judging by remember { mutableStateOf(false) }
     // ---- AI resign proposals + the smart referee ----
@@ -633,28 +641,81 @@ fun GameScreen(
                 )
                 analysisEngine = eng
             }
-            eng.analyze(
-                size = game.size,
-                komi = game.komi,
-                initialStones = baseStones,
-                initialPlayer = basePlayer,
-                moves = movesSnapshot,
-                sideToMove = sideSnapshot,
-                maxVisits = visitsOverride ?: if (deep) 1200 else 300,
-                onProvisional = { prov ->
-                    // Show the provisional top move as soon as the
-                    // search has one, then let the final result
-                    // refine it (the panel keeps its "analyzing"
-                    // state until the final callback lands).
-                    mainHandler.post {
-                        if (token == analysisToken && game.moves.size == moveCount) {
-                            analysis = prov
-                            analysisKey = moveCount
-                            selectedCandidate = 0
-                        }
+            val targetVisits = visitsOverride ?: if (deep) 1200 else 300
+            val provCallback: (AnalysisResult) -> Unit = { prov ->
+                // Show the provisional top move as soon as the
+                // search has one, then let the final result
+                // refine it (the panel keeps its "analyzing"
+                // state until the final callback lands).
+                mainHandler.post {
+                    if (token == analysisToken && game.moves.size == moveCount) {
+                        analysis = prov
+                        analysisKey = moveCount
+                        selectedCandidate = 0
                     }
                 }
-            )
+            }
+            // Two-stage search: a quick pass paints a solid result
+            // fast, then the full pass deepens it on the now-warm
+            // NN cache (a repeat query on the same position costs a
+            // small fraction of a cold one — measured locally), so
+            // the final quality arrives much sooner than one cold
+            // full pass. Skipped for small targets.
+            val stage1Visits = when {
+                targetVisits >= 1200 -> 200
+                targetVisits >= 200 -> 100
+                else -> null
+            }
+            if (stage1Visits == null) {
+                eng.analyze(
+                    size = game.size,
+                    komi = game.komi,
+                    initialStones = baseStones,
+                    initialPlayer = basePlayer,
+                    moves = movesSnapshot,
+                    sideToMove = sideSnapshot,
+                    maxVisits = targetVisits,
+                    onProvisional = provCallback,
+                    includeHuman = humanMarks
+                )
+            } else {
+                val stage1 = eng.analyze(
+                    size = game.size,
+                    komi = game.komi,
+                    initialStones = baseStones,
+                    initialPlayer = basePlayer,
+                    moves = movesSnapshot,
+                    sideToMove = sideSnapshot,
+                    maxVisits = stage1Visits,
+                    onProvisional = provCallback,
+                    includeHuman = humanMarks
+                )
+                mainHandler.post {
+                    if (token == analysisToken && game.moves.size == moveCount) {
+                        analysis = stage1
+                        analysisKey = moveCount
+                        selectedCandidate = 0
+                    }
+                }
+                if (token != analysisToken || game.moves.size != moveCount) {
+                    // Board moved on between stages: the stage-1
+                    // result is the task's answer; the completion
+                    // handler discards it as stale.
+                    stage1
+                } else {
+                    eng.analyze(
+                        size = game.size,
+                        komi = game.komi,
+                        initialStones = baseStones,
+                        initialPlayer = basePlayer,
+                        moves = movesSnapshot,
+                        sideToMove = sideSnapshot,
+                        maxVisits = targetVisits,
+                        onProvisional = provCallback,
+                        includeHuman = humanMarks
+                    )
+                }
+            }
         }) { result ->
             if (token != analysisToken) {
                 // Cancelled meanwhile; cancel already reset the flags,
@@ -674,8 +735,13 @@ fun GameScreen(
                     recordTurnStat(moveCount, res, overwrite = true)
                     // Show the territory right away; the chip can hide it.
                     if (visitsOverride == null) showTerritory = true
-                } else {
+                } else if (visitsOverride == null) {
                     analysisStatus = "棋盘已变化，刚才的分析已过期，请重新分析。"
+                } else {
+                    // Automatic analysis expiring mid-fast-play is
+                    // normal, not news: stay silent, the effect
+                    // re-fires for the new position.
+                    analysisStatus = ""
                 }
             }.onFailure { e ->
                 analysisStatus = "分析失败：${e.message ?: "未知错误"}"
@@ -1037,9 +1103,21 @@ fun GameScreen(
             else -> true
         }
         if (!sideOk) return@LaunchedEffect
-        delay(250)
+        delay(120)
         if (!analyzing && !aiThinking && !game.finished) {
             runAnalysis(deep = false, visitsOverride = 200)
+        }
+    }
+
+    // When the board moves on while an analysis is still running,
+    // cut that query short: its result would be discarded anyway,
+    // and the runner frees up at once for the new position instead
+    // of grinding through a stale search (the "analysis can't keep
+    // up with fast play" complaint). The engine process survives —
+    // only the query is terminated.
+    LaunchedEffect(version) {
+        if (analyzing) {
+            analysisEngine?.interrupt()
         }
     }
 
@@ -1766,10 +1844,13 @@ fun GameScreen(
                 parentPadding = 2.dp,
                 territoryThreshold = 0.5,
                 candidates = if (!focusMode && !judgmentActive && !scoringMode) {
-                    fsA?.candidates?.mapNotNull { cand ->
-                        cand.move?.let { CandidateMark(it.x, it.y, fsA.candidates.indexOf(cand) + 1) }
-                    } ?: emptyList()
+                    shownCandidates(fsA, topThreeOnly)
                 } else emptyList(),
+                humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
+                    humanMarksOf(fsA)
+                } else emptyList(),
+                decidedFirst = !focusMode && !judgmentActive && !scoringMode &&
+                    analysisKey == game.moves.size && decidedFor(fsA, game),
                 ownership = fsOwnership,
                 pvGhost = if (!focusMode && !judgmentActive && !scoringMode) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
@@ -2266,11 +2347,25 @@ fun GameScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         if (!focusMode && liveStats.size >= 4) {
-            MiniTrend(
-                stats = liveStats.values.sortedBy { it.turn },
-                modifier = Modifier.fillMaxWidth()
-                    .clickable { showTrendDialog = true }
-            )
+            if (trendHidden) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text("走势（已隐藏）", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = { trendHidden = false }) {
+                        Text("显示", fontSize = 12.sp)
+                    }
+                }
+            } else {
+                MiniTrend(
+                    stats = liveStats.values.sortedBy { it.turn },
+                    onHide = { trendHidden = true },
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { showTrendDialog = true }
+                )
+            }
             Spacer(modifier = Modifier.height(6.dp))
         }
 
@@ -2293,17 +2388,15 @@ fun GameScreen(
             parentPadding = 2.dp,
             territoryThreshold = 0.5,
             candidates = if (!focusMode && !judgmentActive && !scoringMode) {
-                currentAnalysis?.candidates?.mapNotNull { cand ->
-                    cand.move?.let { CandidateMark(it.x, it.y, currentAnalysis.candidates.indexOf(cand) + 1) }
-                } ?: emptyList()
+                shownCandidates(currentAnalysis, topThreeOnly)
             } else emptyList(),
             ownership = if (focusMode) null else displayOwnership,
             pvGhost = if (!focusMode && !judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
-            humanPoint = if (!focusMode && !judgmentActive && !scoringMode) {
-                currentAnalysis?.humanTopMove?.let { it.x to it.y }
-            } else {
-                null
-            },
+            humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
+                humanMarksOf(currentAnalysis)
+            } else emptyList(),
+            decidedFirst = !focusMode && !judgmentActive && !scoringMode &&
+                analysisKey == game.moves.size && decidedFor(currentAnalysis, game),
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
@@ -2530,6 +2623,57 @@ fun GameScreen(
                         Text(if (analysisExpanded) "收起" else "展开")
                     }
                 }
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = "显示", fontSize = 12.sp, color = Color.Gray)
+                    FilterChip(
+                        selected = humanMarks,
+                        onClick = {
+                            humanMarks = !humanMarks
+                            SettingsStore.save(
+                                context,
+                                settings.copy(
+                                    humanMarks = humanMarks,
+                                    topThreeOnly = topThreeOnly,
+                                    autoAnalysisSide = autoSide,
+                                    refereeEnabled = refereeEnabled
+                                )
+                            )
+                            if (humanMarks &&
+                                analysisEngine?.humanEnabled == true &&
+                                analysis != null &&
+                                analysisKey == game.moves.size &&
+                                analysis?.humanTopVertex.isNullOrEmpty()
+                            ) {
+                                // The showing result was computed
+                                // without the human policy: fetch it
+                                // (an explicit visit count bypasses
+                                // the fresh-result reuse shortcut).
+                                runAnalysis(deep = false, visitsOverride = 300)
+                            }
+                        },
+                        label = { Text("人类选点") }
+                    )
+                    FilterChip(
+                        selected = topThreeOnly,
+                        onClick = {
+                            topThreeOnly = !topThreeOnly
+                            SettingsStore.save(
+                                context,
+                                settings.copy(
+                                    humanMarks = humanMarks,
+                                    topThreeOnly = topThreeOnly,
+                                    autoAnalysisSide = autoSide,
+                                    refereeEnabled = refereeEnabled
+                                )
+                            )
+                        },
+                        label = { Text("只看前三") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 if (continuousAnalysis) {
                     Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -2540,7 +2684,7 @@ fun GameScreen(
                             selected = autoSide == "both",
                             onClick = {
                                 autoSide = "both"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "both"))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "both", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
                             },
                             label = { Text("双方") }
                         )
@@ -2548,7 +2692,7 @@ fun GameScreen(
                             selected = autoSide == "B",
                             onClick = {
                                 autoSide = "B"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "B"))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "B", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
                             },
                             label = { Text("只黑") }
                         )
@@ -2556,7 +2700,7 @@ fun GameScreen(
                             selected = autoSide == "W",
                             onClick = {
                                 autoSide = "W"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "W"))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "W", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
                             },
                             label = { Text("只白") }
                         )
@@ -2596,6 +2740,8 @@ fun GameScreen(
                     fontSize = 13.sp, color = Color(0xFF2F7CF6)
                 )
                 val topCand = currentAnalysis.candidates.firstOrNull()
+                val decidedNow = analysisKey == game.moves.size &&
+                    decidedFor(currentAnalysis, game)
                 if (topCand != null) {
                     Text(
                         text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
@@ -2618,10 +2764,25 @@ fun GameScreen(
                             hv == "pass" -> "人类一选：停一手（真人高手多半会停）"
                             hv == topCand?.vertex ->
                                 "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（和 AI 一选相同）"
+                            humanMarks ->
+                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（棋盘上橙色 1 号）"
                             else ->
-                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}（棋盘上的蓝圈）"
+                                "人类一选：$hv · 真人概率约 ${formatPercent(currentAnalysis.humanTopProb)}"
                         },
                         fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                    )
+                }
+                if (currentAnalysis.humanSecondVertex.isNotEmpty()) {
+                    Text(
+                        text = "人类二选：${currentAnalysis.humanSecondVertex} · 真人概率约 ${formatPercent(currentAnalysis.humanSecondProb)}" +
+                            if (humanMarks) "（棋盘上橙色 2 号）" else "",
+                        fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                    )
+                }
+                if (decidedNow) {
+                    Text(
+                        text = "一选已标「绝」：AI 判断大局已定，这手下完可以提议双方数子定胜负。",
+                        fontSize = 13.sp, color = Color(0xFFC62828)
                     )
                 }
                 if (analysisExpanded) {
@@ -2640,7 +2801,7 @@ fun GameScreen(
                 currentAnalysis.candidates.forEachIndexed { idx, cand ->
                     val isSel = idx == selectedCandidate
                     Text(
-                        text = "${idx + 1}${if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · 访问 ${cand.visits}",
+                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · 访问 ${cand.visits}",
                         fontSize = 14.sp,
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSel) Rose else Color.Unspecified,
@@ -2973,7 +3134,12 @@ fun GameScreen(
                             refereeEnabled = !refereeEnabled
                             SettingsStore.save(
                                 context,
-                                settings.copy(refereeEnabled = refereeEnabled)
+                                settings.copy(
+                                    refereeEnabled = refereeEnabled,
+                                    humanMarks = humanMarks,
+                                    topThreeOnly = topThreeOnly,
+                                    autoAnalysisSide = autoSide
+                                )
                             )
                         }
                     )
@@ -3049,7 +3215,12 @@ fun GameScreen(
                                 refereeEnabled = it
                                 SettingsStore.save(
                                     context,
-                                    settings.copy(refereeEnabled = it)
+                                    settings.copy(
+                                        refereeEnabled = it,
+                                        humanMarks = humanMarks,
+                                        topThreeOnly = topThreeOnly,
+                                        autoAnalysisSide = autoSide
+                                    )
                                 )
                             }
                         )
@@ -3376,16 +3547,24 @@ fun GameScreen(
     }
 }
 
-/** Small in-game win-rate trend, drawn from the live-recorded stats. */
+/** Small in-game win-rate trend, drawn from the live-recorded stats.
+ *  The recorded stats are sparse (one per analyzed turn), so the
+ *  curve is densified by carrying the last known win rate forward
+ *  across the gaps and drawn as a smooth path with a soft fill —
+ *  no more jagged jumps between distant samples. */
 @Composable
 private fun MiniTrend(
     stats: List<com.tuxungo.android.engine.TurnStat>,
+    onHide: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (stats.size < 2) return
     val last = stats.last()
     Column(modifier = modifier) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
             Text(
                 "走势", fontSize = 12.sp,
                 fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C)
@@ -3395,28 +3574,97 @@ private fun MiniTrend(
                 "黑胜率 ${formatPercent(last.winrateBlack)}",
                 fontSize = 12.sp, color = Color.Gray
             )
+            TextButton(onClick = onHide) {
+                Text("隐藏", fontSize = 12.sp)
+            }
         }
         Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
             val maxTurn = stats.maxOf { it.turn }.coerceAtLeast(1)
+            val minTurn = stats.minOf { it.turn }
             val midY = size.height / 2f
             drawLine(
                 Color.Gray.copy(alpha = 0.35f),
                 Offset(0f, midY), Offset(size.width, midY), strokeWidth = 1f
             )
-            var prev: Offset? = null
-            for (st in stats) {
-                val p = Offset(
-                    size.width * st.turn.toFloat() / maxTurn.toFloat(),
-                    size.height * (1f - st.winrateBlack.toFloat())
-                )
-                prev?.let {
-                    drawLine(Color(0xFFD64F7C), it, p, strokeWidth = 2.5f)
+            val pts = ArrayList<Offset>()
+            var carry = stats.first().winrateBlack
+            var si = 0
+            for (t in minTurn..maxTurn) {
+                while (si < stats.size && stats[si].turn <= t) {
+                    carry = stats[si].winrateBlack
+                    si++
                 }
-                prev = p
+                pts.add(
+                    Offset(
+                        size.width * t.toFloat() / maxTurn.toFloat(),
+                        size.height * (1f - carry.toFloat())
+                    )
+                )
             }
-            prev?.let { drawCircle(Color(0xFFD64F7C), radius = 4f, center = it) }
+            if (pts.size >= 2) {
+                val line = Path()
+                line.moveTo(pts.first().x, pts.first().y)
+                for (i in 1 until pts.size) {
+                    val prev = pts[i - 1]
+                    val cur = pts[i]
+                    val mid = Offset(
+                        (prev.x + cur.x) / 2f,
+                        (prev.y + cur.y) / 2f
+                    )
+                    if (i == 1) {
+                        line.lineTo(mid.x, mid.y)
+                    } else {
+                        line.quadraticBezierTo(prev.x, prev.y, mid.x, mid.y)
+                    }
+                }
+                line.lineTo(pts.last().x, pts.last().y)
+                val fill = Path()
+                fill.addPath(line)
+                fill.lineTo(pts.last().x, size.height)
+                fill.lineTo(pts.first().x, size.height)
+                fill.close()
+                drawPath(fill, Color(0xFFD64F7C).copy(alpha = 0.10f))
+                drawPath(line, Color(0xFFD64F7C), style = Stroke(width = 2.5f))
+                drawCircle(Color(0xFFD64F7C), radius = 4f, center = pts.last())
+            }
         }
     }
+}
+
+/** Board marks for the AI's candidates, optionally cut to the top 3. */
+private fun shownCandidates(
+    a: AnalysisResult?,
+    topThree: Boolean
+): List<CandidateMark> {
+    val cands = a?.candidates ?: return emptyList()
+    val shown = if (topThree) cands.take(3) else cands
+    return shown.mapIndexedNotNull { idx, cand ->
+        cand.move?.let { CandidateMark(it.x, it.y, idx + 1) }
+    }
+}
+
+/** Board marks for the human-style model's top two moves. */
+private fun humanMarksOf(a: AnalysisResult?): List<CandidateMark> {
+    if (a == null) return emptyList()
+    val marks = ArrayList<CandidateMark>()
+    a.humanTopMove?.let { marks.add(CandidateMark(it.x, it.y, 1)) }
+    a.humanSecondMove?.let { marks.add(CandidateMark(it.x, it.y, 2)) }
+    return marks
+}
+
+/** Whether the AI calls this position decided (the 「绝」 mark). */
+private fun decidedFor(a: AnalysisResult?, game: GoGame): Boolean {
+    if (a == null) return false
+    var stones = 0
+    for (i in 0 until game.size.area) {
+        if (game.stoneAt(i % game.size.width, i / game.size.width) != null) {
+            stones++
+        }
+    }
+    return AnalysisMath.isDecided(
+        a.rootWinrateBlack, a.rootScoreLeadBlack,
+        game.moves.size, game.size.area - stones, game.size.area
+    )
 }
 
 /** One commentary line per recorded turn for AI-vs-AI spectating,

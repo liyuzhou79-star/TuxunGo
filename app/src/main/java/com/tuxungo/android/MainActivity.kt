@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 全 App 界面升级为游戏级质感：棋盘坐进胡桃木框、对局双方信息条换成真实棋子头像、主页与各页卡片统一深度与边框、主按钮改为渐变质感按钮——不是卡通风，也不是模板风，是正经游戏产品的样子（功能与上一版相同）",
+            whatsNew = "· 分析面板新增「人类选点」开关：打开后，棋盘上会用橙色标出真人高手最可能下的一选、二选，可以和 AI 的候选点同时显示、互相参照\n· 新增「只看前三」开关：棋盘上只保留 AI 的前三个候选点，其余不显示，画面更干净\n· 新增「绝」标记：AI 判断大局已定时（多在官子阶段），一选会被圈起来并标上红色的「绝」——这手下完，就可以提议双方数子定胜负\n· 局内走势图更顺滑，并支持暂时隐藏\n· 分析全面提速：先出快速结果再自动加深，快速落子时不再排队计算已经过期的局面，连续分析明显跟得上了",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false
