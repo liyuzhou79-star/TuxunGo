@@ -273,6 +273,24 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Text(text = "AI 故意失误", fontSize = 15.sp)
+                Text(
+                    text = "全力的 AI 稳赢时每局随机 1～2 手故意失误（保证不输、大龙打架时不放），复盘里专门标记",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            Switch(
+                checked = settings.aiBlunders,
+                onCheckedChange = { update(settings.copy(aiBlunders = it)) }
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
                 Text(text = "终局自动存图", fontSize = 15.sp)
                 Text(text = "对局结束时把终局局面图自动存到相册", fontSize = 12.sp, color = Color.Gray)
             }

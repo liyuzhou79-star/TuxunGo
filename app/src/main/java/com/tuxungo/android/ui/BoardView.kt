@@ -122,12 +122,13 @@ fun BoardView(
      *  so it reads differently from the AI's numbered discs. */
     humanPoint: Pair<Int, Int>? = null,
     /** The human-style model's top moves as ranked marks: drawn as
-     *  orange discs (rank 1 filled, rank 2 ringed), distinct from
-     *  both the AI's discs and the blue humanPoint ring. */
+     *  orange-red rings, distinct from both the AI's rings and the
+     *  blue humanPoint ring. */
     humanMarks: List<CandidateMark> = emptyList(),
-    /** The AI judges the game already decided: the rank-1 candidate
-     *  disc gains an outer ring and a red 「绝」 badge. */
-    decidedFirst: Boolean = false,
+    /** The move that sealed the game (the 「绝」 move): its stone
+     *  keeps a small calligraphy 「绝」 badge at its corner for the
+     *  rest of the game. Null while the game is not decided. */
+    decidedStone: Move? = null,
     /** Territory colouring starts at this ownership strength: points
      *  weaker than this stay uncoloured, so early-game boards do not
      *  speckle. Adjustable in the judgment settings. */
@@ -195,6 +196,37 @@ fun BoardView(
         ),
         label = "breatheAlpha"
     )
+    // Candidate / human rings grow in softly when a fresh analysis
+    // lands, instead of snapping onto the board.
+    val marksAnim = remember { Animatable(1f) }
+    LaunchedEffect(candidates, humanMarks) {
+        if (candidates.isNotEmpty() || humanMarks.isNotEmpty()) {
+            marksAnim.snapTo(0.55f)
+            marksAnim.animateTo(1f, animationSpec = tween(170))
+        }
+    }
+    // Slow pulse shared by the overlap glow and the 「绝」 badge —
+    // deliberately gentle, so it never shouts over the play.
+    val pulseTransition = rememberInfiniteTransition(label = "markPulse")
+    val markPulse by pulseTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(950),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "markPulse"
+    )
+    // Calligraphy typeface for the 「绝」 badge (a one-glyph subset
+    // of Ma Shan Zheng, see THIRD_PARTY_NOTICES.md). Falls back to
+    // the default bold face when the font cannot be loaded.
+    val jueTypeface = remember {
+        try {
+            context.resources.getFont(com.tuxungo.android.R.font.jue_calligraphy)
+        } catch (_: Exception) {
+            null
+        }
+    }
     Canvas(
         modifier = Modifier
             .stretchToParent(edgeToEdge, parentPadding)
@@ -418,35 +450,38 @@ fun BoardView(
             }
         }
 
-        // Stones with shadows and gentle radial shading.
-        fun drawStone(cx: Float, cy: Float, stone: Stone, alpha: Float) {
+        // Stones with shadows and gentle radial shading. [scale]
+        // lets the newest stone settle in slightly oversized.
+        fun drawStone(cx: Float, cy: Float, stone: Stone, alpha: Float, scale: Float = 1f) {
             drawCircle(
                 Color.Black.copy(alpha = 0.26f * alpha),
-                radius = r * 0.97f,
+                radius = r * 0.97f * scale,
                 center = Offset(cx + r * 0.10f, cy + r * 0.17f)
             )
             val brush = if (stone == Stone.BLACK) {
                 Brush.radialGradient(
                     colors = listOf(Color(0xFF4D4D4D), Color(0xFF161616), Color(0xFF000000)),
                     center = Offset(cx - r * 0.30f, cy - r * 0.36f),
-                    radius = r * 1.25f
+                    radius = r * 1.25f * scale
                 )
             } else {
                 Brush.radialGradient(
                     colors = listOf(Color(0xFFFFFFFF), Color(0xFFF5F5F5), Color(0xFFD9D9D9)),
                     center = Offset(cx - r * 0.28f, cy - r * 0.34f),
-                    radius = r * 1.25f
+                    radius = r * 1.25f * scale
                 )
             }
-            drawCircle(brush = brush, radius = r, center = Offset(cx, cy), alpha = alpha)
+            drawCircle(brush = brush, radius = r * scale, center = Offset(cx, cy), alpha = alpha)
             if (stone == Stone.WHITE) {
                 drawCircle(
                     Color(0xFF9A9A9A).copy(alpha = 0.6f * alpha),
-                    radius = r, center = Offset(cx, cy),
+                    radius = r * scale, center = Offset(cx, cy),
                     style = Stroke(width = maxOf(1f, r * 0.045f))
                 )
             }
         }
+        // The newest stone on the board (for the settle-in scale).
+        val lastMoveStone = game.lastMove()
         // Latest move number per point, for the move-number overlay.
         val moveNumbers: Map<Int, Pair<Int, Stone>> = if (showMoveNumbers) {
             val m = HashMap<Int, Pair<Int, Stone>>()
@@ -462,7 +497,17 @@ fun BoardView(
                 val stone = game.stoneAt(x, y) ?: continue
                 val dead = game.index(x, y) in markedDead
                 val renderStone = if (oneColor) Stone.BLACK else stone
-                drawStone(px(x), py(y), renderStone, if (dead) 0.45f else 1f)
+                val isNewest = lastMoveStone != null && !lastMoveStone.isPass &&
+                    lastMoveStone.x == x && lastMoveStone.y == y &&
+                    lastMoveStone.stone == stone
+                drawStone(
+                    px(x), py(y), renderStone, if (dead) 0.45f else 1f,
+                    scale = if (isNewest) {
+                        1f + 0.15f * (1f - ripple.value)
+                    } else {
+                        1f
+                    }
+                )
                 if (dead) {
                     // Red cross over scoring-mode dead stones.
                     val cx = px(x)
@@ -506,7 +551,7 @@ fun BoardView(
         // Last-move marker, Tencent style: a right triangle at the
         // stone's center whose two legs lie exactly along the grid
         // lines running under the stone (right and down).
-        val last = game.lastMove()
+        val last = lastMoveStone
         if (last != null && game.stoneAt(last.x, last.y) == last.stone) {
             val cx = px(last.x)
             val cy = py(last.y)
@@ -600,75 +645,114 @@ fun BoardView(
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${i + 1}", center.x, baseline, paint)
         }
-        // Candidate markers: large, high-contrast discs with a drop
-        // shadow and a pale halo. Rank 1 (the first choice) is a big
-        // rose disc; other ranks are white discs with a bold dark ring
-        // and number.
-        for (mark in candidates) {
+        // Candidate markers (redesigned in 2.63.0 — rings, not
+        // discs): the AI's first choice is a large purple ring, its
+        // second and third are white medium rings, the rest smaller
+        // white rings; the human model's picks are orange-red rings
+        // in the same sizes. When the human top and the AI top land
+        // on the same point, one glowing, gently pulsing orange ring
+        // replaces both — human and machine agree here. The rank
+        // number stays in the middle of each ring.
+        val aiTopMark = candidates.firstOrNull { it.rank == 1 }
+        val humanTopMark = humanMarks.firstOrNull { it.rank == 1 }
+        val topOverlap = aiTopMark != null && humanTopMark != null &&
+            aiTopMark.x == humanTopMark.x && aiTopMark.y == humanTopMark.y
+
+        fun androidx.compose.ui.graphics.drawscope.DrawScope.ringMark(
+            mark: CandidateMark,
+            ringColor: Color,
+            haloColor: Color,
+            radiusFactor: Float,
+            widthFactor: Float,
+            numberColor: Int
+        ) {
             val center = Offset(px(mark.x), py(mark.y))
-            // Discs step down in size by rank, so the first choice
-            // stands out at a glance.
-            val discR = r * (0.86f - 0.05f * mark.rank).coerceAtLeast(0.55f)
+            val ringR = r * radiusFactor * marksAnim.value
+            val strokeW = maxOf(2.5f, r * widthFactor)
+            // Soft shadow, then a halo slightly wider than the ring
+            // so it reads on stones and on the pale board alike.
             drawCircle(
-                Color.Black.copy(alpha = 0.32f),
-                radius = discR,
-                center = Offset(center.x + r * 0.07f, center.y + r * 0.11f)
+                Color.Black.copy(alpha = 0.22f),
+                radius = ringR,
+                center = Offset(center.x + r * 0.05f, center.y + r * 0.08f),
+                style = Stroke(width = strokeW)
             )
-            drawCircle(Color.White.copy(alpha = 0.95f), radius = discR * 1.13f, center = center)
-            if (mark.rank == 1) {
-                drawCircle(AccentRose, radius = discR, center = center)
-            } else {
-                drawCircle(Color.White, radius = discR, center = center)
-                drawCircle(
-                    Color(0xFF263238),
-                    radius = discR,
-                    center = center,
-                    style = Stroke(width = maxOf(2.5f, r * 0.11f))
-                )
-            }
+            drawCircle(
+                haloColor,
+                radius = ringR,
+                center = center,
+                style = Stroke(width = strokeW * 1.9f)
+            )
+            drawCircle(
+                ringColor,
+                radius = ringR,
+                center = center,
+                style = Stroke(width = strokeW)
+            )
             val paint = android.graphics.Paint().apply {
-                color = if (mark.rank == 1) android.graphics.Color.WHITE else android.graphics.Color.rgb(38, 50, 56)
-                textSize = if (mark.rank == 1) r * 1.02f else r * 0.95f
+                color = numberColor
+                textSize = r * 0.66f * marksAnim.value
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true
             }
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
-            drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
-            if (mark.rank == 1 && decidedFirst) {
-                // 「绝」: the AI calls the game decided — an extra ring
-                // around the top disc plus a red badge character.
-                drawCircle(
-                    Color(0xFFC62828),
-                    radius = discR * 1.30f,
-                    center = center,
-                    style = Stroke(width = maxOf(2.5f, r * 0.10f))
+            drawContext.canvas.nativeCanvas.drawText(
+                "${mark.rank}", center.x, baseline, paint
+            )
+        }
+
+        if (topOverlap && aiTopMark != null) {
+            // The glowing agreement ring: two soft outer strokes
+            // breathing with markPulse under a solid orange ring.
+            val center = Offset(px(aiTopMark.x), py(aiTopMark.y))
+            val baseR = r * 0.98f * marksAnim.value
+            drawCircle(
+                Color(0xFFFF8A00).copy(alpha = 0.16f * markPulse),
+                radius = baseR * (1.10f + 0.08f * markPulse),
+                center = center,
+                style = Stroke(width = r * 0.36f)
+            )
+            drawCircle(
+                Color(0xFFFF6D00).copy(alpha = 0.38f * markPulse),
+                radius = baseR * 1.07f,
+                center = center,
+                style = Stroke(width = r * 0.18f)
+            )
+            drawCircle(
+                Color(0xFFFF6D00),
+                radius = baseR,
+                center = center,
+                style = Stroke(width = maxOf(3f, r * 0.17f))
+            )
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.rgb(230, 81, 0)
+                textSize = r * 0.7f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isFakeBoldText = true
+                isAntiAlias = true
+            }
+            val metrics = paint.fontMetrics
+            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText(
+                "1", center.x, baseline, paint
+            )
+        }
+        for (mark in candidates) {
+            if (topOverlap && mark.rank == 1) continue
+            when (mark.rank) {
+                1 -> ringMark(
+                    mark, Color(0xFF7B1FA2), Color.White.copy(alpha = 0.55f),
+                    0.95f, 0.16f, android.graphics.Color.rgb(123, 31, 162)
                 )
-                // Offset far enough that the badge stays clear even
-                // when an orange human disc covers this same point.
-                val badgeCenter = Offset(
-                    center.x + discR * 1.25f,
-                    center.y - discR * 1.25f
+                2, 3 -> ringMark(
+                    mark, Color.White, Color(0xFF90A4AE).copy(alpha = 0.45f),
+                    0.78f, 0.13f, android.graphics.Color.rgb(38, 50, 56)
                 )
-                drawCircle(Color.White, radius = r * 0.52f, center = badgeCenter)
-                drawCircle(
-                    Color(0xFFC62828),
-                    radius = r * 0.52f,
-                    center = badgeCenter,
-                    style = Stroke(width = maxOf(1.5f, r * 0.05f))
-                )
-                val juePaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.rgb(198, 40, 40)
-                    textSize = r * 0.78f
-                    textAlign = android.graphics.Paint.Align.CENTER
-                    isFakeBoldText = true
-                    isAntiAlias = true
-                }
-                val jm = juePaint.fontMetrics
-                val jBase = badgeCenter.y - (jm.ascent + jm.descent) / 2f
-                drawContext.canvas.nativeCanvas.drawText(
-                    "绝", badgeCenter.x, jBase, juePaint
+                else -> ringMark(
+                    mark, Color.White, Color(0xFF90A4AE).copy(alpha = 0.4f),
+                    0.62f, 0.11f, android.graphics.Color.rgb(38, 50, 56)
                 )
             }
         }
@@ -690,44 +774,61 @@ fun BoardView(
                 style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
         }
-        // Human-style top moves: orange discs in the same visual
-        // language as the AI's ranked discs — rank 1 filled orange
-        // with a white number, rank 2 a white disc with an orange
-        // ring and number — so both systems can share the board.
+        // Human-style top moves: orange-red rings in the same sizes
+        // as the AI's rings, so both systems can share the board.
         for (mark in humanMarks) {
-            val center = Offset(px(mark.x), py(mark.y))
-            val discR = r * if (mark.rank == 1) 0.80f else 0.72f
-            drawCircle(
-                Color.Black.copy(alpha = 0.28f),
-                radius = discR,
-                center = Offset(center.x + r * 0.06f, center.y + r * 0.10f)
-            )
-            drawCircle(Color.White.copy(alpha = 0.95f), radius = discR * 1.13f, center = center)
-            if (mark.rank == 1) {
-                drawCircle(Color(0xFFEF6C00), radius = discR, center = center)
-            } else {
-                drawCircle(Color.White, radius = discR, center = center)
-                drawCircle(
-                    Color(0xFFEF6C00),
-                    radius = discR,
-                    center = center,
-                    style = Stroke(width = maxOf(2.5f, r * 0.11f))
+            if (topOverlap && mark.rank == 1) continue
+            when (mark.rank) {
+                1 -> ringMark(
+                    mark, Color(0xFFE64A19), Color.White.copy(alpha = 0.55f),
+                    0.95f, 0.16f, android.graphics.Color.rgb(230, 74, 25)
+                )
+                else -> ringMark(
+                    mark, Color(0xFFE64A19), Color.White.copy(alpha = 0.5f),
+                    0.78f, 0.13f, android.graphics.Color.rgb(230, 74, 25)
                 )
             }
+        }
+
+        // 「绝」 badge: once the game is sealed, the sealing stone
+        // keeps a small calligraphy 「绝」 at its top-right corner
+        // for the rest of the game. It breathes very gently with
+        // markPulse — present, but never shouting over the play.
+        if (decidedStone != null && !decidedStone.isPass &&
+            game.stoneAt(decidedStone.x, decidedStone.y) == decidedStone.stone
+        ) {
+            val center = Offset(px(decidedStone.x), py(decidedStone.y))
+            val badgeCenter = Offset(
+                center.x + r * 0.55f, center.y - r * 0.55f
+            )
+            drawCircle(
+                Color.White.copy(alpha = 0.88f),
+                radius = r * 0.47f,
+                center = badgeCenter
+            )
+            drawCircle(
+                Color(0xFFB71C1C).copy(alpha = 0.75f),
+                radius = r * 0.47f,
+                center = badgeCenter,
+                style = Stroke(width = maxOf(1.2f, r * 0.045f))
+            )
             val paint = android.graphics.Paint().apply {
-                color = if (mark.rank == 1) {
-                    android.graphics.Color.WHITE
-                } else {
-                    android.graphics.Color.rgb(239, 108, 0)
-                }
-                textSize = r * 0.95f
+                color = android.graphics.Color.rgb(183, 28, 28)
+                textSize = r * 0.8f
                 textAlign = android.graphics.Paint.Align.CENTER
-                isFakeBoldText = true
                 isAntiAlias = true
+                alpha = (218 + (37 * markPulse).toInt()).coerceIn(0, 255)
+                if (jueTypeface != null) {
+                    typeface = jueTypeface
+                } else {
+                    isFakeBoldText = true
+                }
             }
             val metrics = paint.fontMetrics
-            val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
-            drawContext.canvas.nativeCanvas.drawText("${mark.rank}", center.x, baseline, paint)
+            val baseline = badgeCenter.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText(
+                "绝", badgeCenter.x, baseline, paint
+            )
         }
 
         // Placement magnifier: while a point is selected (tap-to-

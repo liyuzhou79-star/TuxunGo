@@ -38,28 +38,211 @@ object AnalysisMath {
     }
 
     /**
-     * True when the AI considers the game effectively decided — the
-     * 「绝」 mark on the top move. Deliberately strict, so it stays
-     * rare: the win rate must be beyond 99% for one side, the score
-     * lead at least 10 points, the game past its opening stretch
-     * (a sixth of the board's points played) and the position no
-     * longer wide open (at most four fifths of the points still
-     * empty) — in practice this lands in the endgame, when the
-     * remaining moves cannot plausibly swing the lead.
+     * True when the game is beyond rescue — the 「绝」 call. Two gates,
+     * both from the user's own definition of the word:
+     *  1. The engine's win rate for the leading side is at least
+     *     99.4% (his threshold — high enough that the mark stays rare
+     *     and meaningful).
+     *  2. The trailing side cannot come back even in the best case,
+     *     either because the lead exceeds every empty point still on
+     *     the board (win them all and you still lose — the "lock"), or
+     *     because no large connected unsettled region remains where a
+     *     swing could hide (largest undecided region at most
+     *     [DECIDED_REGION_MAX] points).
+     * The old stage gates (moves played, empty share) are gone: the
+     * lock condition already rules the opening out, because an early
+     * lead can never exceed the hundreds of empty points left.
      */
     fun isDecided(
         winrateBlack: Double,
         scoreLeadBlack: Double,
-        movesPlayed: Int,
         emptyPoints: Int,
-        area: Int
+        largestUndecidedRegion: Int
     ): Boolean {
-        if (area <= 0) return false
-        if (winrateBlack < 0.99 && winrateBlack > 0.01) return false
-        if (kotlin.math.abs(scoreLeadBlack) < 10.0) return false
-        if (movesPlayed < area / 6) return false
-        if (emptyPoints > area * 4 / 5) return false
-        return true
+        val leaderWinrate = maxOf(winrateBlack, 1.0 - winrateBlack)
+        if (leaderWinrate < 0.994) return false
+        if (kotlin.math.abs(scoreLeadBlack) > emptyPoints) return true
+        return largestUndecidedRegion <= DECIDED_REGION_MAX
+    }
+
+    /** Largest undecided empty region that still counts as "no big
+     *  open ground left" for the 「绝」 call. */
+    const val DECIDED_REGION_MAX = 12
+
+    /**
+     * Size of the largest 4-connected region of empty points whose
+     * ownership is still undecided (|ownership| below 0.5). A big
+     * value means a large unsettled area remains — a capturing race,
+     * an invasion target, an unformed moyo — where the game can
+     * still swing. [isEmpty] and [ownershipBlack] are both indexed
+     * y * width + x.
+     */
+    fun largestUndecidedRegion(
+        ownershipBlack: DoubleArray,
+        isEmpty: BooleanArray,
+        width: Int,
+        height: Int
+    ): Int {
+        if (width <= 0 || height <= 0) return 0
+        val n = width * height
+        if (ownershipBlack.size < n || isEmpty.size < n) return 0
+        val seen = BooleanArray(n)
+        var best = 0
+        val stack = ArrayDeque<Int>()
+        for (start in 0 until n) {
+            if (seen[start] || !isEmpty[start] ||
+                kotlin.math.abs(ownershipBlack[start]) >= 0.5
+            ) {
+                continue
+            }
+            var size = 0
+            seen[start] = true
+            stack.addLast(start)
+            while (stack.isNotEmpty()) {
+                val cur = stack.removeLast()
+                size++
+                val cx = cur % width
+                val cy = cur / width
+                val neighbours = intArrayOf(
+                    if (cx > 0) cur - 1 else -1,
+                    if (cx < width - 1) cur + 1 else -1,
+                    if (cy > 0) cur - width else -1,
+                    if (cy < height - 1) cur + width else -1
+                )
+                for (nb in neighbours) {
+                    if (nb < 0 || seen[nb] || !isEmpty[nb] ||
+                        kotlin.math.abs(ownershipBlack[nb]) >= 0.5
+                    ) {
+                        continue
+                    }
+                    seen[nb] = true
+                    stack.addLast(nb)
+                }
+            }
+            if (size > best) best = size
+        }
+        return best
+    }
+
+    /**
+     * Share of empty points whose ownership is still undecided
+     * (|ownership| below 0.5), 0..1. High values mean the position
+     * has unsettled fights — used as a safety gate for deliberate
+     * blunders (never blunder into an unsettled position).
+     */
+    fun unclearShare(
+        ownershipBlack: DoubleArray,
+        isEmpty: BooleanArray
+    ): Double {
+        var empty = 0
+        var unclear = 0
+        val n = minOf(ownershipBlack.size, isEmpty.size)
+        for (i in 0 until n) {
+            if (!isEmpty[i]) continue
+            empty++
+            if (kotlin.math.abs(ownershipBlack[i]) < 0.5) unclear++
+        }
+        return if (empty == 0) 0.0 else unclear.toDouble() / empty
+    }
+
+    /**
+     * Indices where a win-rate series crosses 50% — the "五五开"
+     * turning points of a game. Returns the index AFTER the crossing
+     * (the first turn on the new side). A value sitting exactly on
+     * 0.5 counts as belonging to neither side, so a series that
+     * touches 0.5 and turns back does not register.
+     */
+    fun winrateCrossings(winrates: List<Double>): List<Int> {
+        val out = ArrayList<Int>()
+        var prevSign = 0
+        for (i in winrates.indices) {
+            val sign = when {
+                winrates[i] > 0.5 -> 1
+                winrates[i] < 0.5 -> -1
+                else -> 0
+            }
+            if (sign != 0) {
+                if (prevSign != 0 && sign != prevSign) out.add(i)
+                prevSign = sign
+            }
+        }
+        return out
+    }
+
+    // ---- Deliberate blunders -------------------------------------
+    // Safety rails (all from the user's rules): only from a safely
+    // won position, the mistake must be obvious yet never throw the
+    // win away, and never while big unsettled ground remains where a
+    // dragon could be at stake.
+
+    /** Root position must be at least this good for the mover. */
+    const val BLUNDER_MIN_WINRATE = 0.90
+
+    /** Root lead (mover's perspective) required before blundering. */
+    const val BLUNDER_MIN_LEAD = 15.0
+
+    /** After the blunder the mover must still be at least this good. */
+    const val BLUNDER_FLOOR_WINRATE = 0.80
+
+    /** After the blunder this lead (mover's perspective) must remain. */
+    const val BLUNDER_FLOOR_LEAD = 10.0
+
+    /** The blunder must cost at least this much win rate, so it
+     *  reads as an obvious mistake, not a quiet inaccuracy. */
+    const val BLUNDER_MIN_DROP = 0.05
+
+    /** Never blunder when more than this share of the empty points
+     *  is still undecided (unsettled fights / dragons at stake). */
+    const val BLUNDER_MAX_UNCLEAR = 0.25
+
+    /**
+     * Picks the deliberate blunder for the side to move, or null when
+     * no candidate qualifies. Among the qualifying candidates (never
+     * the engine's best, never a pass) the one with the LARGEST win
+     * rate drop that still respects the floors wins — the most
+     * obvious mistake that cannot lose the game. All inputs are from
+     * Black's perspective except [sideToMove]; conversion happens
+     * inside.
+     */
+    fun pickBlunder(
+        rootWinrateBlack: Double,
+        rootScoreLeadBlack: Double,
+        candidates: List<Candidate>,
+        sideToMove: Stone,
+        unclearShare: Double
+    ): Candidate? {
+        if (unclearShare > BLUNDER_MAX_UNCLEAR) return null
+        val sign = if (sideToMove == Stone.BLACK) 1.0 else -1.0
+        val rootWr = if (sideToMove == Stone.BLACK) {
+            rootWinrateBlack
+        } else {
+            1.0 - rootWinrateBlack
+        }
+        val rootLead = sign * rootScoreLeadBlack
+        if (rootWr < BLUNDER_MIN_WINRATE || rootLead < BLUNDER_MIN_LEAD) {
+            return null
+        }
+        var best: Candidate? = null
+        var bestDrop = 0.0
+        for (cand in candidates.drop(1)) {
+            if (cand.move == null) continue
+            val wr = if (sideToMove == Stone.BLACK) {
+                cand.winrateBlack
+            } else {
+                1.0 - cand.winrateBlack
+            }
+            val lead = sign * cand.scoreLeadBlack
+            val drop = rootWr - wr
+            if (drop < BLUNDER_MIN_DROP) continue
+            if (wr < BLUNDER_FLOOR_WINRATE || lead < BLUNDER_FLOOR_LEAD) {
+                continue
+            }
+            if (drop > bestDrop) {
+                best = cand
+                bestDrop = drop
+            }
+        }
+        return best
     }
 
     /** Plausible range for the final score, from the engine's score

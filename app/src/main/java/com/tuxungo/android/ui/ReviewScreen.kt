@@ -48,6 +48,7 @@ import com.tuxungo.android.LibraryStore
 import com.tuxungo.android.PositionShare
 import com.tuxungo.android.SettingsStore
 import com.tuxungo.android.engine.AnalysisEngine
+import com.tuxungo.android.engine.AnalysisMath
 import com.tuxungo.android.engine.EngineAssets
 import com.tuxungo.android.engine.KataEngine
 import com.tuxungo.android.engine.MarkKind
@@ -391,6 +392,33 @@ fun ReviewScreen(
 
     val replayGame = remember(ply, current.id) { buildGame(ply) }
 
+    // The move that sealed this game (「绝」), re-derived from the
+    // recorded stats with the score-lock rule; its stone carries
+    // the calligraphy badge whenever the review is at or past it.
+    val decidedTurn = remember(turns, current.id) {
+        val t = turns
+        if (t == null || t.size != current.moves.size + 1) {
+            null
+        } else {
+            val emptyByTurn = IntArray(t.size)
+            for (p in 0..current.moves.size) {
+                val g = buildGame(p)
+                var c = 0
+                for (i in 0 until current.size.area) {
+                    if (g.stoneAt(
+                            i % current.size.width,
+                            i / current.size.width
+                        ) == null
+                    ) {
+                        c++
+                    }
+                }
+                emptyByTurn[p] = c
+            }
+            ReviewMath.firstDecidedTurn(t, emptyByTurn)
+        }
+    }
+
     fun enterBranch() {
         branchGame = buildGame(ply)
         branchBasePly = ply
@@ -637,6 +665,12 @@ fun ReviewScreen(
                 },
                 preview = null,
                 markedDead = emptySet(),
+                decidedStone = if (decidedTurn != null && ply >= decidedTurn) {
+                    current.moves.getOrNull(decidedTurn - 1)
+                        ?.takeIf { !it.isPass }
+                } else {
+                    null
+                },
                 flipped = perspective == Stone.WHITE
             ) { _, _ -> }
             }
@@ -795,6 +829,13 @@ fun ReviewScreen(
                         )
                     }
                 }
+                if (turns?.getOrNull(ply + 1)?.deliberate == true) {
+                    Text(
+                        "这一手是 AI 故意失误：稳赢时故意放的，已专门标记，不算恶手",
+                        fontSize = 13.sp, color = Color(0xFFEF6C00)
+                    )
+                }
+                }
             }
         }
 
@@ -889,7 +930,9 @@ fun ReviewScreen(
                     showLead = showLead,
                     onSeek = { autoPlaying = false; scrubTo(it) }
                 )
-                ChartLegend()
+                ChartLegend(
+                    showDeliberate = marks.any { it.kind == MarkKind.DELIBERATE }
+                )
                 val summary = ReviewMath.gameSummary(
                     current.moves, turns!!, current.size
                 )
@@ -942,6 +985,21 @@ fun ReviewScreen(
                                             .padding(vertical = 2.dp)
                                     )
                                 }
+                            }
+                            for (dm in summary.deliberateMoves) {
+                                Text(
+                                    text = "AI 故意失误：第 $dm 手" +
+                                        "（${if (current.moves[dm - 1].stone == Stone.BLACK) "黑" else "白"}" +
+                                        "）——这一手是 AI 稳赢时故意放的，不算恶手（点此跳转）",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFEF6C00),
+                                    modifier = Modifier
+                                        .clickable {
+                                            autoPlaying = false
+                                            scrubTo(dm - 1)
+                                        }
+                                        .padding(vertical = 2.dp)
+                                )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -1040,6 +1098,7 @@ fun ReviewScreen(
                     MarkKind.BLUNDER -> "恶手" to Color(0xFFC62828)
                     MarkKind.BRILLIANT -> "妙手" to Color(0xFF2E7D32)
                     MarkKind.KEY -> "关键手" to Color(0xFF6A1B9A)
+                    MarkKind.DELIBERATE -> "故意失误" to Color(0xFFEF6C00)
                 }
                 Row(
                     modifier = Modifier
@@ -1081,6 +1140,7 @@ fun ReviewScreen(
                                     MarkKind.BLUNDER -> "恶手"
                                     MarkKind.BRILLIANT -> "妙手"
                                     MarkKind.KEY -> "关键手"
+                                    MarkKind.DELIBERATE -> "AI 故意失误"
                                 }
                                 sb.append(" 【").append(label).append(" ")
                                     .append(fmtDelta(mark.deltaPercent)).append("】")
@@ -1173,6 +1233,7 @@ fun WinrateChart(
     ply: Int,
     marks: List<MoveMark>,
     showLead: Boolean = true,
+    dualWinrate: Boolean = false,
     onSeek: (Int) -> Unit
 ) {
     val total = (turns.size - 1).coerceAtLeast(1)
@@ -1181,6 +1242,10 @@ fun WinrateChart(
     val greenFill = Color(0xFF43A047).copy(alpha = 0.30f)
     val gridColor = Color.Gray.copy(alpha = 0.35f)
     val cursorColor = Color(0xFF6A1B9A)
+    // In dual mode both win-rate lines are drawn (Black's dark,
+    // White's mirrored), so the win-rate geometry always follows
+    // Black's perspective and [perspective] only steers the lead.
+    val wrPerspective = if (dualWinrate) Stone.BLACK else perspective
 
     fun seek(x: Float, w: Float) {
         if (w <= 0f) return
@@ -1227,7 +1292,7 @@ fun WinrateChart(
             val path = Path()
             path.moveTo(xOf(runStart), yWr(0.75))
             for (t in runStart..endTurn) {
-                path.lineTo(xOf(t), yWr(ReviewMath.winrateFor(turns[t], perspective)))
+                path.lineTo(xOf(t), yWr(ReviewMath.winrateFor(turns[t], wrPerspective)))
             }
             path.lineTo(xOf(endTurn), yWr(0.75))
             path.close()
@@ -1235,7 +1300,7 @@ fun WinrateChart(
             runStart = -1
         }
         for (t in turns.indices) {
-            val above = ReviewMath.winrateFor(turns[t], perspective) >= 0.75
+            val above = ReviewMath.winrateFor(turns[t], wrPerspective) >= 0.75
             if (above && runStart < 0) runStart = t
             if (!above && runStart >= 0) flushRun(t - 1)
         }
@@ -1257,26 +1322,61 @@ fun WinrateChart(
             drawPath(leadPath, leadColor, style = Stroke(width = 2.5f))
         }
 
-        // Win-rate line.
-        val wrPath = Path()
-        for (t in turns.indices) {
-            val x = xOf(t)
-            val y = yWr(ReviewMath.winrateFor(turns[t], perspective))
-            if (t == 0) wrPath.moveTo(x, y) else wrPath.lineTo(x, y)
+        // Win-rate line(s). Dual mode draws both sides: White's
+        // mirrored line (grey halo under white) and Black's dark
+        // line, with dots where they cross at 50/50.
+        if (dualWinrate) {
+            val whitePath = Path()
+            for (t in turns.indices) {
+                val x = xOf(t)
+                val y = yWr(1.0 - ReviewMath.winrateFor(turns[t], Stone.BLACK))
+                if (t == 0) whitePath.moveTo(x, y) else whitePath.lineTo(x, y)
+            }
+            drawPath(
+                whitePath, Color(0xFF78909C).copy(alpha = 0.65f),
+                style = Stroke(width = 5.5f)
+            )
+            drawPath(whitePath, Color.White, style = Stroke(width = 3f))
+            val blackPath = Path()
+            for (t in turns.indices) {
+                val x = xOf(t)
+                val y = yWr(ReviewMath.winrateFor(turns[t], Stone.BLACK))
+                if (t == 0) blackPath.moveTo(x, y) else blackPath.lineTo(x, y)
+            }
+            drawPath(blackPath, Color(0xFF212121), style = Stroke(width = 3f))
+            val series = turns.map { ReviewMath.winrateFor(it, Stone.BLACK) }
+            for (ci in AnalysisMath.winrateCrossings(series)) {
+                drawCircle(
+                    Color(0xFF2E7D32), radius = 6f,
+                    center = Offset(xOf(ci), h / 2f)
+                )
+                drawCircle(
+                    Color.White, radius = 2.6f,
+                    center = Offset(xOf(ci), h / 2f)
+                )
+            }
+        } else {
+            val wrPath = Path()
+            for (t in turns.indices) {
+                val x = xOf(t)
+                val y = yWr(ReviewMath.winrateFor(turns[t], perspective))
+                if (t == 0) wrPath.moveTo(x, y) else wrPath.lineTo(x, y)
+            }
+            drawPath(wrPath, winColor, style = Stroke(width = 3f))
         }
-        drawPath(wrPath, winColor, style = Stroke(width = 3f))
 
         // Mark dots.
         for (mark in marks) {
             val t = mark.moveNumber.coerceIn(0, total)
             val center = Offset(
                 xOf(t),
-                yWr(ReviewMath.winrateFor(turns[t], perspective))
+                yWr(ReviewMath.winrateFor(turns[t], wrPerspective))
             )
             val (color, radius) = when (mark.kind) {
                 MarkKind.BLUNDER -> Color(0xFFC62828) to 6f
                 MarkKind.BRILLIANT -> Color(0xFF2E7D32) to 6f
                 MarkKind.KEY -> Color(0xFF6A1B9A) to 8f
+                MarkKind.DELIBERATE -> Color(0xFFEF6C00) to 6f
             }
             drawCircle(color = Color.White, radius = radius + 2f, center = center)
             drawCircle(color = color, radius = radius, center = center)
@@ -1288,7 +1388,7 @@ fun WinrateChart(
         drawLine(cursorColor, Offset(cx, 0f), Offset(cx, h), strokeWidth = 3f)
         val handle = Offset(
             cx,
-            yWr(ReviewMath.winrateFor(turns[ply.coerceIn(0, total)], perspective))
+            yWr(ReviewMath.winrateFor(turns[ply.coerceIn(0, total)], wrPerspective))
         )
         drawCircle(color = Color.White, radius = 10f, center = handle)
         drawCircle(color = cursorColor, radius = 7f, center = handle)
@@ -1297,7 +1397,7 @@ fun WinrateChart(
 
 /** Graphic legend for the chart: swatches first, words second. */
 @Composable
-private fun ChartLegend() {
+private fun ChartLegend(showDeliberate: Boolean = false) {
     Row(
         modifier = Modifier.padding(top = 6.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -1326,6 +1426,15 @@ private fun ChartLegend() {
                 .background(Color(0xFF6A1B9A), shape = androidx.compose.foundation.shape.CircleShape)
         )
         Text(" 当前手", fontSize = 11.sp, color = Color.Gray)
+        if (showDeliberate) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(10.dp)
+                    .background(Color(0xFFEF6C00), shape = androidx.compose.foundation.shape.CircleShape)
+            )
+            Text(" AI 故意失误", fontSize = 11.sp, color = Color.Gray)
+        }
     }
     Text(
         "按住曲线左右拖动，可以跳到任意一手",

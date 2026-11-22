@@ -197,4 +197,64 @@ class ReviewMathTest {
             ReviewMath.gameSummary(emptyList(), emptyList(), BoardSize(19, 19))
         )
     }
+
+    @Test
+    fun deliberateBlunderMarkedAsItselfNotBlunder() {
+        val moves = listOf(
+            Move(Stone.BLACK, 3, 3),
+            Move(Stone.WHITE, 4, 4)
+        )
+        // Move 2 (White) drops White's win rate 50% -> 30%, but the
+        // stat it produced is flagged deliberate.
+        val turns = listOf(
+            stat(0, 0.50),
+            stat(1, 0.50),
+            TurnStat(2, 0.70, 0.0, null, false, 0.0, "", deliberate = true)
+        )
+        val marks = ReviewMath.marks(moves, turns)
+        assertTrue(marks.any { it.moveNumber == 2 && it.kind == MarkKind.DELIBERATE })
+        assertTrue(marks.none { it.moveNumber == 2 && it.kind == MarkKind.BLUNDER })
+        val s = ReviewMath.gameSummary(moves, turns, BoardSize(19, 19))!!
+        assertEquals(listOf(2), s.deliberateMoves)
+        assertEquals(0, s.whiteBlunders)
+        assertTrue(s.blunders.isEmpty())
+    }
+
+    @Test
+    fun deliberateFlagSurvivesEncodeRoundTrip() {
+        val turns = listOf(
+            stat(0, 0.5),
+            TurnStat(1, 0.6, 3.0, null, false, 0.0, "Q16", deliberate = true)
+        )
+        val dense = ReviewMath.decodeTurns(ReviewMath.encodeTurns(turns))
+        assertEquals(false, dense[0].deliberate)
+        assertEquals(true, dense[1].deliberate)
+        val sparse = ReviewMath.decodeSparse(
+            ReviewMath.encodeSparse(mapOf(1 to turns[1]))
+        )
+        assertEquals(true, sparse[1]?.deliberate)
+        // Old-format strings (no 7th field) decode as not deliberate.
+        val legacy = ReviewMath.decodeTurns("0.500,0.000,-1,-1,0.000,")
+        assertEquals(false, legacy[0].deliberate)
+    }
+
+    @Test
+    fun firstDecidedTurnUsesLockRule() {
+        fun st(turn: Int, wr: Double, lead: Double) =
+            TurnStat(turn, wr, lead, null, false)
+        val turns = listOf(
+            st(0, 0.5, 0.0),
+            st(1, 0.90, 8.0),
+            st(2, 0.996, 30.0), // lead 30 > 25 empty points: locked
+            st(3, 0.997, 31.0)
+        )
+        val empty = intArrayOf(100, 90, 25, 24)
+        assertEquals(2, ReviewMath.firstDecidedTurn(turns, empty))
+        // Win rate short of 99.4% never locks.
+        val turns2 = listOf(st(0, 0.5, 0.0), st(1, 0.99, 40.0))
+        assertNull(ReviewMath.firstDecidedTurn(turns2, intArrayOf(100, 10)))
+        // Lead not exceeding the empty points never locks.
+        val turns3 = listOf(st(0, 0.5, 0.0), st(1, 0.999, 20.0))
+        assertNull(ReviewMath.firstDecidedTurn(turns3, intArrayOf(100, 25)))
+    }
 }

@@ -23,10 +23,19 @@ data class TurnStat(
      * continuation as ghost stones in review. "" when unknown
      * (stats recorded before this was tracked).
      */
-    val bestPv: String = ""
+    val bestPv: String = "",
+    /**
+     * The move that PRODUCED this position was a deliberate blunder:
+     * the full-strength AI, safely winning, chose a clearly weaker
+     * move on purpose (the user's 「故意恶手」 feature, off by
+     * default). Marked so review can show it as a deliberate gift
+     * instead of an ordinary blunder. False for stats recorded
+     * before this was tracked.
+     */
+    val deliberate: Boolean = false
 )
 
-enum class MarkKind { BLUNDER, BRILLIANT, KEY }
+enum class MarkKind { BLUNDER, BRILLIANT, KEY, DELIBERATE }
 
 data class MoveMark(
     val moveNumber: Int, // 1-based
@@ -85,6 +94,10 @@ object ReviewMath {
                 best != null && best.x == played.x && best.y == played.y
             }
             when {
+                // A deliberate blunder is marked as itself, never as
+                // an ordinary blunder: the AI meant to give that back.
+                turns[i + 1].deliberate ->
+                    out.add(MoveMark(i + 1, MarkKind.DELIBERATE, delta))
                 delta <= -BLUNDER_DROP -> out.add(MoveMark(i + 1, MarkKind.BLUNDER, delta))
                 matchesTop && delta >= -2.0 && turns[i].bestGap >= BRILLIANT_GAP ->
                     out.add(MoveMark(i + 1, MarkKind.BRILLIANT, delta))
@@ -124,7 +137,9 @@ object ReviewMath {
         val blunders: List<BlunderLine>,
         val blackBlunders: Int,
         val whiteBlunders: Int,
-        val brilliantCount: Int
+        val brilliantCount: Int,
+        /** Move numbers the AI played as deliberate blunders. */
+        val deliberateMoves: List<Int> = emptyList()
     )
 
     /**
@@ -177,8 +192,40 @@ object ReviewMath {
             whiteBlunders = blunderMarks.count {
                 moves[it.moveNumber - 1].stone == Stone.WHITE
             },
-            brilliantCount = allMarks.count { it.kind == MarkKind.BRILLIANT }
+            brilliantCount = allMarks.count { it.kind == MarkKind.BRILLIANT },
+            deliberateMoves = allMarks
+                .filter { it.kind == MarkKind.DELIBERATE }
+                .map { it.moveNumber }
         )
+    }
+
+    /**
+     * The first turn (== move number) whose position the engine
+     * already considered beyond rescue, using the score-lock half of
+     * the 「绝」 rule only: win rate at least 99.4% and a lead larger
+     * than every empty point then on the board. (The region half
+     * needs ownership arrays, which recorded stats do not keep.)
+     * [emptyByTurn] is indexed by turn. Null when the game was never
+     * locked. Used to pin the persistent 「绝」 badge on the sealing
+     * stone in review.
+     */
+    fun firstDecidedTurn(turns: List<TurnStat>, emptyByTurn: IntArray): Int? {
+        for (t in 1 until turns.size) {
+            val s = turns[t]
+            val empty = if (t < emptyByTurn.size) {
+                emptyByTurn[t]
+            } else {
+                Int.MAX_VALUE
+            }
+            if (AnalysisMath.isDecided(
+                    s.winrateBlack, s.scoreLeadBlack,
+                    empty, Int.MAX_VALUE
+                )
+            ) {
+                return t
+            }
+        }
+        return null
     }
 
     /** "wr,lead,bestX,bestY,gap;..." — best is -1,-1 for pass / unknown. */
@@ -186,7 +233,11 @@ object ReviewMath {
         turns.joinToString(";") { t ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
+            val base = "${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)}," +
+                "$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
+            // 7th field, present only when set, so old files and old
+            // readers are unaffected.
+            if (t.deliberate) "$base,1" else base
         }
 
     fun decodeTurns(text: String): List<TurnStat> {
@@ -202,7 +253,8 @@ object ReviewMath {
                 bestMove = null,
                 bestIsPass = bx < 0,
                 bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                bestPv = f.getOrNull(5) ?: ""
+                bestPv = f.getOrNull(5) ?: "",
+                deliberate = f.getOrNull(6) == "1"
             ).let { base ->
                 // bestMove's stone is not stored; marks() only needs its
                 // coordinates, so park them on a throwaway Move.
@@ -226,7 +278,9 @@ object ReviewMath {
         stats.entries.sortedBy { it.key }.joinToString(";") { (turn, t) ->
             val bx = t.bestMove?.x ?: -1
             val by = t.bestMove?.y ?: -1
-            "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)},$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
+            val base = "$turn=${fmt(t.winrateBlack)},${fmt(t.scoreLeadBlack)}," +
+                "$bx,$by,${fmt(t.bestGap)},${t.bestPv}"
+            if (t.deliberate) "$base,1" else base
         }
 
     /** Parses the sparse form; also tolerates the dense form. */
@@ -256,7 +310,8 @@ object ReviewMath {
                 bestMove = if (bx >= 0 && by >= 0) Move(Stone.BLACK, bx, by) else null,
                 bestIsPass = bx < 0,
                 bestGap = f.getOrNull(4)?.toDoubleOrNull() ?: 0.0,
-                bestPv = f.getOrNull(5) ?: ""
+                bestPv = f.getOrNull(5) ?: "",
+                deliberate = f.getOrNull(6) == "1"
             )
         }
         return out

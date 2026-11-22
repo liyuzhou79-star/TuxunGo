@@ -35,6 +35,12 @@ data class AppSettings(
     val showMoveNumbers: Boolean = false,
     /** Smart referee: auto-score a fully settled game. */
     val refereeEnabled: Boolean = false,
+    /**
+     * Deliberate blunders: a full-strength AI that is safely winning
+     * occasionally (1-2 times per game) plays a clearly weaker move on
+     * purpose, marked as deliberate in the record. Off by default.
+     */
+    val aiBlunders: Boolean = false,
     /** Save the final position image to the gallery when a game ends. */
     val autoSaveImage: Boolean = false,
     // ---- Position judgment (形势判断) tuning ----
@@ -171,6 +177,7 @@ object SettingsStore {
             keepScreenOn = p.getBoolean("keepScreenOn", false),
             showMoveNumbers = p.getBoolean("showMoveNumbers", false),
             refereeEnabled = p.getBoolean("refereeEnabled", false),
+            aiBlunders = p.getBoolean("aiBlunders", false),
             autoSaveImage = p.getBoolean("autoSaveImage", false),
             judgeVisits = p.getInt("judgeVisits", 800),
             territorySpread = p.getFloat("territorySpread", 0.30f),
@@ -203,6 +210,7 @@ object SettingsStore {
             .putBoolean("keepScreenOn", s.keepScreenOn)
             .putBoolean("showMoveNumbers", s.showMoveNumbers)
             .putBoolean("refereeEnabled", s.refereeEnabled)
+            .putBoolean("aiBlunders", s.aiBlunders)
             .putBoolean("autoSaveImage", s.autoSaveImage)
             .putInt("judgeVisits", s.judgeVisits)
             .putFloat("territorySpread", s.territorySpread)

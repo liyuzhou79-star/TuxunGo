@@ -26,3 +26,12 @@ Jenelle van Heerden, published by
 1.0 Universal public domain dedication. They were resized,
 recompressed and (for the beige variant) recoloured for use as a
 board surface; the grid and stones are drawn by the app itself.
+
+## Calligraphy font (「绝」 badge)
+
+The calligraphy 「绝」 shown on the sealing move's stone is set in
+[Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng),
+a Chinese calligraphy typeface by the Ma Shan Zheng Project
+Authors, licensed under the SIL Open Font License 1.1. Only the
+single 「绝」 glyph is bundled (`res/font/jue_calligraphy.ttf`,
+subset with fonttools); the full font is not included.

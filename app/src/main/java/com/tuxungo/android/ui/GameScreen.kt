@@ -223,6 +223,21 @@ fun GameScreen(
     var resignRefusedAtBlack by remember { mutableIntStateOf(-100) }
     var resignRefusedAtWhite by remember { mutableIntStateOf(-100) }
     var refereeEnabled by remember { mutableStateOf(settings.refereeEnabled) }
+
+    // Deliberate-blunder state (the user's 「故意恶手」 feature):
+    // the live setting, which move numbers were deliberate, how
+    // many have been spent (restored games inherit the count from
+    // their recorded stats), this game's random quota of 1-2, and a
+    // re-entry guard for the pre-move safety analysis.
+    var aiBlunders by remember { mutableStateOf(settings.aiBlunders) }
+    val deliberateMoves = remember {
+        androidx.compose.runtime.mutableStateListOf<Int>()
+    }
+    var blundersUsed by remember {
+        mutableStateOf(initialStats.values.count { it.deliberate })
+    }
+    var blunderQuota by remember { mutableStateOf((1..2).random()) }
+    var blunderChecking by remember { mutableStateOf(false) }
     var settledStreak by remember { mutableIntStateOf(0) }
     var refereeNotice by remember {
         mutableStateOf<Pair<String, Set<Int>>?>(null)
@@ -314,6 +329,7 @@ fun GameScreen(
 
     fun cancelAi() {
         aiToken++
+        blunderChecking = false
         if (aiThinking) {
             aiThinking = false
             engineStatus = ""
@@ -426,8 +442,115 @@ fun GameScreen(
         if (aiControls(stone)) ensureEngine(stone)
     }
 
-    /** Syncs the position to the GTP engine and applies its move for the side to move. */
+    // Base position for the analysis engine.
+    val baseStones: List<Move> = when {
+        config.customStones.isNotEmpty() -> config.customStones
+        config.handicap > 0 -> game.handicapStones.map { (x, y) -> Move(Stone.BLACK, x, y) }
+        else -> emptyList()
+    }
+    val basePlayer: Stone = when {
+        config.customStones.isNotEmpty() -> config.startPlayer
+        config.handicap > 0 -> Stone.WHITE
+        else -> Stone.BLACK
+    }
+
+    /**
+     * Entry point for an AI turn. When the deliberate-blunder
+     * feature is on and this side is a full-strength AI, a quick
+     * safety analysis runs first: only from a safely won, settled
+     * position may the AI spend one of this game's 1-2 deliberate
+     * blunders (see AnalysisMath.pickBlunder for the rails). Every
+     * other case — and every failed check — falls through to the
+     * normal engine move.
+     */
     fun aiMoveNow() {
+        // A blunder safety check is already running for this turn.
+        if (blunderChecking) return
+        val moveStone = game.current
+        val cfgNow = sideCfg(moveStone)
+        val eligible = aiBlunders &&
+            cfgNow.rank == "max" && !cfgNow.humanLike &&
+            blundersUsed < blunderQuota &&
+            game.moves.size >= 12 && !game.finished && !aiThinking &&
+            !blunderChecking && resignProposal == null &&
+            aiControls(moveStone)
+        if (!eligible) {
+            genmoveNow()
+            return
+        }
+        val eng = analysisEngine
+        if (eng == null || !eng.isAlive) {
+            genmoveNow()
+            return
+        }
+        blunderChecking = true
+        engineStatus = "AI 思考中…"
+        val myToken = aiToken
+        val movesSnapshot = game.moves.toList()
+        val sizeSnapshot = game.size
+        val komiSnapshot = game.komi
+        analysisRunner.submit({
+            eng.analyze(
+                size = sizeSnapshot,
+                komi = komiSnapshot,
+                initialStones = baseStones,
+                initialPlayer = basePlayer,
+                moves = movesSnapshot,
+                sideToMove = moveStone,
+                maxVisits = 250,
+                includeHuman = false
+            )
+        }) { result ->
+            blunderChecking = false
+            if (myToken != aiToken) return@submit
+            val pick = result.getOrNull()?.let { res ->
+                val w = sizeSnapshot.width
+                // Emptiness from the live game: the snapshot was
+                // taken from it and the token guard means no move
+                // has been applied since.
+                val emptyArr = BooleanArray(sizeSnapshot.area) { i ->
+                    game.stoneAt(i % w, i / w) == null
+                }
+                val unclear = AnalysisMath.unclearShare(
+                    res.ownershipBlack, emptyArr
+                )
+                if (kotlin.random.Random.nextFloat() < 0.45f) {
+                    AnalysisMath.pickBlunder(
+                        res.rootWinrateBlack, res.rootScoreLeadBlack,
+                        res.candidates, moveStone, unclear
+                    )
+                } else {
+                    null
+                }
+            }
+            val mv = pick?.move
+            // The position must be exactly the one that was
+            // analyzed — anything else (undo, takeover) goes back
+            // to the normal engine path, which re-syncs first.
+            val positionUnchanged = game.moves.size == movesSnapshot.size &&
+                game.current == moveStone
+            if (mv != null && !game.finished && positionUnchanged) {
+                val capsBefore = totalCaptures()
+                if (game.play(mv.x, mv.y)) {
+                    version++
+                    resultDismissed = false
+                    pendingPoint = null
+                    blundersUsed++
+                    deliberateMoves.add(game.moves.size)
+                    engineStatus = ""
+                    onStonePlayed(totalCaptures() > capsBefore)
+                    clearAnalysis()
+                } else {
+                    genmoveNow()
+                }
+            } else {
+                genmoveNow()
+            }
+        }
+    }
+
+    /** Syncs the position to the GTP engine and applies its move for the side to move. */
+    fun genmoveNow() {
         val moveStone = game.current
         val eng = engineFor(moveStone) ?: return
         if (game.finished || aiThinking) return
@@ -525,18 +648,6 @@ fun GameScreen(
         }
     }
 
-    // Base position for the analysis engine.
-    val baseStones: List<Move> = when {
-        config.customStones.isNotEmpty() -> config.customStones
-        config.handicap > 0 -> game.handicapStones.map { (x, y) -> Move(Stone.BLACK, x, y) }
-        else -> emptyList()
-    }
-    val basePlayer: Stone = when {
-        config.customStones.isNotEmpty() -> config.startPlayer
-        config.handicap > 0 -> Stone.WHITE
-        else -> Stone.BLACK
-    }
-
     fun cancelAnalysis() {
         analysisToken++
         analyzing = false
@@ -562,6 +673,63 @@ fun GameScreen(
             .apply { putAll(initialStats) }
     }
 
+    // The move that sealed the game (「绝」): once an analysis of
+    // the current position first calls the game decided, that
+    // move's stone keeps the calligraphy badge for the rest of the
+    // game. Session-only; a restored game re-derives it from its
+    // recorded stats (see the effect below).
+    var decidedMove by remember { mutableStateOf<Int?>(null) }
+
+    // Live detection: the current position's analysis calls the
+    // game decided for the first time -> the last move sealed it.
+    LaunchedEffect(analysis, analysisKey, game.moves.size) {
+        if (decidedMove == null && game.moves.isNotEmpty() &&
+            analysis != null && analysisKey == game.moves.size &&
+            decidedFor(analysis, game)
+        ) {
+            decidedMove = game.moves.size
+        }
+    }
+    // Undoing back past the sealing move clears the badge.
+    LaunchedEffect(game.moves.size) {
+        val dm = decidedMove
+        if (dm != null && dm > game.moves.size) decidedMove = null
+    }
+    // Restored game: re-derive the sealing move from the recorded
+    // stats with the score-lock rule, replaying the game once to
+    // count the empty points at every turn.
+    LaunchedEffect(Unit) {
+        if (decidedMove != null || initialStats.isEmpty()) return@LaunchedEffect
+        val dense = (0..game.moves.size).map { liveStats[it] }
+        if (dense.any { it == null }) return@LaunchedEffect
+        val turns = dense.filterNotNull()
+        val replay = GoGame(game.size, game.komi)
+        when {
+            config.customStones.isNotEmpty() ->
+                replay.loadPosition(config.customStones, config.startPlayer)
+            config.handicap > 0 -> replay.loadPosition(
+                game.handicapStones.map { (x, y) -> Move(Stone.BLACK, x, y) },
+                Stone.WHITE
+            )
+        }
+        fun countEmpty(g: GoGame): Int {
+            var c = 0
+            for (i in 0 until g.size.area) {
+                if (g.stoneAt(i % g.size.width, i / g.size.width) == null) c++
+            }
+            return c
+        }
+        val emptyByTurn = IntArray(game.moves.size + 1)
+        emptyByTurn[0] = countEmpty(replay)
+        for ((i, mv) in game.moves.withIndex()) {
+            if (mv.isPass) replay.pass() else replay.play(mv.x, mv.y)
+            emptyByTurn[i + 1] = countEmpty(replay)
+        }
+        decidedMove = com.tuxungo.android.engine.ReviewMath.firstDecidedTurn(
+            turns, emptyByTurn
+        )
+    }
+
     fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
         val first = res.candidates.firstOrNull()
         val second = res.candidates.getOrNull(1)
@@ -584,7 +752,8 @@ fun GameScreen(
                         KataEngine.toVertex(m, game.size)
                     }
                 }
-            } ?: ""
+            } ?: "",
+            deliberate = moveCount in deliberateMoves
         )
         if (overwrite || !liveStats.containsKey(moveCount)) {
             liveStats[moveCount] = stat
@@ -1849,8 +2018,11 @@ fun GameScreen(
                 humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
                     humanMarksOf(fsA)
                 } else emptyList(),
-                decidedFirst = !focusMode && !judgmentActive && !scoringMode &&
-                    analysisKey == game.moves.size && decidedFor(fsA, game),
+                decidedStone = if (!focusMode) {
+                    decidedStoneOf(game, decidedMove)
+                } else {
+                    null
+                },
                 ownership = fsOwnership,
                 pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
@@ -2347,7 +2519,11 @@ fun GameScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         if (!focusMode && liveStats.size >= 4) {
-            if (trendHidden) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = trendHidden,
+                enter = androidx.compose.animation.fadeIn(tween(150)),
+                exit = androidx.compose.animation.fadeOut(tween(120))
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -2358,7 +2534,14 @@ fun GameScreen(
                         Text("显示", fontSize = 12.sp)
                     }
                 }
-            } else {
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !trendHidden,
+                enter = androidx.compose.animation.expandVertically(tween(220)) +
+                    androidx.compose.animation.fadeIn(tween(180)),
+                exit = androidx.compose.animation.shrinkVertically(tween(180)) +
+                    androidx.compose.animation.fadeOut(tween(120))
+            ) {
                 MiniTrend(
                     stats = liveStats.values.sortedBy { it.turn },
                     onHide = { trendHidden = true },
@@ -2395,8 +2578,11 @@ fun GameScreen(
             humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
                 humanMarksOf(currentAnalysis)
             } else emptyList(),
-            decidedFirst = !focusMode && !judgmentActive && !scoringMode &&
-                analysisKey == game.moves.size && decidedFor(currentAnalysis, game),
+            decidedStone = if (!focusMode) {
+                decidedStoneOf(game, decidedMove)
+            } else {
+                null
+            },
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
@@ -2693,7 +2879,7 @@ fun GameScreen(
                             selected = autoSide == "both",
                             onClick = {
                                 autoSide = "both"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "both", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "both", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled, aiBlunders = aiBlunders))
                             },
                             label = { Text("双方") }
                         )
@@ -2701,7 +2887,7 @@ fun GameScreen(
                             selected = autoSide == "B",
                             onClick = {
                                 autoSide = "B"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "B", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "B", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled, aiBlunders = aiBlunders))
                             },
                             label = { Text("只黑") }
                         )
@@ -2709,7 +2895,7 @@ fun GameScreen(
                             selected = autoSide == "W",
                             onClick = {
                                 autoSide = "W"
-                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "W", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled))
+                                SettingsStore.save(context, settings.copy(autoAnalysisSide = "W", humanMarks = humanMarks, topThreeOnly = topThreeOnly, refereeEnabled = refereeEnabled, aiBlunders = aiBlunders))
                             },
                             label = { Text("只白") }
                         )
@@ -2797,9 +2983,14 @@ fun GameScreen(
                         fontSize = 13.sp, color = Color(0xFF2F7CF6)
                     )
                 }
-                if (decidedNow) {
+                if (decidedNow || decidedMove != null) {
                     Text(
-                        text = "一选已标「绝」：AI 判断大局已定，这手下完可以提议双方数子定胜负。",
+                        text = if (decidedMove != null) {
+                            "已在第 ${decidedMove} 手定局（绝）：那手的子上有个「绝」字——" +
+                                "当时领先的程度，对方把剩下的空全占了也翻不了盘。"
+                        } else {
+                            "「绝」：AI 判断大局已定，这手下完可以提议双方数子定胜负。"
+                        },
                         fontSize = 13.sp, color = Color(0xFFC62828)
                     )
                 }
@@ -3237,7 +3428,8 @@ fun GameScreen(
                                         refereeEnabled = it,
                                         humanMarks = humanMarks,
                                         topThreeOnly = topThreeOnly,
-                                        autoAnalysisSide = autoSide
+                                        autoAnalysisSide = autoSide,
+                                        aiBlunders = aiBlunders
                                     )
                                 )
                             }
@@ -3247,6 +3439,35 @@ fun GameScreen(
                         text = "AI 在绝境时会提出认输，需要你同意；拒绝后至少 15 手它才能再提。",
                         fontSize = 12.sp, color = Color.Gray
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "AI 故意失误", fontSize = 14.sp)
+                            Text(
+                                text = "全力的 AI 稳赢时，每局随机有 1～2 手故意下出明显的失误" +
+                                    "（仍保证赢、大龙打架时不放），复盘里会专门标出来",
+                                fontSize = 12.sp, color = Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = aiBlunders,
+                            onCheckedChange = {
+                                aiBlunders = it
+                                SettingsStore.save(
+                                    context,
+                                    settings.copy(
+                                        aiBlunders = it,
+                                        humanMarks = humanMarks,
+                                        topThreeOnly = topThreeOnly,
+                                        autoAnalysisSide = autoSide,
+                                        refereeEnabled = refereeEnabled
+                                    )
+                                )
+                            }
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -3405,6 +3626,7 @@ fun GameScreen(
             liveStats[t]?.let { carry = it }
             (carry ?: sortedStats.first()).copy(turn = t)
         }
+        var trendLeadBlack by remember { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { showTrendDialog = false },
             title = { Text("局势走势") },
@@ -3412,16 +3634,58 @@ fun GameScreen(
                 Column {
                     WinrateChart(
                         turns = turns,
-                        perspective = Stone.BLACK,
+                        perspective = if (trendLeadBlack) {
+                            Stone.BLACK
+                        } else {
+                            Stone.WHITE
+                        },
                         ply = game.moves.size,
                         marks = com.tuxungo.android.engine.ReviewMath.marks(
                             game.moves, turns
                         ),
                         showLead = true,
+                        dualWinrate = true,
                         onSeek = {}
                     )
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text("目差看", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            "黑", fontSize = 13.sp,
+                            fontWeight = if (trendLeadBlack) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Normal
+                            },
+                            color = if (trendLeadBlack) {
+                                Color(0xFF37474F)
+                            } else {
+                                Color.Gray
+                            },
+                            modifier = Modifier.clickable {
+                                trendLeadBlack = true
+                            }.padding(horizontal = 6.dp)
+                        )
+                        Text(
+                            "白", fontSize = 13.sp,
+                            fontWeight = if (!trendLeadBlack) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Normal
+                            },
+                            color = if (!trendLeadBlack) {
+                                Color(0xFF37474F)
+                            } else {
+                                Color.Gray
+                            },
+                            modifier = Modifier.clickable {
+                                trendLeadBlack = false
+                            }.padding(horizontal = 6.dp)
+                        )
+                    }
                     Text(
-                        "红线是黑方胜率，黄线是目数差。完整的可拖动走势图在复盘页。",
+                        "黑线是黑方胜率，白线是白方胜率，绿点是五五开的交点，黄线是目数差（可切换看黑/白）。完整的可拖动走势图在复盘页。",
                         fontSize = 12.sp, color = Color.Gray
                     )
                 }
@@ -3571,6 +3835,15 @@ fun GameScreen(
  *  across the gaps and drawn as a smooth path with a soft fill —
  *  no more jagged jumps between distant samples. */
 @Composable
+/**
+ * The in-game trend strip, restyled in 2.63.0 to match the review
+ * chart: TWO win-rate lines (a black line for Black, a white line
+ * — grey-haloed so it reads on pale surfaces — for White), pale
+ * green dominance bands where either side is at 75%+, dots where
+ * the lines cross at 50/50, a purple marker on the current turn,
+ * and the gold score-lead line whose perspective （黑/白） can be
+ * switched right in the header.
+ */
 private fun MiniTrend(
     stats: List<com.tuxungo.android.engine.TurnStat>,
     onHide: () -> Unit,
@@ -3578,6 +3851,7 @@ private fun MiniTrend(
 ) {
     if (stats.size < 2) return
     val last = stats.last()
+    var leadBlack by remember { mutableStateOf(true) }
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -3585,65 +3859,168 @@ private fun MiniTrend(
         ) {
             Text(
                 "走势", fontSize = 12.sp,
-                fontWeight = FontWeight.Bold, color = Color(0xFFD64F7C)
+                fontWeight = FontWeight.Bold, color = Color(0xFF37474F)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "黑 ${formatPercent(last.winrateBlack)} · 白 " +
+                    formatPercent(1.0 - last.winrateBlack),
+                fontSize = 11.sp, color = Color.Gray
             )
             Spacer(modifier = Modifier.weight(1f))
+            Text("目差看", fontSize = 11.sp, color = Color.Gray)
             Text(
-                "黑胜率 ${formatPercent(last.winrateBlack)}",
-                fontSize = 12.sp, color = Color.Gray
+                "黑", fontSize = 12.sp,
+                fontWeight = if (leadBlack) FontWeight.Bold else FontWeight.Normal,
+                color = if (leadBlack) Color(0xFF37474F) else Color.Gray,
+                modifier = Modifier.clickable { leadBlack = true }
+                    .padding(horizontal = 4.dp)
+            )
+            Text(
+                "白", fontSize = 12.sp,
+                fontWeight = if (!leadBlack) FontWeight.Bold else FontWeight.Normal,
+                color = if (!leadBlack) Color(0xFF37474F) else Color.Gray,
+                modifier = Modifier.clickable { leadBlack = false }
+                    .padding(horizontal = 4.dp)
             )
             TextButton(onClick = onHide) {
                 Text("隐藏", fontSize = 12.sp)
             }
         }
-        Canvas(modifier = Modifier.fillMaxWidth().height(44.dp)) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
             val maxTurn = stats.maxOf { it.turn }.coerceAtLeast(1)
             val minTurn = stats.minOf { it.turn }
             val midY = size.height / 2f
+            // Densify: carry the last recorded win rate / lead
+            // forward across turns that were never analyzed.
+            val denseWr = ArrayList<Double>()
+            val denseLead = ArrayList<Double>()
+            var carryWr = stats.first().winrateBlack
+            var carryLead = stats.first().scoreLeadBlack
+            var si = 0
+            for (t in minTurn..maxTurn) {
+                while (si < stats.size && stats[si].turn <= t) {
+                    carryWr = stats[si].winrateBlack
+                    carryLead = stats[si].scoreLeadBlack
+                    si++
+                }
+                denseWr.add(carryWr)
+                denseLead.add(carryLead)
+            }
+            fun xFor(idx: Int): Float =
+                size.width * (minTurn + idx).toFloat() / maxTurn.toFloat()
+            fun smoothPath(values: List<Double>, yOf: (Double) -> Float): Path {
+                val path = Path()
+                if (values.isEmpty()) return path
+                path.moveTo(xFor(0), yOf(values[0]))
+                for (i in 1 until values.size) {
+                    val prevX = xFor(i - 1)
+                    val prevY = yOf(values[i - 1])
+                    val curX = xFor(i)
+                    val curY = yOf(values[i])
+                    val midX = (prevX + curX) / 2f
+                    val midY2 = (prevY + curY) / 2f
+                    if (i == 1) {
+                        path.lineTo(midX, midY2)
+                    } else {
+                        path.quadraticBezierTo(prevX, prevY, midX, midY2)
+                    }
+                }
+                path.lineTo(xFor(values.lastIndex), yOf(values.last()))
+                return path
+            }
+            // Dominance bands: either side at 75% or more.
+            for (i in 1 until denseWr.size) {
+                val wr = denseWr[i]
+                if (wr >= 0.75 || wr <= 0.25) {
+                    drawRect(
+                        Color(0xFF43A047).copy(alpha = 0.13f),
+                        topLeft = Offset(xFor(i - 1), 0f),
+                        size = Size(xFor(i) - xFor(i - 1) + 1f, size.height)
+                    )
+                }
+            }
             drawLine(
                 Color.Gray.copy(alpha = 0.35f),
                 Offset(0f, midY), Offset(size.width, midY), strokeWidth = 1f
             )
-            val pts = ArrayList<Offset>()
-            var carry = stats.first().winrateBlack
-            var si = 0
-            for (t in minTurn..maxTurn) {
-                while (si < stats.size && stats[si].turn <= t) {
-                    carry = stats[si].winrateBlack
-                    si++
-                }
-                pts.add(
-                    Offset(
-                        size.width * t.toFloat() / maxTurn.toFloat(),
-                        size.height * (1f - carry.toFloat())
-                    )
+            // Gold score-lead line (perspective switchable).
+            val maxAbsLead = maxOf(
+                15.0, denseLead.maxOfOrNull { kotlin.math.abs(it) } ?: 15.0
+            )
+            val leadPath = smoothPath(denseLead) { lead ->
+                val shown = if (leadBlack) lead else -lead
+                midY - (shown / maxAbsLead).toFloat() * (size.height * 0.46f)
+            }
+            drawPath(leadPath, Color(0xFFE6A817), style = Stroke(width = 2f))
+            // White's win-rate line: grey halo first, then white.
+            val whitePath = smoothPath(denseWr) { wr ->
+                size.height * wr.toFloat()
+            }
+            drawPath(
+                whitePath, Color(0xFF78909C).copy(alpha = 0.65f),
+                style = Stroke(width = 4.5f)
+            )
+            drawPath(whitePath, Color.White, style = Stroke(width = 2.5f))
+            // Black's win-rate line.
+            val blackPath = smoothPath(denseWr) { wr ->
+                size.height * (1f - wr.toFloat())
+            }
+            drawPath(blackPath, Color(0xFF212121), style = Stroke(width = 2.5f))
+            // 50/50 crossing dots on the middle line.
+            for (ci in AnalysisMath.winrateCrossings(denseWr)) {
+                drawCircle(
+                    Color(0xFF2E7D32), radius = 5f,
+                    center = Offset(xFor(ci), midY)
+                )
+                drawCircle(
+                    Color.White, radius = 2.2f,
+                    center = Offset(xFor(ci), midY)
                 )
             }
-            if (pts.size >= 2) {
-                val line = Path()
-                line.moveTo(pts.first().x, pts.first().y)
-                for (i in 1 until pts.size) {
-                    val prev = pts[i - 1]
-                    val cur = pts[i]
-                    val mid = Offset(
-                        (prev.x + cur.x) / 2f,
-                        (prev.y + cur.y) / 2f
+            // Current turn: purple vertical + dot on Black's line.
+            val lastX = xFor(denseWr.lastIndex)
+            val lastY = size.height * (1f - denseWr.last().toFloat())
+            drawLine(
+                Color(0xFF6A1B9A).copy(alpha = 0.55f),
+                Offset(lastX, 0f), Offset(lastX, size.height), strokeWidth = 1.5f
+            )
+            drawCircle(Color(0xFF6A1B9A), radius = 4f, center = Offset(lastX, lastY))
+        }
+        // Legend.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            @Composable
+            fun legendSwatch(color: Color, label: String) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier.size(10.dp, 3.dp).background(color)
                     )
-                    if (i == 1) {
-                        line.lineTo(mid.x, mid.y)
-                    } else {
-                        line.quadraticBezierTo(prev.x, prev.y, mid.x, mid.y)
-                    }
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(label, fontSize = 10.sp, color = Color.Gray)
                 }
-                line.lineTo(pts.last().x, pts.last().y)
-                val fill = Path()
-                fill.addPath(line)
-                fill.lineTo(pts.last().x, size.height)
-                fill.lineTo(pts.first().x, size.height)
-                fill.close()
-                drawPath(fill, Color(0xFFD64F7C).copy(alpha = 0.10f))
-                drawPath(line, Color(0xFFD64F7C), style = Stroke(width = 2.5f))
-                drawCircle(Color(0xFFD64F7C), radius = 4f, center = pts.last())
+            }
+            legendSwatch(Color(0xFF212121), "黑胜率")
+            legendSwatch(Color(0xFFB0BEC5), "白胜率")
+            legendSwatch(Color(0xFFE6A817), "目差")
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(7.dp)
+                        .background(Color(0xFF2E7D32), androidx.compose.foundation.shape.CircleShape)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text("五五开", fontSize = 10.sp, color = Color.Gray)
+            }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(7.dp)
+                        .background(Color(0xFF6A1B9A), androidx.compose.foundation.shape.CircleShape)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text("当前手", fontSize = 10.sp, color = Color.Gray)
             }
         }
     }
@@ -3671,17 +4048,25 @@ private fun humanMarksOf(a: AnalysisResult?): List<CandidateMark> {
 }
 
 /** Whether the AI calls this position decided (the 「绝」 mark). */
+/** The sealing move's stone for the persistent 「绝」 badge. */
+private fun decidedStoneOf(game: GoGame, decidedMove: Int?): Move? {
+    if (decidedMove == null || decidedMove < 1) return null
+    return game.moves.getOrNull(decidedMove - 1)?.takeIf { !it.isPass }
+}
+
 private fun decidedFor(a: AnalysisResult?, game: GoGame): Boolean {
     if (a == null) return false
-    var stones = 0
-    for (i in 0 until game.size.area) {
-        if (game.stoneAt(i % game.size.width, i / game.size.width) != null) {
-            stones++
-        }
+    val w = game.size.width
+    val isEmpty = BooleanArray(game.size.area) { i ->
+        game.stoneAt(i % w, i / w) == null
     }
+    var empty = 0
+    for (e in isEmpty) if (e) empty++
+    val largestRegion = AnalysisMath.largestUndecidedRegion(
+        a.ownershipBlack, isEmpty, w, game.size.height
+    )
     return AnalysisMath.isDecided(
-        a.rootWinrateBlack, a.rootScoreLeadBlack,
-        game.moves.size, game.size.area - stones, game.size.area
+        a.rootWinrateBlack, a.rootScoreLeadBlack, empty, largestRegion
     )
 }
 
