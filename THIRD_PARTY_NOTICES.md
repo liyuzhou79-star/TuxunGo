@@ -29,9 +29,10 @@ board surface; the grid and stones are drawn by the app itself.
 
 ## Calligraphy font (「绝」 badge)
 
-The calligraphy 「绝」 shown on the sealing move's stone is set in
+The calligraphy 「绝」 and 「恶」 shown on the sealing move's and
+the deliberate-blunder moves' stones are set in
 [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng),
 a Chinese calligraphy typeface by the Ma Shan Zheng Project
 Authors, licensed under the SIL Open Font License 1.1. Only the
-single 「绝」 glyph is bundled (`res/font/jue_calligraphy.ttf`,
+「绝」 and 「恶」 glyphs are bundled (`res/font/jue_calligraphy.ttf`,
 subset with fonttools); the full font is not included.

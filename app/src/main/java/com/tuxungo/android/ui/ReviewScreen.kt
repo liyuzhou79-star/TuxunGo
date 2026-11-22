@@ -671,6 +671,13 @@ fun ReviewScreen(
                 } else {
                     null
                 },
+                blunderStones = turns?.let { t ->
+                    t.indices.filter { m -> m in 1..ply && t[m].deliberate }
+                        .mapNotNull { m ->
+                            current.moves.getOrNull(m - 1)
+                                ?.takeIf { !it.isPass }
+                        }
+                } ?: emptyList(),
                 flipped = perspective == Stone.WHITE
             ) { _, _ -> }
             }
@@ -832,7 +839,7 @@ fun ReviewScreen(
                 if (turns?.getOrNull(ply + 1)?.deliberate == true) {
                     Text(
                         "这一手是 AI 故意失误：稳赢时故意放的，已专门标记，不算恶手",
-                        fontSize = 13.sp, color = Color(0xFFEF6C00)
+                        fontSize = 13.sp, color = Color(0xFFC62828)
                     )
                 }
             }
@@ -991,7 +998,7 @@ fun ReviewScreen(
                                         "（${if (current.moves[dm - 1].stone == Stone.BLACK) "黑" else "白"}" +
                                         "）——这一手是 AI 稳赢时故意放的，不算恶手（点此跳转）",
                                     fontSize = 13.sp,
-                                    color = Color(0xFFEF6C00),
+                                    color = Color(0xFFC62828),
                                     modifier = Modifier
                                         .clickable {
                                             autoPlaying = false
@@ -1097,7 +1104,7 @@ fun ReviewScreen(
                     MarkKind.BLUNDER -> "恶手" to Color(0xFFC62828)
                     MarkKind.BRILLIANT -> "妙手" to Color(0xFF2E7D32)
                     MarkKind.KEY -> "关键手" to Color(0xFF6A1B9A)
-                    MarkKind.DELIBERATE -> "故意失误" to Color(0xFFEF6C00)
+                    MarkKind.DELIBERATE -> "故意失误" to Color(0xFFC62828)
                 }
                 Row(
                     modifier = Modifier
@@ -1374,7 +1381,7 @@ fun WinrateChart(
                 MarkKind.BLUNDER -> Color(0xFFC62828) to 6f
                 MarkKind.BRILLIANT -> Color(0xFF2E7D32) to 6f
                 MarkKind.KEY -> Color(0xFF6A1B9A) to 8f
-                MarkKind.DELIBERATE -> Color(0xFFEF6C00) to 6f
+                MarkKind.DELIBERATE -> Color(0xFFC62828) to 6f
             }
             drawCircle(color = Color.White, radius = radius + 2f, center = center)
             drawCircle(color = color, radius = radius, center = center)
@@ -1429,7 +1436,7 @@ private fun ChartLegend(showDeliberate: Boolean = false) {
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .size(10.dp)
-                    .background(Color(0xFFEF6C00), shape = androidx.compose.foundation.shape.CircleShape)
+                    .background(Color(0xFFC62828), shape = androidx.compose.foundation.shape.CircleShape)
             )
             Text(" AI 故意失误", fontSize = 11.sp, color = Color.Gray)
         }

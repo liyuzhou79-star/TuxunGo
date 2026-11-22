@@ -2035,6 +2035,13 @@ fun GameScreen(
                 } else {
                     null
                 },
+                blunderStones = if (!focusMode) {
+                    deliberateMoves.mapNotNull {
+                        game.moves.getOrNull(it - 1)
+                    }.filter { !it.isPass }
+                } else {
+                    emptyList()
+                },
                 ownership = fsOwnership,
                 pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
@@ -2692,6 +2699,13 @@ fun GameScreen(
                 decidedStoneOf(game, decidedMove)
             } else {
                 null
+            },
+            blunderStones = if (!focusMode) {
+                deliberateMoves.mapNotNull {
+                    game.moves.getOrNull(it - 1)
+                }.filter { !it.isPass }
+            } else {
+                emptyList()
             },
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),

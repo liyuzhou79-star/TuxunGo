@@ -129,6 +129,9 @@ fun BoardView(
      *  keeps a small calligraphy 「绝」 badge at its corner for the
      *  rest of the game. Null while the game is not decided. */
     decidedStone: Move? = null,
+    /** Deliberate-blunder moves: each such stone keeps a small red
+     *  「恶」 badge at its corner, the same treatment as 「绝」. */
+    blunderStones: List<Move> = emptyList(),
     /** Territory colouring starts at this ownership strength: points
      *  weaker than this stay uncoloured, so early-game boards do not
      *  speckle. Adjustable in the judgment settings. */
@@ -217,7 +220,7 @@ fun BoardView(
         ),
         label = "markPulse"
     )
-    // Calligraphy typeface for the 「绝」 badge (a one-glyph subset
+    // Calligraphy typeface for the 「绝」 badge (a two-glyph subset
     // of Ma Shan Zheng, see THIRD_PARTY_NOTICES.md). Falls back to
     // the default bold face when the font cannot be loaded.
     val jueTypeface = remember {
@@ -779,6 +782,49 @@ fun BoardView(
             val baseline = badgeCenter.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText(
                 "绝", badgeCenter.x, baseline, paint
+            )
+        }
+
+        // 「恶」 badges: deliberate-blunder stones keep a small
+        // flat red disc with a white calligraphy 「恶」 at their
+        // top-right corner, so the moves the AI gave away on
+        // purpose stay visible on the board itself.
+        for (blunder in blunderStones) {
+            if (blunder.isPass ||
+                game.stoneAt(blunder.x, blunder.y) != blunder.stone
+            ) {
+                continue
+            }
+            val center = Offset(px(blunder.x), py(blunder.y))
+            val badgeCenter = Offset(
+                center.x + r * 0.55f, center.y - r * 0.55f
+            )
+            drawCircle(
+                Color(0xFFC62828),
+                radius = r * 0.47f,
+                center = badgeCenter
+            )
+            drawCircle(
+                Color(0xFF7F1010).copy(alpha = 0.8f),
+                radius = r * 0.47f,
+                center = badgeCenter,
+                style = Stroke(width = maxOf(1.2f, r * 0.045f))
+            )
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = r * 0.8f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isAntiAlias = true
+                if (jueTypeface != null) {
+                    typeface = jueTypeface
+                } else {
+                    isFakeBoldText = true
+                }
+            }
+            val metrics = paint.fontMetrics
+            val baseline = badgeCenter.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText(
+                "恶", badgeCenter.x, baseline, paint
             )
         }
 
