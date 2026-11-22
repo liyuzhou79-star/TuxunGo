@@ -3,6 +3,7 @@ package com.tuxungo.android.engine
 import com.tuxungo.android.go.Stone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -97,5 +98,43 @@ class AnalysisMathTest {
     @Test
     fun notDecidedForDegenerateArea() {
         assertFalse(AnalysisMath.isDecided(0.999, 30.0, 100, 0, 0))
+    }
+
+    @Test
+    fun scoreRangeBlackWin() {
+        assertEquals(
+            "比分范围：大概率黑胜 8～16 目",
+            AnalysisMath.scoreRangeText(12.0, 4.0)
+        )
+    }
+
+    @Test
+    fun scoreRangeWhiteWin() {
+        assertEquals(
+            "比分范围：大概率白胜 8～16 目",
+            AnalysisMath.scoreRangeText(-12.0, 4.0)
+        )
+    }
+
+    @Test
+    fun scoreRangeCrossingZero() {
+        assertEquals(
+            "比分范围：胜负未定，大概率在黑胜 7 目～白胜 3 目之间",
+            AnalysisMath.scoreRangeText(2.0, 5.0)
+        )
+    }
+
+    @Test
+    fun scoreRangeKeepsDecimals() {
+        // Mid-game shape: lead -8.8 with a wide 25.8 spread.
+        assertEquals(
+            "比分范围：胜负未定，大概率在黑胜 17 目～白胜 34.6 目之间",
+            AnalysisMath.scoreRangeText(-8.8, 25.8)
+        )
+    }
+
+    @Test
+    fun scoreRangeTooTightIsNull() {
+        assertNull(AnalysisMath.scoreRangeText(5.0, 0.3))
     }
 }

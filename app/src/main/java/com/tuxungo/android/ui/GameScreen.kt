@@ -1852,7 +1852,7 @@ fun GameScreen(
                 decidedFirst = !focusMode && !judgmentActive && !scoringMode &&
                     analysisKey == game.moves.size && decidedFor(fsA, game),
                 ownership = fsOwnership,
-                pvGhost = if (!focusMode && !judgmentActive && !scoringMode) {
+                pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
                 } else emptyList(),
                 preview = if (scoringMode) null else pendingPoint,
@@ -2391,7 +2391,7 @@ fun GameScreen(
                 shownCandidates(currentAnalysis, topThreeOnly)
             } else emptyList(),
             ownership = if (focusMode) null else displayOwnership,
-            pvGhost = if (!focusMode && !judgmentActive && !scoringMode) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
+            pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
             humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
                 humanMarksOf(currentAnalysis)
             } else emptyList(),
@@ -2553,6 +2553,15 @@ fun GameScreen(
             if (terr.neutral > 0) {
                 Text(
                     text = "未定区域约 ${terr.neutral} 点，下完官子后判断会更准",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+            }
+            val jRange = AnalysisMath.scoreRangeText(
+                j.rootScoreLeadBlack, j.rootScoreStdev
+            )
+            if (jRange != null) {
+                Text(
+                    text = jRange,
                     fontSize = 12.sp, color = Color.Gray
                 )
             }
@@ -2729,6 +2738,15 @@ fun GameScreen(
                         if (lead >= 0) "黑领先约 ${formatNum(lead)} 目" else "白领先约 ${formatNum(-lead)} 目",
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold
                 )
+                val rangeText = AnalysisMath.scoreRangeText(
+                    lead, currentAnalysis.rootScoreStdev
+                )
+                if (rangeText != null) {
+                    Text(
+                        text = rangeText,
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
                 Text(
                     text = commentaryLine(
                         wr, lead,
@@ -2801,7 +2819,7 @@ fun GameScreen(
                 currentAnalysis.candidates.forEachIndexed { idx, cand ->
                     val isSel = idx == selectedCandidate
                     Text(
-                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · 访问 ${cand.visits}",
+                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
                         fontSize = 14.sp,
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSel) Rose else Color.Unspecified,
@@ -3985,9 +4003,34 @@ private fun AiSideSection(
                     }
                 }
                 Text(
-                    text = "思考量：${cfg.visits}（越大越强、越慢）",
+                    text = if (cfg.rank != "max") {
+                        "定级对局靠模仿真人选点：思考量只用来判断停一手/认输，不影响棋力"
+                    } else {
+                        "思考量：${cfg.visits}（越大越强、越慢）"
+                    },
                     fontSize = 12.sp, color = Color.Gray
                 )
+                if (cfg.rank == "max") {
+                    var sliderVisits by remember(cfg.visits) {
+                        mutableStateOf(cfg.visits.toFloat())
+                    }
+                    androidx.compose.material3.Slider(
+                        value = sliderVisits.coerceIn(10f, 3000f),
+                        onValueChange = { sliderVisits = it },
+                        onValueChangeFinished = {
+                            val v = (Math.round(sliderVisits / 10f) * 10)
+                                .coerceIn(10, 3000)
+                            if (v != cfg.visits) {
+                                onCfgChange(cfg.copy(visits = v))
+                            }
+                        },
+                        valueRange = 10f..3000f
+                    )
+                    Text(
+                        text = "拖滑杆直接调思考量（10～3000），松手生效，不用只选上面的档位",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(

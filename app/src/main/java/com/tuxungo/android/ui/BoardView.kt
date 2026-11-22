@@ -399,7 +399,7 @@ fun BoardView(
                     if (mag < territorySpread) continue
                     val t = ((mag - territorySpread) /
                         (1f - territorySpread)).coerceIn(0f, 1f)
-                    val alpha = ((0.16f + 0.84f * t) * territoryIntensity)
+                    val alpha = ((0.22f + 0.78f * t) * territoryIntensity)
                         .coerceIn(0f, 1f)
                     val half = minOf(cellX, cellY) * 0.19f * (0.5f + 0.5f * t)
                     val topLeft = Offset(px(x) - half, py(y) - half)

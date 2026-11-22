@@ -99,22 +99,28 @@ object SettingsStore {
     )
 
     val JUDGE_VISITS = listOf(
+        100 to "极速",
         300 to "快速",
         800 to "标准",
-        1500 to "精准"
+        1500 to "精准",
+        3000 to "深算"
     )
 
     val DEAD_STRICTNESS = listOf(
+        "verycareful" to "非常保守",
         "conservative" to "保守（拿不准就不判死）",
         "standard" to "标准",
-        "bold" to "大胆（更积极判死）"
+        "bold" to "大胆（更积极判死）",
+        "verybold" to "非常大胆"
     )
 
     /** Group-mean ownership (against the owner) above which a group is
      *  judged dead, per strictness setting. */
     fun deadGroupMean(strictness: String): Double = when (strictness) {
+        "verycareful" -> 0.55
         "conservative" -> 0.45
         "bold" -> 0.25
+        "verybold" -> 0.15
         else -> 0.35
     }
 

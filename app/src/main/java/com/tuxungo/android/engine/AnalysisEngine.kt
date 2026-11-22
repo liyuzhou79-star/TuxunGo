@@ -61,6 +61,30 @@ object AnalysisMath {
         if (emptyPoints > area * 4 / 5) return false
         return true
     }
+
+    /** Plausible range for the final score, from the engine's score
+     *  lead and its standard deviation: lead ± stdev covers the bulk
+     *  of the outcomes the engine considers plausible. Null when the
+     *  spread is too small to add anything beyond the lead itself.
+     *  Pure formatting; unit-tested. */
+    fun scoreRangeText(scoreLeadBlack: Double, scoreStdev: Double): String? {
+        if (scoreStdev < 0.5) return null
+        val lo = scoreLeadBlack - scoreStdev
+        val hi = scoreLeadBlack + scoreStdev
+        fun fmt(v: Double): String {
+            val r = kotlin.math.round(v * 10) / 10
+            return if (r == kotlin.math.floor(r)) {
+                r.toInt().toString()
+            } else {
+                r.toString()
+            }
+        }
+        return when {
+            lo >= 0 -> "比分范围：大概率黑胜 ${fmt(lo)}～${fmt(hi)} 目"
+            hi <= 0 -> "比分范围：大概率白胜 ${fmt(-hi)}～${fmt(-lo)} 目"
+            else -> "比分范围：胜负未定，大概率在黑胜 ${fmt(hi)} 目～白胜 ${fmt(-lo)} 目之间"
+        }
+    }
 }
 
 data class Candidate(
@@ -98,7 +122,12 @@ data class AnalysisResult(
     /** GTP vertex of the human second favourite, "" when unavailable. */
     val humanSecondVertex: String = "",
     /** How likely a top human player is to play that move, 0..1. */
-    val humanSecondProb: Double = 0.0
+    val humanSecondProb: Double = 0.0,
+    /** Standard deviation of the engine's final-score estimate: how
+     *  wide the plausible range of final scores still is. Large in
+     *  the opening / midgame, shrinks towards zero as the game
+     *  settles. Sign-invariant (a spread, not a lead). */
+    val rootScoreStdev: Double = 0.0
 )
 
 /**
@@ -440,6 +469,7 @@ class AnalysisEngine private constructor(
         val root = resp.optJSONObject("rootInfo")
         val rootWr = root?.optDouble("winrate", 0.5) ?: 0.5
         val rootLead = root?.optDouble("scoreLead", 0.0) ?: 0.0
+        val rootStdev = root?.optDouble("scoreStdev", 0.0) ?: 0.0
         val (rootWrB, rootLeadB) = AnalysisMath.toBlackPerspective(rootWr, rootLead, sideToMove)
 
         val candidates = mutableListOf<Candidate>()
@@ -556,7 +586,8 @@ class AnalysisEngine private constructor(
         return AnalysisResult(
             sideToMove, rootWrB, rootLeadB, candidates, ownership,
             humanTopMove, humanTopVertex, humanTopProb,
-            humanSecondMove, humanSecondVertex, humanSecondProb
+            humanSecondMove, humanSecondVertex, humanSecondProb,
+            rootScoreStdev = rootStdev
         )
     }
 

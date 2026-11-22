@@ -461,7 +461,10 @@ fun SettingsScreen(
             fontSize = 12.sp, color = Color.Gray
         )
         Spacer(modifier = Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             for ((v, label) in SettingsStore.JUDGE_VISITS) {
                 FilterChip(
                     selected = settings.judgeVisits == v,
@@ -491,8 +494,8 @@ fun SettingsScreen(
         Slider(
             value = settings.territorySpread,
             onValueChange = { update(settings.copy(territorySpread = it)) },
-            valueRange = 0.05f..0.6f,
-            steps = 10
+            valueRange = 0.0f..0.85f,
+            steps = 16
         )
         Text(
             text = "调高：只有定型的地方才上色，棋盘干净；调低：稍有倾向就上色，看得出势力的走向。",
@@ -512,8 +515,8 @@ fun SettingsScreen(
         Slider(
             value = settings.territoryIntensity,
             onValueChange = { update(settings.copy(territoryIntensity = it)) },
-            valueRange = 0.4f..1.0f,
-            steps = 5
+            valueRange = 0.2f..1.6f,
+            steps = 13
         )
         Spacer(modifier = Modifier.height(8.dp))
         val judgeDemo = remember {

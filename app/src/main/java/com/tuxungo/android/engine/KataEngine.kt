@@ -264,10 +264,22 @@ class KataEngine private constructor(
             // the top human profile with a strong-search veto
             // (PiklLambda 0.08, never plays a blunder on purpose),
             // while a rank profile plays PURE imitation at that
-            // rank (PiklLambda huge: the search cannot rescue the
-            // move choice, so the strength — mistakes included —
-            // genuinely matches the rank the human model was
-            // trained on).
+            // rank: PiklLambda huge means the search cannot rescue
+            // the move choice, and the move is SAMPLED from the
+            // rank's human policy under the temperature keys below.
+            // The temperature keys are the real strength dial for a
+            // ranked side. KataGo's own weak-human example config
+            // (gtp_human5k_example.cfg) warns that a low temperature
+            // imitates the "majority vote" of the rank instead of an
+            // individual player: the majority rarely picks any given
+            // blunder, so the bot plays far above its nominal rank.
+            // Verified locally at rank_17k: the old keys
+            // (0.70/0.25/30/1.0) picked the same move in 8/8 samples,
+            // while the example config's keys (0.85/0.70/80/0.01)
+            // spread 8 samples over 7 distinct plausible moves.
+            // Ranked sides therefore use the example values; the
+            // blend mode keeps its sharper keys (its search veto is
+            // what holds its strength, not the sampling).
             val humanKeys = if (humanModelFile == null) "" else """
                 humanSLProfile = ${rankProfile ?: "rank_9d"}
                 humanSLChosenMoveProp = 1.0
@@ -276,10 +288,10 @@ class KataEngine private constructor(
                 humanSLRootExploreProbWeightless = 0.8
                 humanSLCpuctExploration = 0.50
                 humanSLCpuctPermanent = 2.0
-                chosenMoveTemperatureEarly = 0.70
-                chosenMoveTemperature = 0.25
-                chosenMoveTemperatureHalflife = 30
-                chosenMoveTemperatureOnlyBelowProb = 1.0
+                chosenMoveTemperatureEarly = ${if (rankProfile != null) "0.85" else "0.70"}
+                chosenMoveTemperature = ${if (rankProfile != null) "0.70" else "0.25"}
+                chosenMoveTemperatureHalflife = ${if (rankProfile != null) "80" else "30"}
+                chosenMoveTemperatureOnlyBelowProb = ${if (rankProfile != null) "0.01" else "1.0"}
                 useLcbForSelection = false
                 useUncertainty = false
                 subtreeValueBiasFactor = 0.0
