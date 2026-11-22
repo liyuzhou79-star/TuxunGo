@@ -835,7 +835,6 @@ fun ReviewScreen(
                         fontSize = 13.sp, color = Color(0xFFEF6C00)
                     )
                 }
-                }
             }
         }
 
