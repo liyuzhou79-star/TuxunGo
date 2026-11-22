@@ -517,7 +517,7 @@ fun GameScreen(
                         // needs a way to end: a double pass there
                         // finishes it and the scoring effect wraps up.
                         if (bothAi && game.consecutivePasses >= 2) {
-                            game.finished = true
+                            game.markFinished()
                         }
                         version++
                         resultDismissed = false

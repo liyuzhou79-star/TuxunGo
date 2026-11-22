@@ -231,6 +231,15 @@ class GoGame(val size: BoardSize, val komi: Double = 7.5) {
         return true
     }
 
+    /**
+     * Marks the game finished without recording a result. Used by
+     * the AI-vs-AI double-pass wrap-up in GameScreen (2.64.0);
+     * scoring fills the result in right after.
+     */
+    fun markFinished() {
+        if (!finished) finished = true
+    }
+
     fun resign(stone: Stone = current) {
         if (finished) return
         resignedBy = stone
