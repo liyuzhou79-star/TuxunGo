@@ -122,7 +122,7 @@ fun BoardView(
      *  so it reads differently from the AI's numbered discs. */
     humanPoint: Pair<Int, Int>? = null,
     /** The human-style model's top moves as ranked marks: drawn as
-     *  orange-red rings, distinct from both the AI's rings and the
+     *  orange-red discs, distinct from both the AI's discs and the
      *  blue humanPoint ring. */
     humanMarks: List<CandidateMark> = emptyList(),
     /** The move that sealed the game (the 「绝」 move): its stone
@@ -196,7 +196,7 @@ fun BoardView(
         ),
         label = "breatheAlpha"
     )
-    // Candidate / human rings grow in softly when a fresh analysis
+    // Candidate / human discs grow in softly when a fresh analysis
     // lands, instead of snapping onto the board.
     val marksAnim = remember { Animatable(1f) }
     LaunchedEffect(candidates, humanMarks) {
@@ -645,56 +645,79 @@ fun BoardView(
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText("${i + 1}", center.x, baseline, paint)
         }
-        // Candidate markers (redesigned in 2.63.0 — rings, not
-        // discs): the AI's first choice is a large purple ring, its
-        // second and third are white medium rings, the rest smaller
-        // white rings; the human model's picks are orange-red rings
+        // Candidate markers (2.63.0 rings, changed to solid discs
+        // in 2.63.1 — the user found the hollow rings ugly): glossy
+        // filled discs with a radial gradient, a soft shadow and a
+        // small top-left highlight, so they read like little glass
+        // tokens on the board. The AI's first choice is a large
+        // purple disc, second/third are white medium discs, the rest
+        // smaller white discs; the human model's picks are orange-red
         // in the same sizes. When the human top and the AI top land
-        // on the same point, one glowing, gently pulsing orange ring
-        // replaces both — human and machine agree here. The rank
-        // number stays in the middle of each ring.
+        // on the same point, one glowing, gently pulsing orange disc
+        // replaces both. The rank number sits in the middle.
         val aiTopMark = candidates.firstOrNull { it.rank == 1 }
         val humanTopMark = humanMarks.firstOrNull { it.rank == 1 }
         val topOverlap = aiTopMark != null && humanTopMark != null &&
             aiTopMark.x == humanTopMark.x && aiTopMark.y == humanTopMark.y
 
-        fun androidx.compose.ui.graphics.drawscope.DrawScope.ringMark(
+        fun androidx.compose.ui.graphics.drawscope.DrawScope.discMark(
             mark: CandidateMark,
-            ringColor: Color,
-            haloColor: Color,
+            light: Color,
+            base: Color,
+            dark: Color,
+            rim: Color,
             radiusFactor: Float,
-            widthFactor: Float,
             numberColor: Int
         ) {
             val center = Offset(px(mark.x), py(mark.y))
-            val ringR = r * radiusFactor * marksAnim.value
-            val strokeW = maxOf(2.5f, r * widthFactor)
-            // Soft shadow, then a halo slightly wider than the ring
-            // so it reads on stones and on the pale board alike.
+            val discR = r * radiusFactor * marksAnim.value
+            // Soft drop shadow so the disc lifts off the board.
             drawCircle(
-                Color.Black.copy(alpha = 0.22f),
-                radius = ringR,
-                center = Offset(center.x + r * 0.05f, center.y + r * 0.08f),
-                style = Stroke(width = strokeW)
+                Color.Black.copy(alpha = 0.30f),
+                radius = discR,
+                center = Offset(center.x, center.y + r * 0.07f)
+            )
+            // Body: radial gradient lit from the top-left.
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(light, base, dark),
+                    center = Offset(
+                        center.x - discR * 0.38f, center.y - discR * 0.38f
+                    ),
+                    radius = discR * 1.5f
+                ),
+                radius = discR,
+                center = center
+            )
+            // Thin darker rim for a finished edge.
+            drawCircle(
+                rim,
+                radius = discR,
+                center = center,
+                style = Stroke(width = maxOf(1.2f, r * 0.045f))
+            )
+            // Gloss highlight, top-left.
+            drawCircle(
+                Color.White.copy(alpha = 0.38f),
+                radius = discR * 0.30f,
+                center = Offset(
+                    center.x - discR * 0.36f, center.y - discR * 0.40f
+                )
             )
             drawCircle(
-                haloColor,
-                radius = ringR,
-                center = center,
-                style = Stroke(width = strokeW * 1.9f)
-            )
-            drawCircle(
-                ringColor,
-                radius = ringR,
-                center = center,
-                style = Stroke(width = strokeW)
+                Color.White.copy(alpha = 0.14f),
+                radius = discR * 0.52f,
+                center = Offset(
+                    center.x - discR * 0.30f, center.y - discR * 0.34f
+                )
             )
             val paint = android.graphics.Paint().apply {
                 color = numberColor
-                textSize = r * 0.66f * marksAnim.value
+                textSize = r * 0.68f * marksAnim.value
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true
+                setShadowLayer(r * 0.08f, 0f, r * 0.03f, 0x66000000)
             }
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
@@ -704,34 +727,52 @@ fun BoardView(
         }
 
         if (topOverlap && aiTopMark != null) {
-            // The glowing agreement ring: two soft outer strokes
-            // breathing with markPulse under a solid orange ring.
+            // The glowing agreement disc: soft pulsing glow layers
+            // under a solid glossy orange disc.
             val center = Offset(px(aiTopMark.x), py(aiTopMark.y))
             val baseR = r * 0.98f * marksAnim.value
             drawCircle(
-                Color(0xFFFF8A00).copy(alpha = 0.16f * markPulse),
-                radius = baseR * (1.10f + 0.08f * markPulse),
-                center = center,
-                style = Stroke(width = r * 0.36f)
+                Color(0xFFFF8A00).copy(alpha = 0.15f * markPulse),
+                radius = baseR * (1.22f + 0.08f * markPulse),
+                center = center
             )
             drawCircle(
-                Color(0xFFFF6D00).copy(alpha = 0.38f * markPulse),
-                radius = baseR * 1.07f,
-                center = center,
-                style = Stroke(width = r * 0.18f)
+                Color(0xFFFF6D00).copy(alpha = 0.30f * markPulse),
+                radius = baseR * 1.10f,
+                center = center
             )
             drawCircle(
-                Color(0xFFFF6D00),
+                Color.Black.copy(alpha = 0.30f),
                 radius = baseR,
-                center = center,
-                style = Stroke(width = maxOf(3f, r * 0.17f))
+                center = Offset(center.x, center.y + r * 0.07f)
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C)
+                    ),
+                    center = Offset(
+                        center.x - baseR * 0.38f, center.y - baseR * 0.38f
+                    ),
+                    radius = baseR * 1.5f
+                ),
+                radius = baseR,
+                center = center
+            )
+            drawCircle(
+                Color.White.copy(alpha = 0.38f),
+                radius = baseR * 0.30f,
+                center = Offset(
+                    center.x - baseR * 0.36f, center.y - baseR * 0.40f
+                )
             )
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.rgb(230, 81, 0)
+                color = android.graphics.Color.WHITE
                 textSize = r * 0.7f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isFakeBoldText = true
                 isAntiAlias = true
+                setShadowLayer(r * 0.08f, 0f, r * 0.03f, 0x66000000)
             }
             val metrics = paint.fontMetrics
             val baseline = center.y - (metrics.ascent + metrics.descent) / 2f
@@ -742,17 +783,23 @@ fun BoardView(
         for (mark in candidates) {
             if (topOverlap && mark.rank == 1) continue
             when (mark.rank) {
-                1 -> ringMark(
-                    mark, Color(0xFF7B1FA2), Color.White.copy(alpha = 0.55f),
-                    0.95f, 0.16f, android.graphics.Color.rgb(123, 31, 162)
+                1 -> discMark(
+                    mark,
+                    Color(0xFFCE93D8), Color(0xFF8E24AA), Color(0xFF4A148C),
+                    Color(0xFF4A148C).copy(alpha = 0.65f),
+                    0.95f, android.graphics.Color.WHITE
                 )
-                2, 3 -> ringMark(
-                    mark, Color.White, Color(0xFF90A4AE).copy(alpha = 0.45f),
-                    0.78f, 0.13f, android.graphics.Color.rgb(38, 50, 56)
+                2, 3 -> discMark(
+                    mark,
+                    Color(0xFFFFFFFF), Color(0xFFF1F3F4), Color(0xFFB0BEC5),
+                    Color(0xFF78909C).copy(alpha = 0.8f),
+                    0.78f, android.graphics.Color.rgb(38, 50, 56)
                 )
-                else -> ringMark(
-                    mark, Color.White, Color(0xFF90A4AE).copy(alpha = 0.4f),
-                    0.62f, 0.11f, android.graphics.Color.rgb(38, 50, 56)
+                else -> discMark(
+                    mark,
+                    Color(0xFFFFFFFF), Color(0xFFF1F3F4), Color(0xFFB0BEC5),
+                    Color(0xFF78909C).copy(alpha = 0.8f),
+                    0.62f, android.graphics.Color.rgb(38, 50, 56)
                 )
             }
         }
@@ -774,18 +821,22 @@ fun BoardView(
                 style = Stroke(width = maxOf(1.5f, r * 0.05f))
             )
         }
-        // Human-style top moves: orange-red rings in the same sizes
-        // as the AI's rings, so both systems can share the board.
+        // Human-style top moves: orange-red discs in the same
+        // sizes as the AI's, so both systems can share the board.
         for (mark in humanMarks) {
             if (topOverlap && mark.rank == 1) continue
             when (mark.rank) {
-                1 -> ringMark(
-                    mark, Color(0xFFE64A19), Color.White.copy(alpha = 0.55f),
-                    0.95f, 0.16f, android.graphics.Color.rgb(230, 74, 25)
+                1 -> discMark(
+                    mark,
+                    Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C),
+                    Color(0xFFBF360C).copy(alpha = 0.65f),
+                    0.95f, android.graphics.Color.WHITE
                 )
-                else -> ringMark(
-                    mark, Color(0xFFE64A19), Color.White.copy(alpha = 0.5f),
-                    0.78f, 0.13f, android.graphics.Color.rgb(230, 74, 25)
+                else -> discMark(
+                    mark,
+                    Color(0xFFFFAB91), Color(0xFFF4511E), Color(0xFFBF360C),
+                    Color(0xFFBF360C).copy(alpha = 0.65f),
+                    0.78f, android.graphics.Color.WHITE
                 )
             }
         }

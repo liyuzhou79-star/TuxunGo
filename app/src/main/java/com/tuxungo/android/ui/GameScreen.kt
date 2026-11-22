@@ -2687,7 +2687,7 @@ fun GameScreen(
             val blackScore = aliveBlack + terr.blackTerritory
             val whiteScore = aliveWhite + terr.whiteTerritory + game.komi
             val diff = blackScore - whiteScore
-            androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+            GameCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(text = "形势判断", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Rose)
@@ -2720,6 +2720,11 @@ fun GameScreen(
                         .background(Color(0xFFE8E8E8), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
                 )
             }
+            }
+            if (settings.judgeShowDetail || settings.judgeShowConfidence) {
+            androidx.compose.material3.HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
             }
             if (settings.judgeShowDetail) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -2784,6 +2789,9 @@ fun GameScreen(
                 ModelStore.activeId(context) == ModelStore.BUNDLED_ID &&
                 !EngineAssets.strongFile(context).exists()
             ) {
+                androidx.compose.material3.HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
                 Text(
                     text = "这盘棋形复杂，轻量模型有点拿不准。强力模型判断会稳得多，" +
                         "在模型库里可以免费下载（约 98 MB）。",
@@ -2802,6 +2810,8 @@ fun GameScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
             if (currentAnalysis != null) {
+                GameCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
@@ -2819,6 +2829,51 @@ fun GameScreen(
                         Text(if (analysisExpanded) "收起" else "展开")
                     }
                 }
+                val wr = currentAnalysis.rootWinrateBlack
+                Row(modifier = Modifier.fillMaxWidth().height(14.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(wr.coerceIn(0.02, 0.98).toFloat())
+                            .height(14.dp)
+                            .background(Color(0xFF1A1A1A))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight((1.0 - wr).coerceIn(0.02, 0.98).toFloat())
+                            .height(14.dp)
+                            .background(Color(0xFFE8E8E8))
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                val lead = currentAnalysis.rootScoreLeadBlack
+                Text(
+                    text = "黑胜率 ${formatPercent(wr)} · " +
+                        if (lead >= 0) "黑领先约 ${formatNum(lead)} 目" else "白领先约 ${formatNum(-lead)} 目",
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = commentaryLine(
+                        wr, lead,
+                        kotlin.math.abs(
+                            (currentAnalysis.candidates.getOrNull(0)?.winrateBlack ?: 0.0) -
+                                (currentAnalysis.candidates.getOrNull(1)?.winrateBlack ?: 0.0)
+                        )
+                    ),
+                    fontSize = 13.sp, color = Color(0xFF2F7CF6)
+                )
+                val decidedNow = analysisKey == game.moves.size &&
+                    decidedFor(currentAnalysis, game)
+                if (decidedNow || decidedMove != null) {
+                    Text(
+                        text = if (decidedMove != null) {
+                            "第 ${decidedMove} 手已定局（绝），那手的子上有标记。"
+                        } else {
+                            "「绝」：大局已定，这手下完可提议双方数子。"
+                        },
+                        fontSize = 13.sp, color = Color(0xFFC62828)
+                    )
+                }
+                if (analysisExpanded) {
                 Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2903,28 +2958,20 @@ fun GameScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                 }
-                val wr = currentAnalysis.rootWinrateBlack
-                Row(modifier = Modifier.fillMaxWidth().height(14.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .weight(wr.coerceIn(0.02, 0.98).toFloat())
-                            .height(14.dp)
-                            .background(Color(0xFF1A1A1A))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight((1.0 - wr).coerceIn(0.02, 0.98).toFloat())
-                            .height(14.dp)
-                            .background(Color(0xFFE8E8E8))
-                    )
+                androidx.compose.material3.HorizontalDivider()
+                Spacer(modifier = Modifier.height(6.dp))
+                val stones = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                val lead = currentAnalysis.rootScoreLeadBlack
-                Text(
-                    text = "黑胜率 ${formatPercent(wr)} · " +
-                        if (lead >= 0) "黑领先约 ${formatNum(lead)} 目" else "白领先约 ${formatNum(-lead)} 目",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                val terr = TerritoryEstimate.estimate(
+                    currentAnalysis.ownershipBlack, stones,
+                    game.size.width, game.size.height, 0.5
                 )
+                Text(
+                    text = "地盘估算（含死子）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
+                    fontSize = 13.sp, color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 val rangeText = AnalysisMath.scoreRangeText(
                     lead, currentAnalysis.rootScoreStdev
                 )
@@ -2934,19 +2981,7 @@ fun GameScreen(
                         fontSize = 12.sp, color = Color.Gray
                     )
                 }
-                Text(
-                    text = commentaryLine(
-                        wr, lead,
-                        kotlin.math.abs(
-                            (currentAnalysis.candidates.getOrNull(0)?.winrateBlack ?: 0.0) -
-                                (currentAnalysis.candidates.getOrNull(1)?.winrateBlack ?: 0.0)
-                        )
-                    ),
-                    fontSize = 13.sp, color = Color(0xFF2F7CF6)
-                )
                 val topCand = currentAnalysis.candidates.firstOrNull()
-                val decidedNow = analysisKey == game.moves.size &&
-                    decidedFor(currentAnalysis, game)
                 if (topCand != null) {
                     Text(
                         text = "一选：${topCand.vertex} · 胜率 ${formatPercent(topCand.winrateBlack)}",
@@ -2984,29 +3019,7 @@ fun GameScreen(
                         fontSize = 13.sp, color = Color(0xFF2F7CF6)
                     )
                 }
-                if (decidedNow || decidedMove != null) {
-                    Text(
-                        text = if (decidedMove != null) {
-                            "已在第 ${decidedMove} 手定局（绝）：那手的子上有个「绝」字——" +
-                                "当时领先的程度，对方把剩下的空全占了也翻不了盘。"
-                        } else {
-                            "「绝」：AI 判断大局已定，这手下完可以提议双方数子定胜负。"
-                        },
-                        fontSize = 13.sp, color = Color(0xFFC62828)
-                    )
-                }
-                if (analysisExpanded) {
-                val stones = Array(game.size.area) { i ->
-                    game.stoneAt(i % game.size.width, i / game.size.width)
-                }
-                val terr = TerritoryEstimate.estimate(
-                    currentAnalysis.ownershipBlack, stones,
-                    game.size.width, game.size.height, 0.5
-                )
-                Text(
-                    text = "地盘估算（含死子）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
-                    fontSize = 13.sp, color = Color.Gray
-                )
+                androidx.compose.material3.HorizontalDivider()
                 Spacer(modifier = Modifier.height(6.dp))
                 currentAnalysis.candidates.forEachIndexed { idx, cand ->
                     val isSel = idx == selectedCandidate
@@ -3027,6 +3040,7 @@ fun GameScreen(
                         fontSize = 12.sp, color = Color.Gray
                     )
                 }
+                androidx.compose.material3.HorizontalDivider()
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -3059,27 +3073,11 @@ fun GameScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(text = "换个深度重算", fontSize = 12.sp, color = Color.Gray)
-                    FilterChip(
-                        selected = false,
-                        onClick = { runAnalysis(deep = false, visitsOverride = 150, userInitiated = true) },
-                        enabled = !analyzing,
-                        label = { Text("快速") }
-                    )
-                    FilterChip(
-                        selected = false,
-                        onClick = { runAnalysis(deep = false, visitsOverride = 400, userInitiated = true) },
-                        enabled = !analyzing,
-                        label = { Text("标准") }
-                    )
-                }
                 if (analysisStatus.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = analysisStatus, fontSize = 12.sp, color = Color.Gray)
+                }
+                }
                 }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
