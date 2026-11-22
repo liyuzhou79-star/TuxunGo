@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -442,6 +443,105 @@ fun GameScreen(
         if (aiControls(stone)) ensureEngine(stone)
     }
 
+    /** Syncs the position to the GTP engine and applies its move for the side to move. */
+    fun genmoveNow() {
+        val moveStone = game.current
+        val eng = engineFor(moveStone) ?: return
+        if (game.finished || aiThinking) return
+        if (resignProposal != null) return
+        val myToken = aiToken
+        aiThinking = true
+        engineStatus = "AI 思考中…"
+        var genMs = 0L
+        runner.submit({
+            eng.clearBoard()
+            eng.setBoardSize(game.size)
+            eng.setKomi(game.komi)
+            when {
+                config.customStones.isNotEmpty() -> {
+                    eng.setPosition(config.customStones, game.size)
+                    for (move in game.moves) eng.play(move, game.size)
+                }
+                config.handicap > 0 -> {
+                    eng.command("fixed_handicap ${config.handicap}")
+                    for (move in game.moves) eng.play(move, game.size)
+                }
+                else -> for (move in game.moves) eng.play(move, game.size)
+            }
+            val t0 = System.nanoTime()
+            val mv = eng.genmove(game.current, game.size)
+            genMs = (System.nanoTime() - t0) / 1_000_000
+            mv
+        }) { result ->
+            // A cancelled move (undo / pause / takeover change) is dropped.
+            if (myToken != aiToken) return@submit
+            aiThinking = false
+            result.onSuccess { aiMove ->
+                engineStatus = if (genMs > 0) {
+                    "AI 用时 " + if (genMs < 1000) {
+                        "$genMs 毫秒"
+                    } else {
+                        String.format("%.1f 秒", genMs / 1000.0)
+                    }
+                } else {
+                    ""
+                }
+                if (!game.finished) {
+                    val capsBefore = totalCaptures()
+                    val refusedAt = if (moveStone == Stone.BLACK) {
+                        resignRefusedAtBlack
+                    } else {
+                        resignRefusedAtWhite
+                    }
+                    val applied = when {
+                        // The engine itself answered "resign": turn
+                        // it into a proposal the user consents to
+                        // (same 15-move refusal cooldown), never an
+                        // instant loss.
+                        aiMove == null && eng.lastGenmoveResigned &&
+                            sideCfg(moveStone).rank == "max" &&
+                            game.moves.size - refusedAt >= 15 -> {
+                            resignProposal = moveStone
+                            false
+                        }
+                        aiMove == null -> game.pass()
+                        else -> game.play(aiMove.x, aiMove.y) || game.pass()
+                    }
+                    if (applied) {
+                        version++
+                        resultDismissed = false
+                        pendingPoint = null
+                        onStonePlayed(totalCaptures() > capsBefore)
+                        clearAnalysis()
+                    }
+                }
+            }.onFailure { e ->
+                if (recoveryUsedForMove != game.moves.size) {
+                    // First failure on this move: the engine process
+                    // likely died. Drop it, let the driver effect
+                    // restart it and retry the move automatically.
+                    recoveryUsedForMove = game.moves.size
+                    runner.submit({ runCatching { eng.quit() } }) { }
+                    if (moveStone == Stone.BLACK) {
+                        engineBlack = null
+                        startedCfgBlack = null
+                    } else {
+                        engineWhite = null
+                        startedCfgWhite = null
+                    }
+                    engineStatus = "引擎异常，正在自动重启…"
+                } else {
+                    // Second failure on the same move: fall back to
+                    // manual play instead of leaving the human locked
+                    // out on the AI's turn.
+                    if (moveStone == Stone.BLACK) failedBlack = true else failedWhite = true
+                    eveRunning = false
+                    engineStatus = "引擎出错：${e.message ?: "未知错误"}"
+                }
+            }
+        }
+    }
+
     // Base position for the analysis engine.
     val baseStones: List<Move> = when {
         config.customStones.isNotEmpty() -> config.customStones
@@ -545,105 +645,6 @@ fun GameScreen(
                 }
             } else {
                 genmoveNow()
-            }
-        }
-    }
-
-    /** Syncs the position to the GTP engine and applies its move for the side to move. */
-    fun genmoveNow() {
-        val moveStone = game.current
-        val eng = engineFor(moveStone) ?: return
-        if (game.finished || aiThinking) return
-        if (resignProposal != null) return
-        val myToken = aiToken
-        aiThinking = true
-        engineStatus = "AI 思考中…"
-        var genMs = 0L
-        runner.submit({
-            eng.clearBoard()
-            eng.setBoardSize(game.size)
-            eng.setKomi(game.komi)
-            when {
-                config.customStones.isNotEmpty() -> {
-                    eng.setPosition(config.customStones, game.size)
-                    for (move in game.moves) eng.play(move, game.size)
-                }
-                config.handicap > 0 -> {
-                    eng.command("fixed_handicap ${config.handicap}")
-                    for (move in game.moves) eng.play(move, game.size)
-                }
-                else -> for (move in game.moves) eng.play(move, game.size)
-            }
-            val t0 = System.nanoTime()
-            val mv = eng.genmove(game.current, game.size)
-            genMs = (System.nanoTime() - t0) / 1_000_000
-            mv
-        }) { result ->
-            // A cancelled move (undo / pause / takeover change) is dropped.
-            if (myToken != aiToken) return@submit
-            aiThinking = false
-            result.onSuccess { aiMove ->
-                engineStatus = if (genMs > 0) {
-                    "AI 用时 " + if (genMs < 1000) {
-                        "$genMs 毫秒"
-                    } else {
-                        String.format("%.1f 秒", genMs / 1000.0)
-                    }
-                } else {
-                    ""
-                }
-                if (!game.finished) {
-                    val capsBefore = totalCaptures()
-                    val refusedAt = if (moveStone == Stone.BLACK) {
-                        resignRefusedAtBlack
-                    } else {
-                        resignRefusedAtWhite
-                    }
-                    val applied = when {
-                        // The engine itself answered "resign": turn
-                        // it into a proposal the user consents to
-                        // (same 15-move refusal cooldown), never an
-                        // instant loss.
-                        aiMove == null && eng.lastGenmoveResigned &&
-                            sideCfg(moveStone).rank == "max" &&
-                            game.moves.size - refusedAt >= 15 -> {
-                            resignProposal = moveStone
-                            false
-                        }
-                        aiMove == null -> game.pass()
-                        else -> game.play(aiMove.x, aiMove.y) || game.pass()
-                    }
-                    if (applied) {
-                        version++
-                        resultDismissed = false
-                        pendingPoint = null
-                        onStonePlayed(totalCaptures() > capsBefore)
-                        clearAnalysis()
-                    }
-                }
-            }.onFailure { e ->
-                if (recoveryUsedForMove != game.moves.size) {
-                    // First failure on this move: the engine process
-                    // likely died. Drop it, let the driver effect
-                    // restart it and retry the move automatically.
-                    recoveryUsedForMove = game.moves.size
-                    runner.submit({ runCatching { eng.quit() } }) { }
-                    if (moveStone == Stone.BLACK) {
-                        engineBlack = null
-                        startedCfgBlack = null
-                    } else {
-                        engineWhite = null
-                        startedCfgWhite = null
-                    }
-                    engineStatus = "引擎异常，正在自动重启…"
-                } else {
-                    // Second failure on the same move: fall back to
-                    // manual play instead of leaving the human locked
-                    // out on the AI's turn.
-                    if (moveStone == Stone.BLACK) failedBlack = true else failedWhite = true
-                    eveRunning = false
-                    engineStatus = "引擎出错：${e.message ?: "未知错误"}"
-                }
             }
         }
     }
