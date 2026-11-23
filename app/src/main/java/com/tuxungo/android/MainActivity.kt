@@ -534,7 +534,7 @@ fun TuxunGoApp(
         OnboardingScreen(
             versionName = versionName,
             isUpdate = guideIsUpdate,
-            whatsNew = "· 这一版是优化版：对局页更流畅、更省电\n· 形势判断和 AI 分析面板打开时，整盘的地盘、死子、比分和可信度改为算一次就缓存，不再跟着棋钟每秒重算一遍全盘\n· 棋盘上最后一手的蓝色圆圈改为常亮标记，去掉了让整个棋盘每帧不停重画的呼吸动画（落子时的涟漪还在），长时间对局更省电、更跟手\n· 「绝」的判定也改为缓存，点选棋子时不再重复跑整盘扫描",
+            whatsNew = "· 这一版继续优化分析的响应速度\n· 新增局面分析缓存：最近分析过的 12 个局面会记下来，悔棋、重下、来回翻看时回到同一个局面，之前的分析结果直接秒出，不用再等引擎重算\n· 缓存分得清：换了模型、换了贴目、开了人类选点、摆了底子局，都是不同的缓存，不会串味\n· 深度只认够深的结果：之前只算过快速分析的局面，再点深度分析仍会认真深算，不会拿浅结果糊弄",
             onFinish = {
                 metaPrefs.edit().putString("seen_version", versionName).apply()
                 showGuide = false

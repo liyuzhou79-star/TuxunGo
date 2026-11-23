@@ -207,6 +207,22 @@ fun GameScreen(
     var analyzing by remember { mutableStateOf(false) }
     var analysis by remember { mutableStateOf<AnalysisResult?>(null) }
     var analysisKey by remember { mutableIntStateOf(-1) }
+    // Recent final analysis results by position (2.67.0): going
+    // back to a position that was already analysed (undo, redo,
+    // stepping around) reuses the finished result instantly
+    // instead of paying for a fresh engine search. Access-order
+    // LRU, capped at 12 positions; values carry the visit count
+    // the result was computed at, so a deeper request is never
+    // satisfied by a shallower cached result.
+    val analysisCache = remember {
+        object : LinkedHashMap<String, Pair<AnalysisResult, Int>>(
+            16, 0.75f, true
+        ) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, Pair<AnalysisResult, Int>>
+            ): Boolean = size > 12
+        }
+    }
     var analysisStatus by remember { mutableStateOf("") }
     var selectedCandidate by remember { mutableIntStateOf(0) }
     var showTerritory by remember { mutableStateOf(false) }
@@ -800,15 +816,33 @@ fun GameScreen(
             onDone?.invoke()
             return
         }
+        val movesSnapshot = game.moves.toList()
+        val sideSnapshot = game.current
+        val moveCount = movesSnapshot.size
+        val targetVisits = visitsOverride ?: if (deep) 1200 else 300
+        // Position cache (2.67.0): a finished result for this exact
+        // position, computed at at least the requested depth, is
+        // reused on the spot.
+        val cacheKey = analysisCacheKey(
+            game.size.width, game.size.height, game.komi,
+            ModelStore.activeId(context), humanMarks,
+            baseStones, movesSnapshot
+        )
+        val cachedEntry = analysisCache[cacheKey]
+        if (cachedEntry != null && cachedEntry.second >= targetVisits) {
+            analysis = cachedEntry.first
+            analysisKey = moveCount
+            selectedCandidate = 0
+            analysisStatus = ""
+            onDone?.invoke()
+            return
+        }
         analyzing = true
         analysisStatus = when {
             deep -> "深度分析中…"
             visitsOverride != null && visitsOverride <= 150 -> "快速分析中…"
             else -> "分析中…"
         }
-        val movesSnapshot = game.moves.toList()
-        val sideSnapshot = game.current
-        val moveCount = movesSnapshot.size
         val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         analysisRunner.submit({
             var eng = analysisEngine
@@ -822,7 +856,6 @@ fun GameScreen(
                 )
                 analysisEngine = eng
             }
-            val targetVisits = visitsOverride ?: if (deep) 1200 else 300
             val provCallback: (AnalysisResult) -> Unit = { prov ->
                 // Show the provisional top move as soon as the
                 // search has one, then let the final result
@@ -907,6 +940,7 @@ fun GameScreen(
             analyzing = false
             result.onSuccess { res ->
                 if (game.moves.size == moveCount) {
+                    analysisCache[cacheKey] = res to targetVisits
                     analysis = res
                     analysisKey = moveCount
                     selectedCandidate = 0
@@ -4313,6 +4347,40 @@ private data class JudgmentView(
     val diff: Double,
     val unclearShare: Double
 )
+
+/** Identity of one analysable position for the analysis cache
+ *  (2.67.0): board size, komi, the model that must produce the
+ *  result, whether human-style data is included, the loaded
+ *  base position and the full move list. Two positions with the
+ *  same key are the same question to the engine. */
+internal fun analysisCacheKey(
+    width: Int,
+    height: Int,
+    komi: Double,
+    modelId: String,
+    includeHuman: Boolean,
+    base: List<Move>,
+    moves: List<Move>
+): String {
+    val sb = StringBuilder()
+    sb.append(width).append('x').append(height)
+        .append('|').append(komi)
+        .append('|').append(modelId)
+        .append('|').append(if (includeHuman) 'H' else '-')
+    for (m in base) {
+        sb.append('|').append(m.x).append(',').append(m.y)
+            .append(',').append(m.stone)
+    }
+    sb.append('#')
+    for (m in moves) {
+        if (m.isPass) {
+            sb.append('p')
+        } else {
+            sb.append(m.x).append(',').append(m.y).append(';')
+        }
+    }
+    return sb.toString()
+}
 
 private fun decidedFor(a: AnalysisResult?, game: GoGame): Boolean {
     if (a == null) return false
