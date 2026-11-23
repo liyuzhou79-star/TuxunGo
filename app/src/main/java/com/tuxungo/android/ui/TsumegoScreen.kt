@@ -330,7 +330,17 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                 delay(800)
             }
         }
-        statusText = "这就是正解。点「自己试一次」亲手走一遍，记得更牢。"
+        // Demo over: hand the board back on a FRESH problem
+        // (2.70.0). demoMode used to stay on after the demo, which
+        // left the board locked behind a button swap the user
+        // could easily miss — it read as "the board is dead".
+        game = buildProblemGame(problem)
+        version++
+        step = 0
+        pending = null
+        hintPoint = null
+        demoMode = false
+        statusText = "这就是正解。已经帮你重开一局，亲手走一遍，记得更牢。"
     }
 
     // Challenge countdown: one second at a time; running out
@@ -558,7 +568,39 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
             preview = pending ?: hintPoint,
             onPointTap = { x, y ->
                 if (solved || replyPending || demoMode) return@BoardView
-                if (!game.isLegal(x, y)) return@BoardView
+                if (!game.isLegal(x, y)) {
+                    // Illegal points used to be rejected in total
+                    // silence (2.70.0): no shake, no message — a
+                    // user tapping an occupied point or a suicide
+                    // point reasonably concluded the board was not
+                    // responding at all. Give the same shake as a
+                    // wrong move, plus a plain reason.
+                    statusText = if (game.stoneAt(x, y) != null) {
+                        "那个点已经有子了，换个空点试试。"
+                    } else {
+                        "这个点落不了子（禁着点：下进去会被提，或犯劫争规则），换个点试试。"
+                    }
+                    shakeScope.launch {
+                        shakeX.snapTo(0f)
+                        shakeX.animateTo(
+                            -9f,
+                            androidx.compose.animation.core.tween(40)
+                        )
+                        shakeX.animateTo(
+                            9f,
+                            androidx.compose.animation.core.tween(70)
+                        )
+                        shakeX.animateTo(
+                            -6f,
+                            androidx.compose.animation.core.tween(60)
+                        )
+                        shakeX.animateTo(
+                            0f,
+                            androidx.compose.animation.core.tween(50)
+                        )
+                    }
+                    return@BoardView
+                }
                 if (pending == Pair(x, y)) {
                     pending = null
                     hintPoint = null
@@ -663,7 +705,11 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                         hintPoint = problem.steps.getOrNull(step)?.accept?.firstOrNull()
                         statusText = "提示：${problem.hint}（棋盘上发光的点就是关键位置）"
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    // Not during the scripted reply (2.70.0): the
+                    // hint/demo actions rebuild or annotate the
+                    // position while the reply effect is still armed.
+                    enabled = !replyPending
                 ) { Text("提示") }
                 OutlinedButton(
                     onClick = {
@@ -675,7 +721,7 @@ fun TsumegoScreen(onBack: () -> Unit, initialIndex: Int = 0) {
                         demoMode = true
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !challengeMode
+                    enabled = !challengeMode && !replyPending
                 ) { Text("演示正解") }
                 OutlinedButton(
                     onClick = { reset(index) },
