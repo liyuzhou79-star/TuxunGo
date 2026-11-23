@@ -2435,23 +2435,6 @@ fun GameScreen(
         // on every recomposition while open. Each value below only
         // depends on its analysis object plus the move count, so
         // it is cached on exactly those keys.
-        val decidedCached = remember(currentAnalysis, game.moves.size) {
-            decidedFor(currentAnalysis, game)
-        }
-        val analysisTerr = remember(currentAnalysis, game.moves.size) {
-            val a = currentAnalysis
-            if (a == null) {
-                null
-            } else {
-                val stonesArr = Array(game.size.area) { i ->
-                    game.stoneAt(i % game.size.width, i / game.size.width)
-                }
-                TerritoryEstimate.estimate(
-                    a.ownershipBlack, stonesArr,
-                    game.size.width, game.size.height, 0.5
-                )
-            }
-        }
         val judgmentView = remember(
             judgment, game.moves.size, settings.deadStrictness
         ) {
@@ -2705,6 +2688,23 @@ fun GameScreen(
         }
 
         val currentAnalysis = analysis
+        val decidedCached = remember(currentAnalysis, game.moves.size) {
+            decidedFor(currentAnalysis, game)
+        }
+        val analysisTerr = remember(currentAnalysis, game.moves.size) {
+            val a = currentAnalysis
+            if (a == null) {
+                null
+            } else {
+                val stonesArr = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
+                }
+                TerritoryEstimate.estimate(
+                    a.ownershipBlack, stonesArr,
+                    game.size.width, game.size.height, 0.5
+                )
+            }
+        }
         val selected = currentAnalysis?.candidates?.getOrNull(selectedCandidate)
         val displayOwnership = when {
             scoringMode -> null
