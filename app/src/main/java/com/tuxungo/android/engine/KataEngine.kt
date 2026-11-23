@@ -129,6 +129,15 @@ class KataEngine private constructor(
                 )
             }
             val text = block.trim()
+            // The "= / ?" first bytes are GTP protocol tokens (the
+            // protocol's own success/failure framing), not error
+            // message text: branching on them is branching on the
+            // reply TYPE, which stays correct whatever wording the
+            // engine puts after them. (Audit note, 2.68.0: the app
+            // never branches on human-readable error wording
+            // anywhere; failures are typed — HTTP status codes,
+            // JSON "error" fields, exception types — at the site
+            // that raises them.)
             if (text.startsWith("?")) {
                 throw IllegalStateException(
                     "KataGo error for '$cmd': ${text.removePrefix("?").trim()} ${diagnostics()}"
