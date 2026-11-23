@@ -2429,6 +2429,84 @@ fun GameScreen(
                 est.whiteTerritory + aliveW + game.komi
             )
         }
+        // Memoised whole-board derivations (2.66.0): the clock
+        // recomposes this screen every second, and the panels used
+        // to re-run full-board flood fills and territory estimates
+        // on every recomposition while open. Each value below only
+        // depends on its analysis object plus the move count, so
+        // it is cached on exactly those keys.
+        val decidedCached = remember(currentAnalysis, game.moves.size) {
+            decidedFor(currentAnalysis, game)
+        }
+        val analysisTerr = remember(currentAnalysis, game.moves.size) {
+            val a = currentAnalysis
+            if (a == null) {
+                null
+            } else {
+                val stonesArr = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
+                }
+                TerritoryEstimate.estimate(
+                    a.ownershipBlack, stonesArr,
+                    game.size.width, game.size.height, 0.5
+                )
+            }
+        }
+        val judgmentView = remember(
+            judgment, game.moves.size, settings.deadStrictness
+        ) {
+            val j = judgment
+            if (!judgmentActive || j == null) {
+                null
+            } else {
+                val stonesArr = Array(game.size.area) { i ->
+                    game.stoneAt(i % game.size.width, i / game.size.width)
+                }
+                val terr = TerritoryEstimate.estimate(
+                    j.ownershipBlack, stonesArr,
+                    game.size.width, game.size.height, 0.5
+                )
+                val deadJ = TerritoryEstimate.deadStones(
+                    j.ownershipBlack, stonesArr,
+                    game.size.width, game.size.height,
+                    SettingsStore.deadGroupMean(settings.deadStrictness)
+                )
+                var blackDead = 0
+                var whiteDead = 0
+                var aliveBlack = 0
+                var aliveWhite = 0
+                for (i in stonesArr.indices) {
+                    val st = stonesArr[i] ?: continue
+                    if (i in deadJ) {
+                        if (st == Stone.WHITE) whiteDead++ else blackDead++
+                    } else {
+                        if (st == Stone.BLACK) aliveBlack++ else aliveWhite++
+                    }
+                }
+                var emptyPoints = 0
+                var unclearPoints = 0
+                for (i in stonesArr.indices) {
+                    if (stonesArr[i] != null) continue
+                    emptyPoints++
+                    val mag = kotlin.math.abs(
+                        j.ownershipBlack.getOrElse(i) { 0.0 }
+                    )
+                    if (mag < 0.5) unclearPoints++
+                }
+                val blackScore = aliveBlack + terr.blackTerritory
+                val whiteScore = aliveWhite + terr.whiteTerritory + game.komi
+                JudgmentView(
+                    terr.blackTerritory, terr.whiteTerritory, terr.neutral,
+                    blackDead, whiteDead, aliveBlack, aliveWhite,
+                    blackScore, whiteScore, blackScore - whiteScore,
+                    if (emptyPoints > 0) {
+                        unclearPoints.toDouble() / emptyPoints
+                    } else {
+                        0.0
+                    }
+                )
+            }
+        }
         // Mini win-rate bar: always occupies its strip so the board
         // does not shift when data arrives.
         Box(modifier = Modifier.fillMaxWidth().height(6.dp)) {
@@ -2675,7 +2753,7 @@ fun GameScreen(
         }
         val pendingDecided = pendingAi?.rank == 1 &&
             currentAnalysis != null && analysisKey == game.moves.size &&
-            decidedFor(currentAnalysis, game)
+            decidedCached
         Box {
         BoardFrame(framed = !settings.boardFill) {
         BoardView(
@@ -2830,36 +2908,16 @@ fun GameScreen(
         // ---- Judgment panel ----
         if (judgmentActive && !focusMode) {
             val j = judgment!!
-            val stones = Array(game.size.area) { i ->
-                game.stoneAt(i % game.size.width, i / game.size.width)
-            }
-            val terr = TerritoryEstimate.estimate(
-                j.ownershipBlack, stones, game.size.width, game.size.height, 0.5
-            )
-            val deadJ = TerritoryEstimate.deadStones(
-                j.ownershipBlack, stones, game.size.width, game.size.height,
-                SettingsStore.deadGroupMean(settings.deadStrictness)
-            )
-            var blackDead = 0
-            var whiteDead = 0
-            for (i in deadJ) {
-                if (stones[i] == Stone.WHITE) whiteDead++
-                if (stones[i] == Stone.BLACK) blackDead++
-            }
-            // Counted score, Chinese style: live stones + territory
-            // points (dead stones already count for the opponent in
-            // the territory numbers). The breakdown must add up to
-            // the verdict, like the score panels of the big Go apps.
-            var aliveBlack = 0
-            var aliveWhite = 0
-            for (i in stones.indices) {
-                if (i in deadJ) continue
-                if (stones[i] == Stone.BLACK) aliveBlack++
-                if (stones[i] == Stone.WHITE) aliveWhite++
-            }
-            val blackScore = aliveBlack + terr.blackTerritory
-            val whiteScore = aliveWhite + terr.whiteTerritory + game.komi
-            val diff = blackScore - whiteScore
+            // All whole-board numbers come from the memoised
+            // judgmentView (2.66.0); the panel only reads them.
+            val terr = judgmentView!!
+            val blackDead = terr.blackDead
+            val whiteDead = terr.whiteDead
+            val aliveBlack = terr.aliveBlack
+            val aliveWhite = terr.aliveWhite
+            val blackScore = terr.blackScore
+            val whiteScore = terr.whiteScore
+            val diff = terr.diff
             GameCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -2931,22 +2989,8 @@ fun GameScreen(
                 )
             }
             }
-            // Confidence from how decisive the ownership looks on the
-            // empty points: lots of pale (undecided) points means the
-            // verdict is still soft.
-            var emptyPoints = 0
-            var unclearPoints = 0
-            for (i in stones.indices) {
-                if (stones[i] != null) continue
-                emptyPoints++
-                val mag = kotlin.math.abs(j.ownershipBlack.getOrElse(i) { 0.0 })
-                if (mag < 0.5) unclearPoints++
-            }
-            val unclearShare = if (emptyPoints > 0) {
-                unclearPoints.toDouble() / emptyPoints
-            } else {
-                0.0
-            }
+            // Confidence share is part of the memoised judgmentView.
+            val unclearShare = terr.unclearShare
             if (settings.judgeShowConfidence) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -3035,7 +3079,7 @@ fun GameScreen(
                     fontSize = 13.sp, color = Color(0xFF2F7CF6)
                 )
                 val decidedNow = analysisKey == game.moves.size &&
-                    decidedFor(currentAnalysis, game)
+                    decidedCached
                 if (decidedNow || decidedMove != null) {
                     Text(
                         text = if (decidedMove != null) {
@@ -3185,13 +3229,7 @@ fun GameScreen(
                 }
                 androidx.compose.material3.HorizontalDivider()
                 Spacer(modifier = Modifier.height(6.dp))
-                val stones = Array(game.size.area) { i ->
-                    game.stoneAt(i % game.size.width, i / game.size.width)
-                }
-                val terr = TerritoryEstimate.estimate(
-                    currentAnalysis.ownershipBlack, stones,
-                    game.size.width, game.size.height, 0.5
-                )
+                val terr = analysisTerr!!
                 Text(
                     text = "地盘估算（含死子）：黑约 ${terr.blackTerritory} · 白约 ${terr.whiteTerritory}",
                     fontSize = 13.sp, color = Color.Gray
@@ -4257,6 +4295,24 @@ private fun decidedStoneOf(game: GoGame, decidedMove: Int?): Move? {
     if (decidedMove == null || decidedMove < 1) return null
     return game.moves.getOrNull(decidedMove - 1)?.takeIf { !it.isPass }
 }
+
+/** Memoised whole-board derivations for the judgment panel
+ *  (2.66.0): territory, dead/alive counts, the counted score and
+ *  the confidence share, computed once per judgment/position
+ *  instead of on every recomposition. */
+private data class JudgmentView(
+    val blackTerritory: Int,
+    val whiteTerritory: Int,
+    val neutral: Int,
+    val blackDead: Int,
+    val whiteDead: Int,
+    val aliveBlack: Int,
+    val aliveWhite: Int,
+    val blackScore: Int,
+    val whiteScore: Double,
+    val diff: Double,
+    val unclearShare: Double
+)
 
 private fun decidedFor(a: AnalysisResult?, game: GoGame): Boolean {
     if (a == null) return false

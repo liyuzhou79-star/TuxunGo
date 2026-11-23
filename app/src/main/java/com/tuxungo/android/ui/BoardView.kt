@@ -188,17 +188,12 @@ fun BoardView(
             ripple.animateTo(1f, animationSpec = tween(450))
         }
     }
-    // Gentle breathing ring around the last move.
-    val breatheTransition = rememberInfiniteTransition(label = "lastMoveBreathe")
-    val breatheAlpha by breatheTransition.animateFloat(
-        initialValue = 0.16f,
-        targetValue = 0.48f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1100),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breatheAlpha"
-    )
+    // The last-move ring used to breathe via an infinite
+    // transition (2.66.0: removed — an infinite animation makes
+    // the whole board canvas redraw every frame for the entire
+    // game, which costs battery and smoothness for a purely
+    // decorative pulse. The ring is now a steady marker; the
+    // one-shot placement ripple still animates each new stone.)
     // Candidate / human discs grow in softly when a fresh analysis
     // lands, instead of snapping onto the board.
     val marksAnim = remember { Animatable(1f) }
@@ -208,7 +203,7 @@ fun BoardView(
             marksAnim.animateTo(1f, animationSpec = tween(170))
         }
     }
-    // Slow pulse shared by the overlap glow and the 「绝」 badge —
+    // Slow pulse for the 「绝」 badge —
     // deliberately gentle, so it never shouts over the play.
     val pulseTransition = rememberInfiniteTransition(label = "markPulse")
     val markPulse by pulseTransition.animateFloat(
@@ -568,9 +563,9 @@ fun BoardView(
                 tri,
                 color = if (last.stone == Stone.BLACK) Color.White.copy(alpha = 0.92f) else Color.Black.copy(alpha = 0.88f)
             )
-            // Breathing ring + the placement ripple on the newest stone.
+            // Steady ring + the placement ripple on the newest stone.
             drawCircle(
-                color = Color(0xFF2F7CF6).copy(alpha = breatheAlpha),
+                color = Color(0xFF2F7CF6).copy(alpha = 0.34f),
                 radius = r * 1.10f,
                 center = Offset(cx, cy),
                 style = Stroke(width = maxOf(1.2f, r * 0.05f))
