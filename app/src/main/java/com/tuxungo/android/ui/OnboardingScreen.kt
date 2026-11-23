@@ -1,6 +1,8 @@
 package com.tuxungo.android.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -127,7 +129,14 @@ fun OnboardingScreen(
                 modifier = Modifier.weight(1f)
             ) { page ->
                 val p = pages[page]
-                Column {
+                // Each page scrolls on its own (2.69.0): the guide
+                // texts are long, and on a short screen a plain
+                // Column clipped them with no way to read the rest.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Text(
                         text = p.title,
                         fontSize = 24.sp,
