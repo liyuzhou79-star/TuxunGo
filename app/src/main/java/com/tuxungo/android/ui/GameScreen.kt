@@ -2362,7 +2362,7 @@ fun GameScreen(
                 ) {
                     Row(
                         modifier = Modifier.padding(top = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         Text(text = "当前选点：", fontSize = 13.sp, color = Color.Gray)
                         Box(
