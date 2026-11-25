@@ -156,6 +156,12 @@ fun BoardView(
      *  its top-right corner for the rest of the game. Callers pass
      *  at most one badge per stone. */
     badges: List<StoneBadge> = emptyList(),
+    /** The analysis vulgar pick （俗）: an (empty) candidate
+     *  point that gets a small white calligraphy 「俗」 disc at
+     *  its top-right corner — the same badge language as the
+     *  stone badges, riding on a candidate instead of a stone.
+     *  Drawn only when the point is among [candidates]. */
+    vulgarPoint: Move? = null,
     /** Territory colouring starts at this ownership strength: points
      *  weaker than this stay uncoloured, so early-game boards do not
      *  speckle. Adjustable in the judgment settings. */
@@ -743,6 +749,38 @@ fun BoardView(
                 }
             }
         }
+        // The analysis vulgar pick （俗）: a small white disc
+        // with a calligraphy 「俗」 at the candidate point's
+        // top-right corner — same badge language as the stone
+        // badges, but riding on an (empty) candidate point.
+        if (vulgarPoint != null &&
+            candidates.any {
+                it.x == vulgarPoint.x && it.y == vulgarPoint.y
+            }
+        ) {
+            val c = Offset(px(vulgarPoint.x), py(vulgarPoint.y))
+            val br = r * 0.34f
+            val bc = c + Offset(r * 0.52f, -r * 0.52f)
+            drawCircle(Color.White, radius = br, center = bc)
+            drawCircle(
+                Color(0xFF90A4AE), radius = br, center = bc,
+                style = Stroke(width = maxOf(1.2f, r * 0.045f))
+            )
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.rgb(55, 71, 79)
+                textSize = br * 1.3f
+                textAlign = android.graphics.Paint.Align.CENTER
+                isAntiAlias = true
+                typeface = jueTypeface
+                if (jueTypeface == null) isFakeBoldText = true
+            }
+            val metrics = paint.fontMetrics
+            val baseline = bc.y - (metrics.ascent + metrics.descent) / 2f
+            drawContext.canvas.nativeCanvas.drawText(
+                "俗", bc.x, baseline, paint
+            )
+        }
+
         // Human-style favourite: a blue double ring, no number — the
         // "where a human would play" marker, distinct from the AI's
         // ranked discs even when both point at the same spot.

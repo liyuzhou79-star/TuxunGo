@@ -614,24 +614,28 @@ fun GameScreen(
      * Entry point for an AI turn. When a deliberate-flaw feature
      * applies to this side — the global deliberate blunders
      * (「恶」) or this side's own deliberate vulgar moves
-     * (「俗」) — a quick safety analysis runs first: only from a
-     * safely won, settled position may the AI spend one of its
-     * 1-2 deliberate flaws (see AnalysisMath.pickBlunder /
-     * pickVulgar for the rails). Every other case — and every
-     * failed check — falls through to the normal engine move.
+     * (「俗」) — a quick analysis runs first so a picker can
+     * choose the flawed move. Blunders keep their safety rails
+     * (safely won, settled position, see AnalysisMath.pickBlunder);
+     * vulgar moves have NO conditions by the user's ruling — any
+     * side configuration, any score, from the first moves on (see
+     * AnalysisMath.pickVulgar). Every case where no picker fires
+     * falls through to the normal engine move.
      */
     fun aiMoveNow() {
-        // A deliberate-flaw safety check is already running.
+        // A deliberate-flaw check is already running.
         if (blunderChecking) return
         val moveStone = game.current
         val cfgNow = sideCfg(moveStone)
         val fullStrength = cfgNow.rank == "max" && !cfgNow.humanLike
         val blunderEligible = aiBlunders && fullStrength &&
             blundersUsed < blunderQuota
-        val vulgarEligible = cfgNow.vulgar && fullStrength &&
+        val vulgarEligible = cfgNow.vulgar &&
             vulgarUsed(moveStone) < vulgarQuota(moveStone)
-        val eligible = (blunderEligible || vulgarEligible) &&
-            game.moves.size >= 12 && !game.finished && !aiThinking &&
+        val blunderReady = blunderEligible && game.moves.size >= 12
+        val vulgarReady = vulgarEligible
+        val eligible = (blunderReady || vulgarReady) &&
+            !game.finished && !aiThinking &&
             !blunderChecking && resignProposal == null &&
             aiControls(moveStone)
         if (!eligible) {
@@ -660,7 +664,7 @@ fun GameScreen(
                 maxVisits = 250,
                 // The vulgar picker wants the human model's
                 // favourite; the blunder picker does not.
-                includeHuman = vulgarEligible
+                includeHuman = vulgarReady
             )
         }) { result ->
             blunderChecking = false
@@ -678,7 +682,7 @@ fun GameScreen(
                 val unclear = AnalysisMath.unclearShare(
                     res.ownershipBlack, emptyArr
                 )
-                if (blunderEligible &&
+                if (blunderReady &&
                     kotlin.random.Random.nextFloat() < 0.45f
                 ) {
                     AnalysisMath.pickBlunder(
@@ -689,13 +693,12 @@ fun GameScreen(
                         appliedKind = 1
                     }
                 }
-                if (applied == null && vulgarEligible &&
+                if (applied == null && vulgarReady &&
                     kotlin.random.Random.nextFloat() < 0.55f
                 ) {
                     AnalysisMath.pickVulgar(
-                        res.rootWinrateBlack, res.rootScoreLeadBlack,
-                        res.candidates, res.humanTopMove, moveStone,
-                        unclear
+                        res.rootWinrateBlack,
+                        res.candidates, res.humanTopMove, moveStone
                     )?.let {
                         applied = it.move
                         appliedKind = 2
@@ -2173,6 +2176,26 @@ fun GameScreen(
                 }
             }
             val fsA = analysis
+            // The analysis display's vulgar pick （俗）for the
+            // fullscreen board: the natural-looking candidate
+            // that quietly costs a few points. No conditions —
+            // any analysis, any position (user's ruling).
+            val fsVulgar = remember(fsA, analysisKey) {
+                val a = fsA
+                if (a == null) {
+                    null
+                } else {
+                    val side = if (analysisKey % 2 == 0) {
+                        basePlayer
+                    } else {
+                        basePlayer.other()
+                    }
+                    AnalysisMath.pickVulgar(
+                        a.rootWinrateBlack, a.candidates,
+                        a.humanTopMove, side
+                    )?.move
+                }
+            }
             val fsSel = fsA?.candidates?.getOrNull(selectedCandidate)
             val fsOwnership = when {
                 focusMode -> null
@@ -2235,6 +2258,9 @@ fun GameScreen(
                     humanMarksOf(fsA)
                 } else emptyList(),
                 badges = if (!focusMode) boardBadges() else emptyList(),
+                vulgarPoint = if (!focusMode && !judgmentActive && !scoringMode) {
+                    fsVulgar
+                } else null,
                 ownership = fsOwnership,
                 pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
@@ -2980,6 +3006,28 @@ fun GameScreen(
         }
 
         val currentAnalysis = analysis
+        // The analysis display's vulgar pick （俗）: among the
+        // shown candidates, the natural-looking one that quietly
+        // costs a few points (AnalysisMath.pickVulgar). Shown on
+        // the board and in the panel's candidate list. No
+        // conditions — any analysis (single, continuous, auto),
+        // any position (user's ruling).
+        val analysisVulgar = remember(currentAnalysis, analysisKey) {
+            val a = currentAnalysis
+            if (a == null) {
+                null
+            } else {
+                val side = if (analysisKey % 2 == 0) {
+                    basePlayer
+                } else {
+                    basePlayer.other()
+                }
+                AnalysisMath.pickVulgar(
+                    a.rootWinrateBlack, a.candidates,
+                    a.humanTopMove, side
+                )?.move
+            }
+        }
         val analysisTerr = remember(currentAnalysis, game.moves.size) {
             val a = currentAnalysis
             if (a == null) {
@@ -3063,6 +3111,9 @@ fun GameScreen(
                 humanMarksOf(currentAnalysis)
             } else emptyList(),
             badges = if (!focusMode) boardBadges() else emptyList(),
+            vulgarPoint = if (!focusMode && !judgmentActive && !scoringMode) {
+                analysisVulgar
+            } else null,
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
@@ -3387,8 +3438,12 @@ fun GameScreen(
                 }
                 currentAnalysis.candidates.forEachIndexed { idx, cand ->
                     val isSel = idx == selectedCandidate
+                    val isVulgar = cand.move != null &&
+                        analysisVulgar != null &&
+                        cand.move!!.x == analysisVulgar!!.x &&
+                        cand.move!!.y == analysisVulgar!!.y
                     Text(
-                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
+                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex}${if (isVulgar) "（俗）" else ""} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
                         fontSize = 14.sp,
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSel) Rose else Color.Unspecified,
@@ -5083,17 +5138,12 @@ private fun AiSideSection(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "AI 故意俗手", fontSize = 14.sp)
                         Text(
-                            text = if (cfg.rank != "max" || cfg.humanLike) {
-                                "只对全实力 AI 生效，定级和模拟人类落子时不用"
-                            } else {
-                                "稳赢时每局随机 1～2 手，故意下看着自然、其实吃小亏的俗手；落的子会标白色「俗」，只对这一方生效"
-                            },
+                            text = "每局随机 1～2 手故意下俗手：看着自然、其实吃小亏，落的子标白色「俗」；只对这一方生效",
                             fontSize = 12.sp, color = Color.Gray
                         )
                     }
                     Switch(
-                        checked = cfg.vulgar && cfg.rank == "max" && !cfg.humanLike,
-                        enabled = cfg.rank == "max" && !cfg.humanLike,
+                        checked = cfg.vulgar,
                         onCheckedChange = { onCfgChange(cfg.copy(vulgar = it)) }
                     )
                 }

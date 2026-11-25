@@ -245,25 +245,19 @@ object AnalysisMath {
         return best
     }
 
-    // ---- Deliberate vulgar moves （俗手） -------------------------
+    // ---- Vulgar moves （俗手） --------------------------------
     // A vulgar move looks completely natural — ideally it is the
     // move a human would pick — but the engine can see it quietly
-    // gives something back: a few points of win rate, a little
-    // territory, the kind of move that loses games slowly. The AI
-    // plays one on purpose only from a safely won position, and
-    // the cost is capped so it can never throw the game.
-
-    /** Root position must be at least this good for the mover. */
-    const val VULGAR_MIN_WINRATE = 0.78
-
-    /** Root lead (mover's perspective) required before a vulgar move. */
-    const val VULGAR_MIN_LEAD = 8.0
-
-    /** After the vulgar move the mover must still be at least this good. */
-    const val VULGAR_FLOOR_WINRATE = 0.70
-
-    /** After the vulgar move this lead (mover's perspective) must remain. */
-    const val VULGAR_FLOOR_LEAD = 5.0
+    // gives something back: a few points of win rate, the kind
+    // of move that loses games slowly. Used two ways: the AI can
+    // play one on purpose (per-side toggle in the AI panel), and
+    // the analysis display marks one among the candidates. The
+    // user ruled there are NO position conditions on either use:
+    // any side, any score, settled or not. The only gate left is
+    // the definition itself — the cost must sit between
+    // [VULGAR_MIN_DROP] and [VULGAR_MAX_DROP]: cheaper is just a
+    // normal alternative, dearer is a blunder （恶）, not a
+    // vulgar move （俗）.
 
     /** The move must cost at least this much win rate to count as
      *  vulgar at all — cheaper than that is just a normal choice. */
@@ -274,33 +268,25 @@ object AnalysisMath {
     const val VULGAR_MAX_DROP = 0.09
 
     /**
-     * Picks the deliberate vulgar move for the side to move, or
-     * null when no candidate qualifies. Qualifying candidates
-     * (never the engine's best, never a pass) cost between
-     * [VULGAR_MIN_DROP] and [VULGAR_MAX_DROP] win rate while
-     * respecting the floors. Among them, the human model's own
-     * favourite wins when present — nothing looks more natural
-     * than the move a human would actually play; otherwise the
-     * subtlest (smallest drop) candidate is chosen.
+     * Picks the vulgar move among the candidates for the side to
+     * move, or null when no candidate qualifies. Qualifying
+     * candidates (never the engine's best, never a pass) cost
+     * between [VULGAR_MIN_DROP] and [VULGAR_MAX_DROP] win rate.
+     * Among them, the human model's own favourite wins when
+     * present — nothing looks more natural than the move a human
+     * would actually play; otherwise the subtlest (smallest
+     * drop) candidate is chosen.
      */
     fun pickVulgar(
         rootWinrateBlack: Double,
-        rootScoreLeadBlack: Double,
         candidates: List<Candidate>,
         humanTopMove: Move?,
-        sideToMove: Stone,
-        unclearShare: Double
+        sideToMove: Stone
     ): Candidate? {
-        if (unclearShare > BLUNDER_MAX_UNCLEAR) return null
-        val sign = if (sideToMove == Stone.BLACK) 1.0 else -1.0
         val rootWr = if (sideToMove == Stone.BLACK) {
             rootWinrateBlack
         } else {
             1.0 - rootWinrateBlack
-        }
-        val rootLead = sign * rootScoreLeadBlack
-        if (rootWr < VULGAR_MIN_WINRATE || rootLead < VULGAR_MIN_LEAD) {
-            return null
         }
         var subtlest: Candidate? = null
         var subtlestDrop = Double.MAX_VALUE
@@ -312,12 +298,8 @@ object AnalysisMath {
             } else {
                 1.0 - cand.winrateBlack
             }
-            val lead = sign * cand.scoreLeadBlack
             val drop = rootWr - wr
             if (drop < VULGAR_MIN_DROP || drop > VULGAR_MAX_DROP) continue
-            if (wr < VULGAR_FLOOR_WINRATE || lead < VULGAR_FLOOR_LEAD) {
-                continue
-            }
             if (humanTopMove != null && mv.x == humanTopMove.x &&
                 mv.y == humanTopMove.y
             ) {
