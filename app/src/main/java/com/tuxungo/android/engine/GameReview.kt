@@ -632,7 +632,11 @@ object DecisiveMath {
             var lo = Double.MAX_VALUE
             var hi = 0.0
             for (s in (t - LOCK_WINDOW + 1)..t) {
-                val ss = stats[s] ?: run { ok = false; break }
+                val ss = stats[s]
+                if (ss == null) {
+                    ok = false
+                    break
+                }
                 val w = wrFor(ss, leader)
                 if (w < LOCK_WINRATE) {
                     ok = false
@@ -799,7 +803,11 @@ object DecisiveMath {
             var lo = Double.MAX_VALUE
             var hi = 0.0
             for (s in (t - COMEBACK_CALM_TURNS + 1)..t) {
-                val ss = stats[s] ?: run { ok = false; break }
+                val ss = stats[s]
+                if (ss == null) {
+                    ok = false
+                    break
+                }
                 val w = wrFor(ss, leader)
                 lo = minOf(lo, w)
                 hi = maxOf(hi, w)
