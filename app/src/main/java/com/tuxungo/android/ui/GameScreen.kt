@@ -2353,6 +2353,57 @@ fun GameScreen(
                     )
                 }
             }
+            // The floating pill's verdict, mirrored as a steady
+            // label in the analysis strip under the board, so it
+            // can be read here too (not only while it floats).
+            Box(modifier = Modifier.fillMaxWidth().height(26.dp)) {
+                if (!focusMode && pendingPoint != null &&
+                    (fsPendingKind != 0 || fsPendingRank in 2..3 || fsPendingDecided)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(top = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "当前选点：", fontSize = 13.sp, color = Color.Gray)
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = when {
+                                        fsPendingDecided && pendingGlobal ->
+                                            Color(0xFFC62828)
+                                        fsPendingDecided -> Color(0xFF1565C0)
+                                        fsPendingKind == 1 -> Color(0xFFF57C00)
+                                        fsPendingKind == 2 -> Color(0xFF7B1FA2)
+                                        fsPendingKind == 3 -> Color(0xFFFFE082)
+                                        else -> Color.White
+                                    },
+                                    shape = RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = when {
+                                    fsPendingDecided && pendingGlobal -> "绝"
+                                    fsPendingDecided -> "定"
+                                    fsPendingKind == 1 -> "双一选"
+                                    fsPendingKind == 2 -> "人类一选"
+                                    fsPendingKind == 3 -> "一选"
+                                    fsPendingRank == 2 -> "二选"
+                                    else -> "三选"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    fsPendingDecided || fsPendingKind == 1 ||
+                                        fsPendingKind == 2 -> Color.White
+                                    fsPendingKind == 3 -> Color(0xFF4E342E)
+                                    else -> Color(0xFF37474F)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
