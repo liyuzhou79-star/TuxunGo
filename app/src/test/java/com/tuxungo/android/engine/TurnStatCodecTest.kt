@@ -78,6 +78,38 @@ class TurnStatCodecTest {
     }
 
     @Test
+    fun decisiveAndVulgarFieldsRoundTrip() {
+        val marked = TurnStat(
+            turn = 7, winrateBlack = 0.97, scoreLeadBlack = 30.0,
+            bestMove = null, bestIsPass = true,
+            decisive = 1, decisiveReason = 1
+        )
+        val vulgarOnly = TurnStat(
+            turn = 9, winrateBlack = 0.8, scoreLeadBlack = 10.0,
+            bestMove = null, bestIsPass = true, vulgar = true
+        )
+        val stats = mapOf(7 to marked, 9 to vulgarOnly)
+        val back = ReviewMath.decodeSparse(ReviewMath.encodeSparse(stats))
+        assertEquals(1, back[7]!!.decisive)
+        assertEquals(1, back[7]!!.decisiveReason)
+        assertFalse(back[7]!!.vulgar)
+        // The vulgar flag sits behind two zero-padded fields and
+        // must still land in its own slot.
+        assertEquals(0, back[9]!!.decisive)
+        assertTrue(back[9]!!.vulgar)
+    }
+
+    @Test
+    fun sevenFieldLegacyRowsDecodeWithNoDecisive() {
+        // Rows with only the deliberate flag (the 2.63-2.70 format)
+        // must read as no decisive mark, not vulgar.
+        val back = ReviewMath.decodeTurns("0.900,20.000,-1,-1,0.000,,1")
+        assertTrue(back[0].deliberate)
+        assertEquals(0, back[0].decisive)
+        assertFalse(back[0].vulgar)
+    }
+
+    @Test
     fun blankAndNullDecodeToEmpty() {
         assertTrue(ReviewMath.decodeTurns("").isEmpty())
         assertTrue(ReviewMath.decodeSparse(null).isEmpty())

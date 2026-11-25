@@ -44,6 +44,31 @@ import kotlin.math.roundToInt
 /** A numbered candidate-move marker (rank 1 is the AI's first choice). */
 data class CandidateMark(val x: Int, val y: Int, val rank: Int)
 
+/** The five stone corner badges, one calligraphy character each. */
+enum class StoneBadgeKind(val char: String) {
+    /** Red: the move that sealed the whole game. */
+    JUE("绝"),
+    /** Blue: the move that settled one region / dragon. */
+    DING("定"),
+    /** Red: a deliberate blunder by the AI. */
+    EVIL("恶"),
+    /** White: a deliberate vulgar move by the AI. */
+    VULGAR("俗"),
+    /** Green: the move that resolved a ko. */
+    KO("销")
+}
+
+/** One corner badge pinned on one played stone. */
+data class StoneBadge(val move: Move, val kind: StoneBadgeKind)
+
+/** Disc fill, rim, ink colour and breathing for one badge kind. */
+private data class BadgePalette(
+    val fill: Color,
+    val rim: Color,
+    val ink: Int,
+    val breathe: Boolean
+)
+
 /** Board face designs, selectable in settings. */
 enum class BoardSkin {
     BEIGE, KAYA, WOOD_LIGHT, WOOD_DARK, BAMBOO, SAKURA, MOON, OBSIDIAN;
@@ -125,13 +150,12 @@ fun BoardView(
      *  orange-red discs, distinct from both the AI's discs and the
      *  blue humanPoint ring. */
     humanMarks: List<CandidateMark> = emptyList(),
-    /** The move that sealed the game (the 「绝」 move): its stone
-     *  keeps a small calligraphy 「绝」 badge at its corner for the
-     *  rest of the game. Null while the game is not decided. */
-    decidedStone: Move? = null,
-    /** Deliberate-blunder moves: each such stone keeps a small red
-     *  「恶」 badge at its corner, the same treatment as 「绝」. */
-    blunderStones: List<Move> = emptyList(),
+    /** Corner badges on stones (「绝 / 定 / 恶 / 俗 / 销」):
+     *  each badged stone keeps a small flat disc with a white (or
+     *  dark, on the white 「俗」 disc) calligraphy character at
+     *  its top-right corner for the rest of the game. Callers pass
+     *  at most one badge per stone. */
+    badges: List<StoneBadge> = emptyList(),
     /** Territory colouring starts at this ownership strength: points
      *  weaker than this stay uncoloured, so early-game boards do not
      *  speckle. Adjustable in the judgment settings. */
@@ -738,78 +762,58 @@ fun BoardView(
             )
         }
 
-        // 「绝」 badge: once the game is sealed, the sealing stone
-        // keeps a small calligraphy 「绝」 at its top-right corner
-        // for the rest of the game. It breathes very gently with
-        // markPulse — present, but never shouting over the play.
-        if (decidedStone != null && !decidedStone.isPass &&
-            game.stoneAt(decidedStone.x, decidedStone.y) == decidedStone.stone
-        ) {
-            val center = Offset(px(decidedStone.x), py(decidedStone.y))
-            val badgeCenter = Offset(
-                center.x + r * 0.55f, center.y - r * 0.55f
-            )
-            // Flat solid red disc, white calligraphy on top.
-            drawCircle(
-                Color(0xFFC62828),
-                radius = r * 0.47f,
-                center = badgeCenter
-            )
-            drawCircle(
-                Color(0xFF7F1010).copy(alpha = 0.8f),
-                radius = r * 0.47f,
-                center = badgeCenter,
-                style = Stroke(width = maxOf(1.2f, r * 0.045f))
-            )
-            val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = r * 0.8f
-                textAlign = android.graphics.Paint.Align.CENTER
-                isAntiAlias = true
-                alpha = (218 + (37 * markPulse).toInt()).coerceIn(0, 255)
-                if (jueTypeface != null) {
-                    typeface = jueTypeface
-                } else {
-                    isFakeBoldText = true
-                }
-            }
-            val metrics = paint.fontMetrics
-            val baseline = badgeCenter.y - (metrics.ascent + metrics.descent) / 2f
-            drawContext.canvas.nativeCanvas.drawText(
-                "绝", badgeCenter.x, baseline, paint
-            )
-        }
-
-        // 「恶」 badges: deliberate-blunder stones keep a small
-        // flat red disc with a white calligraphy 「恶」 at their
-        // top-right corner, so the moves the AI gave away on
-        // purpose stay visible on the board itself.
-        for (blunder in blunderStones) {
-            if (blunder.isPass ||
-                game.stoneAt(blunder.x, blunder.y) != blunder.stone
-            ) {
+        // Stone corner badges (「绝 / 定 / 恶 / 俗 / 销」): a
+        // small flat disc at the stone's top-right corner with one
+        // calligraphy character, staying for the rest of the game.
+        // Colours: 绝 red, 定 blue, 恶 red, 俗 white with a dark
+        // character, 销 green. Only 「绝」 breathes very gently
+        // with markPulse — present, but never shouting over play.
+        for (badge in badges) {
+            val mv = badge.move
+            if (mv.isPass || game.stoneAt(mv.x, mv.y) != mv.stone) {
                 continue
             }
-            val center = Offset(px(blunder.x), py(blunder.y))
+            val (fill, rim, ink, breathe) = when (badge.kind) {
+                StoneBadgeKind.JUE -> BadgePalette(
+                    Color(0xFFC62828), Color(0xFF7F1010),
+                    android.graphics.Color.WHITE, true
+                )
+                StoneBadgeKind.DING -> BadgePalette(
+                    Color(0xFF1565C0), Color(0xFF0D47A1),
+                    android.graphics.Color.WHITE, false
+                )
+                StoneBadgeKind.EVIL -> BadgePalette(
+                    Color(0xFFC62828), Color(0xFF7F1010),
+                    android.graphics.Color.WHITE, false
+                )
+                StoneBadgeKind.VULGAR -> BadgePalette(
+                    Color(0xFFFFFFFF), Color(0xFF90A4AE),
+                    android.graphics.Color.rgb(55, 71, 79), false
+                )
+                StoneBadgeKind.KO -> BadgePalette(
+                    Color(0xFF2E7D32), Color(0xFF1B5E20),
+                    android.graphics.Color.WHITE, false
+                )
+            }
+            val center = Offset(px(mv.x), py(mv.y))
             val badgeCenter = Offset(
                 center.x + r * 0.55f, center.y - r * 0.55f
             )
+            drawCircle(fill, radius = r * 0.47f, center = badgeCenter)
             drawCircle(
-                Color(0xFFC62828),
-                radius = r * 0.47f,
-                center = badgeCenter
-            )
-            drawCircle(
-                Color(0xFF7F1010).copy(alpha = 0.8f),
+                rim.copy(alpha = 0.8f),
                 radius = r * 0.47f,
                 center = badgeCenter,
                 style = Stroke(width = maxOf(1.2f, r * 0.045f))
             )
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
+                color = ink
                 textSize = r * 0.8f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isAntiAlias = true
+                if (breathe) {
+                    alpha = (218 + (37 * markPulse).toInt()).coerceIn(0, 255)
+                }
                 if (jueTypeface != null) {
                     typeface = jueTypeface
                 } else {
@@ -819,7 +823,7 @@ fun BoardView(
             val metrics = paint.fontMetrics
             val baseline = badgeCenter.y - (metrics.ascent + metrics.descent) / 2f
             drawContext.canvas.nativeCanvas.drawText(
-                "恶", badgeCenter.x, baseline, paint
+                badge.kind.char, badgeCenter.x, baseline, paint
             )
         }
 

@@ -27,12 +27,14 @@ Jenelle van Heerden, published by
 recompressed and (for the beige variant) recoloured for use as a
 board surface; the grid and stones are drawn by the app itself.
 
-## Calligraphy font (「绝」 badge)
+## Calligraphy font (stone badges)
 
-The calligraphy 「绝」 and 「恶」 shown on the sealing move's and
-the deliberate-blunder moves' stones are set in
+The calligraphy characters on the stone badges (「绝」 for the
+game-sealing move, 「定」 for a region-settling move, 「恶」 for
+deliberate blunders, 「俗」 for deliberate vulgar moves and
+「销」 for the move that resolves a ko) are set in
 [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng),
 a Chinese calligraphy typeface by the Ma Shan Zheng Project
-Authors, licensed under the SIL Open Font License 1.1. Only the
-「绝」 and 「恶」 glyphs are bundled (`res/font/jue_calligraphy.ttf`,
+Authors, licensed under the SIL Open Font License 1.1. Only those
+five glyphs are bundled (`res/font/jue_calligraphy.ttf`,
 subset with fonttools); the full font is not included.

@@ -15,7 +15,7 @@
 - `app/src/main/java/com/tuxungo/android/go/GoGame.kt` — 规则核心：落子、提子、禁着点、全局同形禁着（positional superko）、停一手（2.64.0 起双停不自动终局，AI 对 AI 由 GameScreen 收官）、认输/超时、中国规则数目（`score` / `scoreWithDead`）、死子确认后的定稿（`finishScoringWith`）
 - `go/Sgf.kt` — SGF 导出（含逐手胜率注释的复盘导出也在这里组装）
 - `go/SgfImport.kt` — SGF 导入：主线解析（多局/让子/摆子/矩形），导入前用 GoGame 逐手回放校验，对不上就截断并标记
-- `engine/GameReview.kt` — 复盘数据：逐手统计 `TurnStat` 的编解码（含故意失误标记位）、恶手/妙手/转折手/故意失误判定、整局讲评汇总、定局手推导（`ReviewMath`）
+- `engine/GameReview.kt` — 复盘数据：逐手统计 `TurnStat` 的编解码（尾字段依次为故意失误/定局种类/定局理由/故意俗手）、恶手/妙手/转折手/故意失误/故意俗手判定、整局讲评汇总；`DecisiveMath` 是「绝/定/销」判定核心（全局锁定=冷静窗+最坏账+无突破口、官子收尽、逆转定局、区域/大龙定型需归属持续两手、销劫为纯规则形状检测），纯函数可单测
 
 ## 引擎层
 
@@ -25,7 +25,7 @@
 - `engine/ModelDownload.kt` — 强力模型的下载（断点与取消）
 - `engine/EngineAssets.kt` — 把打包进 APK 的模型文件释放到 filesDir（资源用中性扩展名 `.model` 防打包器改名）
 - `engine/ModelHeader.kt` — 模型文件头解析；`TerritoryEstimate` 是死子判定（按整块棋的气与归属均值）
-- `engine/SideAiStore.kt` — 双方 AI 配置（模型、访问量、模拟人类、定级档位 `RANKS` 与对应的人类模型 profile）
+- `engine/SideAiStore.kt` — 双方 AI 配置（模型、访问量、模拟人类、定级档位 `RANKS` 与对应的人类模型 profile、单侧故意俗手开关 `vulgar`）
 
 ## 数据与设置
 
@@ -41,9 +41,9 @@
 - `MainActivity.kt` — 导航总调度、主题、首次启动引导与「本版更新」、桌面长按快捷入口、空闲预热分析引擎
 - `ui/SetupScreen.kt` — 主页：开局设置、最近棋谱、每日一题卡；连点吉祥物五次打开个人统计页
 - `ui/GameScreen.kt` — 对局页（全项目最大的文件）：对局驱动、AI 托管、分析/形势判断/数目、智能裁判、AI 认输、走势小图、表演赛解说流、系列赛、结果弹窗都在这里
-- `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选标记（AI 紫/白半透明圆点、人类橙红圆点、重叠发光点）、选中点悬浮标签在 GameScreen、定局「绝」字书法徽章、落子放大镜、手数、涟漪与落子沉降动画
+- `ui/BoardView.kt` — 棋盘绘制：皮肤纹理、领地着色、候选标记（扁平纯色圆点：人类一选紫、AI 一选淡黄、双一选橙、其余白）、选中点悬浮标签在 GameScreen（普通与全屏都有）、棋子角书法徽章 `StoneBadge`（绝红/定蓝/恶红/俗白/销绿，调用方按优先级合并到一子一徽）、落子放大镜、手数、涟漪与落子沉降动画
 - `ui/GameUi.kt` — 游戏级视觉组件（2.60.0）：渐变质感按钮 GameButton、深度卡片 GameCard、棋盘胡桃木框 BoardFrame、棋子头像 StoneAvatar、几何图标 GameIcon
-- `ui/ReviewScreen.kt` — 复盘：走势图、逐手回放、分支试下、领地归属图（按手数缓存）
+- `ui/ReviewScreen.kt` — 复盘：走势图、逐手回放、分支试下、领地归属图（按手数缓存）；整场分析顺带收集逐手归属喂 `DecisiveMath`，点带徽章的子显示判定理由，检出标记会回存进棋谱统计
 - `ui/LibraryScreen.kt` — 棋谱库：搜索/筛选/多选、终局缩略图（后台渲染、缓存有上限）
 - `ui/GuessScreen.kt` — 猜一选训练：随机对局、棋谱库出题、错题本
 - `ui/TsumegoScreen.kt` — 死活题（题目数据在文件内，解法全部经过规则推演验证）、限时挑战
@@ -69,7 +69,9 @@
 - `go/SgfImportTest`（10）— SGF 导入解析（主线/变化/多局/让子/摆子/矩形/回放截断/结果文案）
 - `engine/KataEngineVertexTest`（3）— GTP 顶点坐标转换（跳过 I、y 自上而下）
 - `engine/ModelHeaderTest`（8）— 模型文件头解析 + 死子判定（整块均值）+ 展示用归属加深
-- `engine/AnalysisMathTest`（24）— 视角转换、判绝规则（99.4%＋翻盘锁定/无大空地）、最大未定区域、胜率五五开交点、故意失误选步的安全线、比分范围文案
+- `engine/AnalysisMathTest`（28）— 视角转换、旧判绝规则、最大未定区域、胜率五五开交点、故意失误与故意俗手的选步安全线、比分范围文案
+- `engine/DecisiveMathTest`（7）— 销劫（填劫/回提劫之分、双向形状）、全局锁定（冷静窗+最坏账）、逆转定局、大龙定型与假定型不标、标记存档字段优先级
+- `engine/TurnStatCodecTest`（6）— 稠密/稀疏编解码往返、旧格式（6 字段/7 字段）兼容、定局与俗手尾字段
 - `engine/SideAiStoreTest`（4）— 定级阶梯 RANKS 的构成、顺序与显示名
 - `GameStoreTest`（2）— 对局存档编解码
 - `ReviewMathTest`（14）— 逐手统计编解码、恶手/妙手判定、棋谱库手顺编码、稀疏统计拒绝、整局讲评汇总、故意失误标记与存档往返、定局手（绝）推导

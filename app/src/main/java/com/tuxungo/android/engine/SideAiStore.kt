@@ -13,7 +13,14 @@ data class SideAiConfig(
      *  or "1k".."18k". A capped rank plays pure imitation of the
      *  human model at that rank — genuinely that strong, mistakes
      *  included, not a full-strength engine throwing moves away. */
-    val rank: String = "max"
+    val rank: String = "max",
+    /**
+     * Deliberate vulgar moves （俗手） for THIS side only: a
+     * full-strength AI that is safely winning may, once or twice a
+     * game, play a natural-looking but subtly inferior move on
+     * purpose. Off by default; set per side in the AI panel.
+     */
+    val vulgar: Boolean = false
 )
 
 /**
@@ -35,7 +42,8 @@ object SideAiStore {
         val visits = prefs.getInt(key(stone, "visits"), defaultVisits)
         val humanLike = prefs.getBoolean(key(stone, "human"), false)
         val rank = prefs.getString(key(stone, "rank"), "max") ?: "max"
-        return SideAiConfig(modelId, visits, humanLike, rank)
+        val vulgar = prefs.getBoolean(key(stone, "vulgar"), false)
+        return SideAiConfig(modelId, visits, humanLike, rank, vulgar)
     }
 
     fun save(context: Context, stone: Stone, cfg: SideAiConfig) {
@@ -45,6 +53,7 @@ object SideAiStore {
             .putInt(key(stone, "visits"), cfg.visits)
             .putBoolean(key(stone, "human"), cfg.humanLike)
             .putString(key(stone, "rank"), cfg.rank)
+            .putBoolean(key(stone, "vulgar"), cfg.vulgar)
             .apply()
     }
 

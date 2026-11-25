@@ -259,6 +259,35 @@ fun GameScreen(
     }
     var blunderQuota by remember { mutableStateOf((1..2).random()) }
     var blunderChecking by remember { mutableStateOf(false) }
+
+    // Deliberate vulgar moves (the user's 「俗手」 feature):
+    // per-side opt-in from the AI panel (SideAiConfig.vulgar).
+    // Which move numbers were vulgar, each side's spend count
+    // (restored games inherit theirs from the recorded stats) and
+    // each side's random quota of 1-2.
+    val vulgarMoves = remember {
+        androidx.compose.runtime.mutableStateListOf<Int>()
+    }
+    var vulgarUsedBlack by remember {
+        mutableStateOf(initialStats.entries.count { (turn, st) ->
+            st.vulgar &&
+                game.moves.getOrNull(turn - 1)?.stone == Stone.BLACK
+        })
+    }
+    var vulgarUsedWhite by remember {
+        mutableStateOf(initialStats.entries.count { (turn, st) ->
+            st.vulgar &&
+                game.moves.getOrNull(turn - 1)?.stone == Stone.WHITE
+        })
+    }
+    var vulgarQuotaBlack by remember { mutableStateOf((1..2).random()) }
+    var vulgarQuotaWhite by remember { mutableStateOf((1..2).random()) }
+
+    fun vulgarUsed(stone: Stone): Int =
+        if (stone == Stone.BLACK) vulgarUsedBlack else vulgarUsedWhite
+
+    fun vulgarQuota(stone: Stone): Int =
+        if (stone == Stone.BLACK) vulgarQuotaBlack else vulgarQuotaWhite
     var settledStreak by remember { mutableIntStateOf(0) }
     var refereeNotice by remember {
         mutableStateOf<Pair<String, Set<Int>>?>(null)
@@ -582,22 +611,26 @@ fun GameScreen(
     }
 
     /**
-     * Entry point for an AI turn. When the deliberate-blunder
-     * feature is on and this side is a full-strength AI, a quick
-     * safety analysis runs first: only from a safely won, settled
-     * position may the AI spend one of this game's 1-2 deliberate
-     * blunders (see AnalysisMath.pickBlunder for the rails). Every
-     * other case — and every failed check — falls through to the
-     * normal engine move.
+     * Entry point for an AI turn. When a deliberate-flaw feature
+     * applies to this side — the global deliberate blunders
+     * (「恶」) or this side's own deliberate vulgar moves
+     * (「俗」) — a quick safety analysis runs first: only from a
+     * safely won, settled position may the AI spend one of its
+     * 1-2 deliberate flaws (see AnalysisMath.pickBlunder /
+     * pickVulgar for the rails). Every other case — and every
+     * failed check — falls through to the normal engine move.
      */
     fun aiMoveNow() {
-        // A blunder safety check is already running for this turn.
+        // A deliberate-flaw safety check is already running.
         if (blunderChecking) return
         val moveStone = game.current
         val cfgNow = sideCfg(moveStone)
-        val eligible = aiBlunders &&
-            cfgNow.rank == "max" && !cfgNow.humanLike &&
-            blundersUsed < blunderQuota &&
+        val fullStrength = cfgNow.rank == "max" && !cfgNow.humanLike
+        val blunderEligible = aiBlunders && fullStrength &&
+            blundersUsed < blunderQuota
+        val vulgarEligible = cfgNow.vulgar && fullStrength &&
+            vulgarUsed(moveStone) < vulgarQuota(moveStone)
+        val eligible = (blunderEligible || vulgarEligible) &&
             game.moves.size >= 12 && !game.finished && !aiThinking &&
             !blunderChecking && resignProposal == null &&
             aiControls(moveStone)
@@ -625,12 +658,16 @@ fun GameScreen(
                 moves = movesSnapshot,
                 sideToMove = moveStone,
                 maxVisits = 250,
-                includeHuman = false
+                // The vulgar picker wants the human model's
+                // favourite; the blunder picker does not.
+                includeHuman = vulgarEligible
             )
         }) { result ->
             blunderChecking = false
             if (myToken != aiToken) return@submit
-            val pick = result.getOrNull()?.let { res ->
+            var applied: Move? = null
+            var appliedKind = 0 // 1 = blunder （恶）, 2 = vulgar （俗）
+            result.getOrNull()?.let { res ->
                 val w = sizeSnapshot.width
                 // Emptiness from the live game: the snapshot was
                 // taken from it and the token guard means no move
@@ -641,16 +678,31 @@ fun GameScreen(
                 val unclear = AnalysisMath.unclearShare(
                     res.ownershipBlack, emptyArr
                 )
-                if (kotlin.random.Random.nextFloat() < 0.45f) {
+                if (blunderEligible &&
+                    kotlin.random.Random.nextFloat() < 0.45f
+                ) {
                     AnalysisMath.pickBlunder(
                         res.rootWinrateBlack, res.rootScoreLeadBlack,
                         res.candidates, moveStone, unclear
-                    )
-                } else {
-                    null
+                    )?.let {
+                        applied = it.move
+                        appliedKind = 1
+                    }
+                }
+                if (applied == null && vulgarEligible &&
+                    kotlin.random.Random.nextFloat() < 0.55f
+                ) {
+                    AnalysisMath.pickVulgar(
+                        res.rootWinrateBlack, res.rootScoreLeadBlack,
+                        res.candidates, res.humanTopMove, moveStone,
+                        unclear
+                    )?.let {
+                        applied = it.move
+                        appliedKind = 2
+                    }
                 }
             }
-            val mv = pick?.move
+            val mv = applied
             // The position must be exactly the one that was
             // analyzed — anything else (undo, takeover) goes back
             // to the normal engine path, which re-syncs first.
@@ -662,8 +714,17 @@ fun GameScreen(
                     version++
                     resultDismissed = false
                     pendingPoint = null
-                    blundersUsed++
-                    deliberateMoves.add(game.moves.size)
+                    if (appliedKind == 1) {
+                        blundersUsed++
+                        deliberateMoves.add(game.moves.size)
+                    } else if (appliedKind == 2) {
+                        if (moveStone == Stone.BLACK) {
+                            vulgarUsedBlack++
+                        } else {
+                            vulgarUsedWhite++
+                        }
+                        vulgarMoves.add(game.moves.size)
+                    }
                     engineStatus = ""
                     onStonePlayed(totalCaptures() > capsBefore)
                     clearAnalysis()
@@ -701,61 +762,110 @@ fun GameScreen(
             .apply { putAll(initialStats) }
     }
 
-    // The move that sealed the game (「绝」): once an analysis of
-    // the current position first calls the game decided, that
-    // move's stone keeps the calligraphy badge for the rest of the
-    // game. Session-only; a restored game re-derives it from its
-    // recorded stats (see the effect below).
-    var decidedMove by remember { mutableStateOf<Int?>(null) }
+    // Decisive badges (「绝 / 定 / 销」): re-detected whenever
+    // the recorded stats or the ownership snapshots grow, from a
+    // fresh board replay. Confirmed marks (the detectors'
+    // persistence rules applied) pin their badges for the rest of
+    // the game; provisional marks — the same detectors treating
+    // the current position as final — only feed the floating pill.
+    // A restored game also inherits any marks stored in its stats.
+    var decisiveMarks by remember {
+        mutableStateOf<List<com.tuxungo.android.engine.DecisiveMark>>(
+            emptyList()
+        )
+    }
+    var provisionalMarks by remember {
+        mutableStateOf<List<com.tuxungo.android.engine.DecisiveMark>>(
+            emptyList()
+        )
+    }
+    // Ownership snapshot per analysed turn, for the detectors.
+    val ownershipByTurn = remember {
+        androidx.compose.runtime.mutableStateMapOf<Int, DoubleArray>()
+    }
 
-    // Live detection: the current position's analysis calls the
-    // game decided for the first time -> the last move sealed it.
-    LaunchedEffect(analysis, analysisKey, game.moves.size) {
-        if (decidedMove == null && game.moves.isNotEmpty() &&
-            analysis != null && analysisKey == game.moves.size &&
-            decidedFor(analysis, game)
-        ) {
-            decidedMove = game.moves.size
+    LaunchedEffect(
+        game.moves.size, liveStats.size, ownershipByTurn.size,
+        game.finished
+    ) {
+        val boards = replayBoards(game, config)
+        val movesNow = game.moves.toList()
+        val confirmed =
+            com.tuxungo.android.engine.DecisiveMath.detect(
+                game.size, movesNow, liveStats, ownershipByTurn,
+                boards, finalized = game.finished
+            )
+        val stored = initialStats.entries.mapNotNull { (turn, st) ->
+            val kind = com.tuxungo.android.engine.DecisiveMath
+                .kindFromCode(st.decisive) ?: return@mapNotNull null
+            val reason = com.tuxungo.android.engine.DecisiveReason
+                .fromCode(st.decisiveReason) ?: return@mapNotNull null
+            if (turn in 1..movesNow.size) {
+                com.tuxungo.android.engine.DecisiveMark(turn, kind, reason)
+            } else {
+                null
+            }
         }
+        decisiveMarks = (confirmed + stored)
+            .distinctBy { it.moveNumber to it.kind }
+            .sortedBy { it.moveNumber }
+        provisionalMarks =
+            com.tuxungo.android.engine.DecisiveMath.detect(
+                game.size, movesNow, liveStats, ownershipByTurn,
+                boards, finalized = true
+            )
     }
-    // Undoing back past the sealing move clears the badge.
-    LaunchedEffect(game.moves.size) {
-        val dm = decidedMove
-        if (dm != null && dm > game.moves.size) decidedMove = null
-    }
-    // Restored game: re-derive the sealing move from the recorded
-    // stats with the score-lock rule, replaying the game once to
-    // count the empty points at every turn.
-    LaunchedEffect(Unit) {
-        if (decidedMove != null || initialStats.isEmpty()) return@LaunchedEffect
-        val dense = (0..game.moves.size).map { liveStats[it] }
-        if (dense.any { it == null }) return@LaunchedEffect
-        val turns = dense.filterNotNull()
-        val replay = GoGame(game.size, game.komi)
-        when {
-            config.customStones.isNotEmpty() ->
-                replay.loadPosition(config.customStones, config.startPlayer)
-            config.handicap > 0 -> replay.loadPosition(
-                game.handicapStones.map { (x, y) -> Move(Stone.BLACK, x, y) },
-                Stone.WHITE
+
+    // Corner badges for the boards: decisive marks plus the
+    // deliberate-flaw marks, at most one badge per stone
+    // (绝 > 定 > 恶 > 俗 > 销）.
+    fun boardBadges(): List<StoneBadge> {
+        fun rankOf(kind: StoneBadgeKind): Int = when (kind) {
+            StoneBadgeKind.JUE -> 0
+            StoneBadgeKind.DING -> 1
+            StoneBadgeKind.EVIL -> 2
+            StoneBadgeKind.VULGAR -> 3
+            StoneBadgeKind.KO -> 4
+        }
+        val chosen = HashMap<Int, StoneBadgeKind>()
+        fun offer(moveNumber: Int, kind: StoneBadgeKind) {
+            val cur = chosen[moveNumber]
+            if (cur == null || rankOf(kind) < rankOf(cur)) {
+                chosen[moveNumber] = kind
+            }
+        }
+        for (mark in decisiveMarks) {
+            offer(
+                mark.moveNumber,
+                when (mark.kind) {
+                    com.tuxungo.android.engine.DecisiveKind.GLOBAL ->
+                        StoneBadgeKind.JUE
+                    com.tuxungo.android.engine.DecisiveKind.REGIONAL ->
+                        StoneBadgeKind.DING
+                    com.tuxungo.android.engine.DecisiveKind.KO ->
+                        StoneBadgeKind.KO
+                }
             )
         }
-        fun countEmpty(g: GoGame): Int {
-            var c = 0
-            for (i in 0 until g.size.area) {
-                if (g.stoneAt(i % g.size.width, i / g.size.width) == null) c++
-            }
-            return c
+        for (n in deliberateMoves) offer(n, StoneBadgeKind.EVIL)
+        for (n in vulgarMoves) offer(n, StoneBadgeKind.VULGAR)
+        return chosen.entries.mapNotNull { (n, kind) ->
+            game.moves.getOrNull(n - 1)?.takeIf { !it.isPass }
+                ?.let { StoneBadge(it, kind) }
         }
-        val emptyByTurn = IntArray(game.moves.size + 1)
-        emptyByTurn[0] = countEmpty(replay)
-        for ((i, mv) in game.moves.withIndex()) {
-            if (mv.isPass) replay.pass() else replay.play(mv.x, mv.y)
-            emptyByTurn[i + 1] = countEmpty(replay)
-        }
-        decidedMove = com.tuxungo.android.engine.ReviewMath.firstDecidedTurn(
-            turns, emptyByTurn
-        )
+    }
+
+    // Provisional decisive calls on the latest position, shared
+    // by the fullscreen and normal boards' floating pills and by
+    // the analysis panel: the last move already sealed the game
+    // (「绝」) or settled a region (「定」).
+    val pendingGlobal = provisionalMarks.any {
+        it.kind == com.tuxungo.android.engine.DecisiveKind.GLOBAL &&
+            it.moveNumber == game.moves.size
+    }
+    val pendingRegional = provisionalMarks.any {
+        it.kind == com.tuxungo.android.engine.DecisiveKind.REGIONAL &&
+            it.moveNumber == game.moves.size
     }
 
     fun recordTurnStat(moveCount: Int, res: AnalysisResult, overwrite: Boolean) {
@@ -781,11 +891,15 @@ fun GameScreen(
                     }
                 }
             } ?: "",
-            deliberate = moveCount in deliberateMoves
+            deliberate = moveCount in deliberateMoves,
+            vulgar = moveCount in vulgarMoves
         )
         if (overwrite || !liveStats.containsKey(moveCount)) {
             liveStats[moveCount] = stat
         }
+        // Keep the freshest ownership snapshot for this turn: the
+        // decisive detectors （绝 / 定） read these.
+        ownershipByTurn[moveCount] = res.ownershipBlack
     }
 
     fun runAnalysis(
@@ -1715,7 +1829,25 @@ fun GameScreen(
             moves = game.moves.toList(),
             resultText = if (game.finished) resultSummary() else "",
             statsCache = if (liveStats.isNotEmpty()) {
-                com.tuxungo.android.engine.ReviewMath.encodeSparse(liveStats)
+                // Bake the decisive marks （绝 / 定 / 销） and any
+                // vulgar flags into the stored stats, so review can
+                // show the badges even where it has no ownership
+                // data to re-detect them from.
+                val mergedStats = liveStats.mapValues { (turn, st) ->
+                    val (dk, dr) =
+                        com.tuxungo.android.engine.DecisiveMath
+                            .statFieldsFor(decisiveMarks, turn)
+                    st.copy(
+                        decisive = if (dk != 0) dk else st.decisive,
+                        decisiveReason = if (dk != 0) {
+                            dr
+                        } else {
+                            st.decisiveReason
+                        },
+                        vulgar = st.vulgar || (turn in vulgarMoves)
+                    )
+                }
+                com.tuxungo.android.engine.ReviewMath.encodeSparse(mergedStats)
             } else {
                 null
             }
@@ -2049,6 +2181,44 @@ fun GameScreen(
                 showTerritory -> boostedOwnership(fsA?.ownershipBlack)
                 else -> null
             }
+            // Fullscreen gets the same floating rank pill as the
+            // normal board (it used to have none): computed from
+            // the fullscreen analysis snapshot.
+            val fsPendingAi = if (pendingPoint != null && !focusMode &&
+                !judgmentActive && !scoringMode
+            ) {
+                shownCandidates(fsA, topThreeOnly).firstOrNull {
+                    it.x == pendingPoint!!.first &&
+                        it.y == pendingPoint!!.second
+                }
+            } else {
+                null
+            }
+            val fsPendingHu = if (pendingPoint != null && !focusMode &&
+                !judgmentActive && !scoringMode && humanMarks
+            ) {
+                humanMarksOf(fsA).firstOrNull {
+                    it.x == pendingPoint!!.first &&
+                        it.y == pendingPoint!!.second
+                }
+            } else {
+                null
+            }
+            val fsPendingKind = when {
+                fsPendingAi?.rank == 1 && fsPendingHu?.rank == 1 -> 1
+                fsPendingHu?.rank == 1 -> 2
+                fsPendingAi?.rank == 1 -> 3
+                else -> 0
+            }
+            val fsPendingRank = if (fsPendingKind != 0) {
+                1
+            } else {
+                minOf(fsPendingAi?.rank ?: 99, fsPendingHu?.rank ?: 99)
+            }
+            val fsPendingDecided = fsPendingAi?.rank == 1 &&
+                fsA != null && analysisKey == game.moves.size &&
+                (pendingGlobal || pendingRegional)
+            Box {
             BoardView(
                 game = game,
                 enabled = scoringMode || (!finished && !userPaused && humanTurn && !aiThinking),
@@ -2064,18 +2234,7 @@ fun GameScreen(
                 humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
                     humanMarksOf(fsA)
                 } else emptyList(),
-                decidedStone = if (!focusMode) {
-                    decidedStoneOf(game, decidedMove)
-                } else {
-                    null
-                },
-                blunderStones = if (!focusMode) {
-                    deliberateMoves.mapNotNull {
-                        game.moves.getOrNull(it - 1)
-                    }.filter { !it.isPass }
-                } else {
-                    emptyList()
-                },
+                badges = if (!focusMode) boardBadges() else emptyList(),
                 ownership = fsOwnership,
                 pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) {
                     fsSel?.pvMoves?.take(7) ?: emptyList()
@@ -2104,6 +2263,54 @@ fun GameScreen(
                         else -> pendingPoint = null
                     }
                 }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = fsPendingRank <= 3,
+                enter = androidx.compose.animation.fadeIn(tween(160)) +
+                    androidx.compose.animation.slideInVertically(tween(200)) { -it / 2 },
+                exit = androidx.compose.animation.fadeOut(tween(120)) +
+                    androidx.compose.animation.slideOutVertically(tween(160)) { -it / 2 },
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopCenter)
+                    .padding(top = 10.dp)
+            ) {
+                val pillColor = when {
+                    fsPendingDecided && pendingGlobal -> Color(0xFFC62828)
+                    fsPendingDecided -> Color(0xFF1565C0)
+                    fsPendingKind == 1 -> Color(0xFFF57C00)
+                    fsPendingKind == 2 -> Color(0xFF7B1FA2)
+                    fsPendingKind == 3 -> Color(0xFFFFE082)
+                    else -> Color.White
+                }
+                Box(
+                    modifier = Modifier
+                        .background(
+                            pillColor,
+                            androidx.compose.foundation.shape.RoundedCornerShape(50)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = when {
+                            fsPendingDecided && pendingGlobal -> "绝"
+                            fsPendingDecided -> "定"
+                            fsPendingKind == 1 -> "双一选"
+                            fsPendingKind == 2 -> "人类一选"
+                            fsPendingKind == 3 -> "一选"
+                            fsPendingRank == 2 -> "二选"
+                            else -> "三选"
+                        },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            fsPendingDecided || fsPendingKind == 1 ||
+                                fsPendingKind == 2 -> Color.White
+                            fsPendingKind == 3 -> Color(0xFF4E342E)
+                            else -> Color(0xFF37474F)
+                        }
+                    )
+                }
+            }
             }
             val fsRes = when {
                 analysis != null && analysisKey == game.moves.size -> analysis
@@ -2722,9 +2929,6 @@ fun GameScreen(
         }
 
         val currentAnalysis = analysis
-        val decidedCached = remember(currentAnalysis, game.moves.size) {
-            decidedFor(currentAnalysis, game)
-        }
         val analysisTerr = remember(currentAnalysis, game.moves.size) {
             val a = currentAnalysis
             if (a == null) {
@@ -2787,7 +2991,7 @@ fun GameScreen(
         }
         val pendingDecided = pendingAi?.rank == 1 &&
             currentAnalysis != null && analysisKey == game.moves.size &&
-            decidedCached
+            (pendingGlobal || pendingRegional)
         Box {
         BoardFrame(framed = !settings.boardFill) {
         BoardView(
@@ -2807,18 +3011,7 @@ fun GameScreen(
             humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
                 humanMarksOf(currentAnalysis)
             } else emptyList(),
-            decidedStone = if (!focusMode) {
-                decidedStoneOf(game, decidedMove)
-            } else {
-                null
-            },
-            blunderStones = if (!focusMode) {
-                deliberateMoves.mapNotNull {
-                    game.moves.getOrNull(it - 1)
-                }.filter { !it.isPass }
-            } else {
-                emptyList()
-            },
+            badges = if (!focusMode) boardBadges() else emptyList(),
             preview = if (scoringMode) null else pendingPoint,
             markedDead = if (scoringMode) deadSet else emptySet(),
             judgedDead = judgedDeadSet,
@@ -2856,7 +3049,8 @@ fun GameScreen(
                     .padding(top = 10.dp)
             ) {
                 val pillColor = when {
-                    pendingDecided -> Color(0xFFC62828)
+                    pendingDecided && pendingGlobal -> Color(0xFFC62828)
+                    pendingDecided -> Color(0xFF1565C0)
                     pendingKind == 1 -> Color(0xFFF57C00)
                     pendingKind == 2 -> Color(0xFF7B1FA2)
                     pendingKind == 3 -> Color(0xFFFFE082)
@@ -2872,7 +3066,8 @@ fun GameScreen(
                 ) {
                     Text(
                         text = when {
-                            pendingDecided -> "绝"
+                            pendingDecided && pendingGlobal -> "绝"
+                            pendingDecided -> "定"
                             pendingKind == 1 -> "双一选"
                             pendingKind == 2 -> "人类一选"
                             pendingKind == 3 -> "一选"
@@ -3113,15 +3308,30 @@ fun GameScreen(
                     fontSize = 13.sp, color = Color(0xFF2F7CF6)
                 )
                 val decidedNow = analysisKey == game.moves.size &&
-                    decidedCached
-                if (decidedNow || decidedMove != null) {
+                    pendingGlobal
+                val latestMark = decisiveMarks.lastOrNull()
+                if (latestMark != null) {
+                    val markChar = when (latestMark.kind) {
+                        com.tuxungo.android.engine.DecisiveKind.GLOBAL ->
+                            "绝"
+                        com.tuxungo.android.engine.DecisiveKind.REGIONAL ->
+                            "定"
+                        com.tuxungo.android.engine.DecisiveKind.KO ->
+                            "销"
+                    }
+                    val markColor = when (latestMark.kind) {
+                        com.tuxungo.android.engine.DecisiveKind.GLOBAL ->
+                            Color(0xFFC62828)
+                        com.tuxungo.android.engine.DecisiveKind.REGIONAL ->
+                            Color(0xFF1565C0)
+                        com.tuxungo.android.engine.DecisiveKind.KO ->
+                            Color(0xFF2E7D32)
+                    }
                     Text(
-                        text = if (decidedMove != null) {
-                            "第 ${decidedMove} 手已定局（绝），那手的子上有标记。"
-                        } else {
-                            "「绝」：大局已定，这手下完可提议双方数子。"
-                        },
-                        fontSize = 13.sp, color = Color(0xFFC62828)
+                        text = "第 ${latestMark.moveNumber} 手 · " +
+                            "$markChar（${latestMark.reason.label}）：" +
+                            latestMark.reason.detail,
+                        fontSize = 13.sp, color = markColor
                     )
                 }
                 currentAnalysis.candidates.forEachIndexed { idx, cand ->
@@ -3668,6 +3878,10 @@ fun GameScreen(
                         fontSize = 12.sp, color = Color.Gray
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.HorizontalDivider(
+                        color = Color(0xFFE3E0DC)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
@@ -3699,6 +3913,11 @@ fun GameScreen(
                         text = "AI 在绝境时会提出认输，需要你同意；拒绝后至少 15 手它才能再提。",
                         fontSize = 12.sp, color = Color.Gray
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.HorizontalDivider(
+                        color = Color(0xFFE3E0DC)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -4323,11 +4542,31 @@ private fun humanMarksOf(a: AnalysisResult?): List<CandidateMark> {
     return marks
 }
 
-/** Whether the AI calls this position decided (the 「绝」 mark). */
-/** The sealing move's stone for the persistent 「绝」 badge. */
-private fun decidedStoneOf(game: GoGame, decidedMove: Int?): Move? {
-    if (decidedMove == null || decidedMove < 1) return null
-    return game.moves.getOrNull(decidedMove - 1)?.takeIf { !it.isPass }
+/** Board snapshots (index == turn) for the decisive detectors,
+ *  replayed from the game's base position in one pass. */
+private fun replayBoards(
+    game: GoGame,
+    config: GameConfig
+): List<Array<Stone?>> {
+    val replay = GoGame(game.size, game.komi)
+    when {
+        config.customStones.isNotEmpty() ->
+            replay.loadPosition(config.customStones, config.startPlayer)
+        config.handicap > 0 -> replay.loadPosition(
+            game.handicapStones.map { (x, y) -> Move(Stone.BLACK, x, y) },
+            Stone.WHITE
+        )
+    }
+    val out = ArrayList<Array<Stone?>>(game.moves.size + 1)
+    fun snap(): Array<Stone?> = Array(game.size.area) { i ->
+        replay.stoneAt(i % game.size.width, i / game.size.width)
+    }
+    out.add(snap())
+    for (mv in game.moves) {
+        if (mv.isPass) replay.pass() else replay.play(mv.x, mv.y)
+        out.add(snap())
+    }
+    return out
 }
 
 /** Memoised whole-board derivations for the judgment panel
@@ -4380,22 +4619,6 @@ internal fun analysisCacheKey(
         }
     }
     return sb.toString()
-}
-
-private fun decidedFor(a: AnalysisResult?, game: GoGame): Boolean {
-    if (a == null) return false
-    val w = game.size.width
-    val isEmpty = BooleanArray(game.size.area) { i ->
-        game.stoneAt(i % w, i / w) == null
-    }
-    var empty = 0
-    for (e in isEmpty) if (e) empty++
-    val largestRegion = AnalysisMath.largestUndecidedRegion(
-        a.ownershipBlack, isEmpty, w, game.size.height
-    )
-    return AnalysisMath.isDecided(
-        a.rootWinrateBlack, a.rootScoreLeadBlack, empty, largestRegion
-    )
 }
 
 /** One commentary line per recorded turn for AI-vs-AI spectating,
@@ -4798,6 +5021,29 @@ private fun AiSideSection(
                         checked = cfg.humanLike && humanInstalled && cfg.rank == "max",
                         enabled = humanInstalled && cfg.rank == "max",
                         onCheckedChange = { onCfgChange(cfg.copy(humanLike = it)) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                androidx.compose.material3.HorizontalDivider(
+                    color = Color(0xFFE3E0DC)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "AI 故意俗手", fontSize = 14.sp)
+                        Text(
+                            text = if (cfg.rank != "max" || cfg.humanLike) {
+                                "只对全实力 AI 生效，定级和模拟人类落子时不用"
+                            } else {
+                                "稳赢时每局随机 1～2 手，故意下看着自然、其实吃小亏的俗手；落的子会标白色「俗」，只对这一方生效"
+                            },
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = cfg.vulgar && cfg.rank == "max" && !cfg.humanLike,
+                        enabled = cfg.rank == "max" && !cfg.humanLike,
+                        onCheckedChange = { onCfgChange(cfg.copy(vulgar = it)) }
                     )
                 }
             }

@@ -86,6 +86,12 @@ fun ReviewScreen(
     var statsMap by remember {
         mutableStateOf(ReviewMath.decodeSparse(current.statsCache))
     }
+    // Ownership per turn, collected during full-game analysis:
+    // the decisive detectors （绝 / 定） read these. Session-only —
+    // a reopened review re-collects them with its analysis.
+    var reviewOwnership by remember {
+        mutableStateOf<Map<Int, DoubleArray>>(emptyMap())
+    }
     val turns: List<TurnStat>? =
         if (totalMoves > 0 && (0..totalMoves).all { it in statsMap }) {
             (0..totalMoves).map { statsMap[it]!! }
@@ -256,6 +262,10 @@ fun ReviewScreen(
                     g.handicap > 0 -> Stone.WHITE
                     else -> Stone.BLACK
                 }
+                val collectedOwnership =
+                    java.util.Collections.synchronizedMap(
+                        HashMap<Int, DoubleArray>()
+                    )
                 val result = eng.analyzeGame(
                     size = g.size,
                     komi = g.komi,
@@ -268,11 +278,18 @@ fun ReviewScreen(
                     onProgress = { d, t ->
                         progressDone = d
                         progressTotal = t
+                    },
+                    includeOwnership = true,
+                    onOwnership = { turn, own ->
+                        collectedOwnership[turn] = own
                     }
                 )
                 val merged = statsMap.toMutableMap()
                 for (stat in result) merged[stat.turn] = stat
                 statsMap = merged
+                if (collectedOwnership.isNotEmpty()) {
+                    reviewOwnership = reviewOwnership + collectedOwnership
+                }
                 if (g.id.isNotBlank()) {
                     LibraryStore.updateStatsCache(
                         context, g.id, ReviewMath.encodeSparse(merged)
@@ -392,30 +409,90 @@ fun ReviewScreen(
 
     val replayGame = remember(ply, current.id) { buildGame(ply) }
 
-    // The move that sealed this game (「绝」), re-derived from the
-    // recorded stats with the score-lock rule; its stone carries
-    // the calligraphy badge whenever the review is at or past it.
-    val decidedTurn = remember(turns, current.id) {
-        val t = turns
-        if (t == null || t.size != current.moves.size + 1) {
-            null
-        } else {
-            val emptyByTurn = IntArray(t.size)
-            for (p in 0..current.moves.size) {
-                val g = buildGame(p)
-                var c = 0
-                for (i in 0 until current.size.area) {
-                    if (g.stoneAt(
-                            i % current.size.width,
-                            i / current.size.width
-                        ) == null
-                    ) {
-                        c++
-                    }
-                }
-                emptyByTurn[p] = c
+    // Board at every turn (index == turn), one incremental
+    // replay — the decisive detectors read these.
+    fun allBoards(): List<Array<Stone?>> {
+        val g = GoGame(current.size, current.komi)
+        when {
+            current.customStones.isNotEmpty() ->
+                g.loadPosition(current.customStones, current.startPlayer)
+            current.handicap > 0 -> g.setupHandicap(current.handicap)
+        }
+        val out = ArrayList<Array<Stone?>>(current.moves.size + 1)
+        fun snap(): Array<Stone?> = Array(current.size.area) { i ->
+            g.stoneAt(i % current.size.width, i / current.size.width)
+        }
+        out.add(snap())
+        for (m in current.moves) {
+            if (m.isPass) g.pass() else g.play(m.x, m.y)
+            out.add(snap())
+        }
+        return out
+    }
+
+    val allBoardsCached = remember(current.id) { allBoards() }
+
+    // The decisive marks of this game (「绝 / 定 / 销」):
+    // detected from the stats plus the ownership collected during
+    // analysis, merged with any marks stored in the stats
+    // themselves (saved by the live game, or by an earlier review
+    // save). Badged stones show their badges whenever the review
+    // is at or past them; tapping one explains why.
+    val decisiveMarks = remember(statsMap, reviewOwnership, current.id) {
+        val detected = com.tuxungo.android.engine.DecisiveMath.detect(
+            current.size, current.moves, statsMap, reviewOwnership,
+            allBoardsCached, finalized = true
+        )
+        val stored = statsMap.entries.mapNotNull { (turn, st) ->
+            val kind = com.tuxungo.android.engine.DecisiveMath
+                .kindFromCode(st.decisive) ?: return@mapNotNull null
+            val reason = com.tuxungo.android.engine.DecisiveReason
+                .fromCode(st.decisiveReason) ?: return@mapNotNull null
+            if (turn in 1..current.moves.size) {
+                com.tuxungo.android.engine.DecisiveMark(turn, kind, reason)
+            } else {
+                null
             }
-            ReviewMath.firstDecidedTurn(t, emptyByTurn)
+        }
+        (detected + stored)
+            .distinctBy { it.moveNumber to it.kind }
+            .sortedBy { it.moveNumber }
+    }
+
+    // Why the tapped stone earned its badge; shown under the board.
+    var badgeNote by remember { mutableStateOf("") }
+
+    LaunchedEffect(ply) { badgeNote = "" }
+
+    // Bake freshly detected marks into the stored stats once per
+    // game, so a reopened review shows the same badges instantly
+    // (regional marks otherwise need the ownership data, which is
+    // session-only).
+    var marksSavedForId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(decisiveMarks, current.id) {
+        if (current.id.isBlank() || marksSavedForId == current.id) {
+            return@LaunchedEffect
+        }
+        if (decisiveMarks.isEmpty()) return@LaunchedEffect
+        marksSavedForId = current.id
+        val baked = statsMap.mapValues { (turn, st) ->
+            val (dk, dr) = com.tuxungo.android.engine.DecisiveMath
+                .statFieldsFor(decisiveMarks, turn)
+            if (dk != 0 && dk != st.decisive) {
+                st.copy(decisive = dk, decisiveReason = dr)
+            } else {
+                st
+            }
+        }
+        if (baked != statsMap) {
+            statsMap = baked
+            val snapshot = baked
+            val gid = current.id
+            runner.execute {
+                LibraryStore.updateStatsCache(
+                    context, gid, ReviewMath.encodeSparse(snapshot)
+                )
+            }
         }
     }
 
@@ -645,7 +722,7 @@ fun ReviewScreen(
             BoardFrame(framed = !settings.boardFill) {
             BoardView(
                 game = replayGame,
-                enabled = false,
+                enabled = true,
                 skin = BoardSkin.fromId(settings.boardSkin),
                 showCoordinates = settings.showCoordinates,
                 edgeToEdge = settings.boardFill,
@@ -665,21 +742,95 @@ fun ReviewScreen(
                 },
                 preview = null,
                 markedDead = emptySet(),
-                decidedStone = if (decidedTurn != null && ply >= decidedTurn) {
-                    current.moves.getOrNull(decidedTurn - 1)
-                        ?.takeIf { !it.isPass }
-                } else {
-                    null
-                },
-                blunderStones = turns?.let { t ->
-                    t.indices.filter { m -> m in 1..ply && t[m].deliberate }
-                        .mapNotNull { m ->
-                            current.moves.getOrNull(m - 1)
-                                ?.takeIf { !it.isPass }
+                badges = run {
+                    val prio = mapOf(
+                        StoneBadgeKind.JUE to 0,
+                        StoneBadgeKind.DING to 1,
+                        StoneBadgeKind.EVIL to 2,
+                        StoneBadgeKind.VULGAR to 3,
+                        StoneBadgeKind.KO to 4
+                    )
+                    val chosen = HashMap<Int, StoneBadgeKind>()
+                    fun offer(n: Int, kind: StoneBadgeKind) {
+                        val cur = chosen[n]
+                        if (cur == null ||
+                            prio.getValue(kind) < prio.getValue(cur)
+                        ) {
+                            chosen[n] = kind
                         }
-                } ?: emptyList(),
+                    }
+                    for (mark in decisiveMarks) {
+                        if (mark.moveNumber > ply) break
+                        offer(
+                            mark.moveNumber,
+                            when (mark.kind) {
+                                com.tuxungo.android.engine.DecisiveKind
+                                    .GLOBAL -> StoneBadgeKind.JUE
+                                com.tuxungo.android.engine.DecisiveKind
+                                    .REGIONAL -> StoneBadgeKind.DING
+                                com.tuxungo.android.engine.DecisiveKind
+                                    .KO -> StoneBadgeKind.KO
+                            }
+                        )
+                    }
+                    val t = turns
+                    if (t != null) {
+                        for (m in 1..minOf(ply, t.size - 1)) {
+                            if (t[m].deliberate) {
+                                offer(m, StoneBadgeKind.EVIL)
+                            }
+                            if (t[m].vulgar) {
+                                offer(m, StoneBadgeKind.VULGAR)
+                            }
+                        }
+                    }
+                    chosen.entries.mapNotNull { (n, kind) ->
+                        current.moves.getOrNull(n - 1)
+                            ?.takeIf { !it.isPass }
+                            ?.let { StoneBadge(it, kind) }
+                    }
+                },
                 flipped = perspective == Stone.WHITE
-            ) { _, _ -> }
+            ) { x, y ->
+                // Tapping a badged stone explains its badge.
+                val moveNo = (1..ply).firstOrNull { n ->
+                    current.moves.getOrNull(n - 1)?.let {
+                        it.x == x && it.y == y && !it.isPass
+                    } == true
+                }
+                badgeNote = when {
+                    moveNo == null -> ""
+                    else -> {
+                        val mark = decisiveMarks.firstOrNull {
+                            it.moveNumber == moveNo
+                        }
+                        val st = turns?.getOrNull(moveNo)
+                        when {
+                            mark != null ->
+                                "第 $moveNo 手 · ${mark.reason.label}：" +
+                                    mark.reason.detail
+                            st?.deliberate == true ->
+                                "第 $moveNo 手 · 故意失误：这一手是 AI " +
+                                    "稳赢时故意下错的，棋子上标红色的「恶」。"
+                            st?.vulgar == true ->
+                                "第 $moveNo 手 · 故意俗手：这一手是 AI " +
+                                    "稳赢时故意下的俗手，看着自然、其实吃" +
+                                    "小亏，棋子上标白色的「俗」。"
+                            else -> ""
+                        }
+                    }
+                }
+            }
+            }
+            if (badgeNote.isNotEmpty()) {
+                Text(
+                    text = badgeNote,
+                    fontSize = 13.sp,
+                    color = Color(0xFF37474F),
+                    modifier = Modifier.padding(
+                        horizontal = 4.dp, vertical = 2.dp
+                    )
+                )
             }
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -842,6 +993,37 @@ fun ReviewScreen(
                         fontSize = 13.sp, color = Color(0xFFC62828)
                     )
                 }
+                if (turns?.getOrNull(ply + 1)?.vulgar == true) {
+                    Text(
+                        "这一手是 AI 故意俗手：稳赢时故意下的，看着自然、其实吃小亏，已专门标记",
+                        fontSize = 13.sp, color = Color(0xFF37474F)
+                    )
+                }
+                decisiveMarks.firstOrNull {
+                    it.moveNumber == ply + 1
+                }?.let { mark ->
+                    val markChar = when (mark.kind) {
+                        com.tuxungo.android.engine.DecisiveKind.GLOBAL ->
+                            "绝"
+                        com.tuxungo.android.engine.DecisiveKind.REGIONAL ->
+                            "定"
+                        com.tuxungo.android.engine.DecisiveKind.KO ->
+                            "销"
+                    }
+                    val markColor = when (mark.kind) {
+                        com.tuxungo.android.engine.DecisiveKind.GLOBAL ->
+                            Color(0xFFC62828)
+                        com.tuxungo.android.engine.DecisiveKind.REGIONAL ->
+                            Color(0xFF1565C0)
+                        com.tuxungo.android.engine.DecisiveKind.KO ->
+                            Color(0xFF2E7D32)
+                    }
+                    Text(
+                        "这一手是「$markChar」· ${mark.reason.label}：" +
+                            mark.reason.detail,
+                        fontSize = 13.sp, color = markColor
+                    )
+                }
             }
         }
 
@@ -937,7 +1119,8 @@ fun ReviewScreen(
                     onSeek = { autoPlaying = false; scrubTo(it) }
                 )
                 ChartLegend(
-                    showDeliberate = marks.any { it.kind == MarkKind.DELIBERATE }
+                    showDeliberate = marks.any { it.kind == MarkKind.DELIBERATE },
+                    showVulgar = marks.any { it.kind == MarkKind.VULGAR }
                 )
                 val summary = ReviewMath.gameSummary(
                     current.moves, turns!!, current.size
@@ -1003,6 +1186,55 @@ fun ReviewScreen(
                                         .clickable {
                                             autoPlaying = false
                                             scrubTo(dm - 1)
+                                        }
+                                        .padding(vertical = 2.dp)
+                                )
+                            }
+                            for (vm in summary.vulgarMoves) {
+                                Text(
+                                    text = "AI 故意俗手：第 $vm 手" +
+                                        "（${if (current.moves[vm - 1].stone == Stone.BLACK) "黑" else "白"}" +
+                                        "）——看着自然、其实吃小亏的一手（点此跳转）",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF37474F),
+                                    modifier = Modifier
+                                        .clickable {
+                                            autoPlaying = false
+                                            scrubTo(vm - 1)
+                                        }
+                                        .padding(vertical = 2.dp)
+                                )
+                            }
+                            for (mark in decisiveMarks) {
+                                val markChar = when (mark.kind) {
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.GLOBAL -> "绝"
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.REGIONAL -> "定"
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.KO -> "销"
+                                }
+                                val markColor = when (mark.kind) {
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.GLOBAL ->
+                                        Color(0xFFC62828)
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.REGIONAL ->
+                                        Color(0xFF1565C0)
+                                    com.tuxungo.android.engine
+                                        .DecisiveKind.KO ->
+                                        Color(0xFF2E7D32)
+                                }
+                                Text(
+                                    text = "「$markChar」第 ${mark.moveNumber} 手" +
+                                        "（${if (current.moves[mark.moveNumber - 1].stone == Stone.BLACK) "黑" else "白"}" +
+                                        "）· ${mark.reason.label}：${mark.reason.detail}（点此跳转）",
+                                    fontSize = 13.sp,
+                                    color = markColor,
+                                    modifier = Modifier
+                                        .clickable {
+                                            autoPlaying = false
+                                            scrubTo(mark.moveNumber - 1)
                                         }
                                         .padding(vertical = 2.dp)
                                 )
@@ -1105,6 +1337,7 @@ fun ReviewScreen(
                     MarkKind.BRILLIANT -> "妙手" to Color(0xFF2E7D32)
                     MarkKind.KEY -> "关键手" to Color(0xFF6A1B9A)
                     MarkKind.DELIBERATE -> "故意失误" to Color(0xFFC62828)
+                    MarkKind.VULGAR -> "故意俗手" to Color(0xFF37474F)
                 }
                 Row(
                     modifier = Modifier
@@ -1147,6 +1380,7 @@ fun ReviewScreen(
                                     MarkKind.BRILLIANT -> "妙手"
                                     MarkKind.KEY -> "关键手"
                                     MarkKind.DELIBERATE -> "AI 故意失误"
+                                    MarkKind.VULGAR -> "AI 故意俗手"
                                 }
                                 sb.append(" 【").append(label).append(" ")
                                     .append(fmtDelta(mark.deltaPercent)).append("】")
@@ -1382,6 +1616,7 @@ fun WinrateChart(
                 MarkKind.BRILLIANT -> Color(0xFF2E7D32) to 6f
                 MarkKind.KEY -> Color(0xFF6A1B9A) to 8f
                 MarkKind.DELIBERATE -> Color(0xFFC62828) to 6f
+                MarkKind.VULGAR -> Color(0xFF37474F) to 6f
             }
             drawCircle(color = Color.White, radius = radius + 2f, center = center)
             drawCircle(color = color, radius = radius, center = center)
@@ -1402,7 +1637,10 @@ fun WinrateChart(
 
 /** Graphic legend for the chart: swatches first, words second. */
 @Composable
-private fun ChartLegend(showDeliberate: Boolean = false) {
+private fun ChartLegend(
+    showDeliberate: Boolean = false,
+    showVulgar: Boolean = false
+) {
     Row(
         modifier = Modifier.padding(top = 6.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
@@ -1439,6 +1677,15 @@ private fun ChartLegend(showDeliberate: Boolean = false) {
                     .background(Color(0xFFC62828), shape = androidx.compose.foundation.shape.CircleShape)
             )
             Text(" AI 故意失误", fontSize = 11.sp, color = Color.Gray)
+        }
+        if (showVulgar) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(10.dp)
+                    .background(Color(0xFF37474F), shape = androidx.compose.foundation.shape.CircleShape)
+            )
+            Text(" AI 故意俗手", fontSize = 11.sp, color = Color.Gray)
         }
     }
     Text(

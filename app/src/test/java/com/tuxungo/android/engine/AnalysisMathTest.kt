@@ -231,6 +231,64 @@ class AnalysisMathTest {
     }
 
     @Test
+    fun vulgarPrefersTheHumanFavourite() {
+        // Black to move at 85% / +12. Candidate 1 costs 3% (subtle),
+        // candidate 2 costs 6% but is the human model's favourite —
+        // the natural-looking one wins.
+        val cands = listOf(
+            cand(0, 0.85, 12.0),
+            cand(1, 0.82, 10.0),
+            cand(2, 0.79, 9.0)
+        )
+        val pick = AnalysisMath.pickVulgar(
+            0.85, 12.0, cands, Move(Stone.BLACK, 2, 0), Stone.BLACK, 0.1
+        )
+        assertEquals(2, pick?.move?.x)
+    }
+
+    @Test
+    fun vulgarFallsBackToSubtlest() {
+        val cands = listOf(
+            cand(0, 0.85, 12.0),
+            cand(1, 0.80, 9.0),
+            cand(2, 0.82, 10.0)
+        )
+        val pick = AnalysisMath.pickVulgar(
+            0.85, 12.0, cands, null, Stone.BLACK, 0.1
+        )
+        assertEquals(2, pick?.move?.x)
+    }
+
+    @Test
+    fun vulgarRejectsBlunderSizedLosses() {
+        // The only alternative costs 15%: that is a blunder, not a
+        // vulgar move.
+        val cands = listOf(cand(0, 0.85, 12.0), cand(1, 0.70, 6.0))
+        assertNull(
+            AnalysisMath.pickVulgar(0.85, 12.0, cands, null, Stone.BLACK, 0.0)
+        )
+        // And a 1% cost is just a normal alternative, not vulgar.
+        val cands2 = listOf(cand(0, 0.85, 12.0), cand(1, 0.84, 11.0))
+        assertNull(
+            AnalysisMath.pickVulgar(0.85, 12.0, cands2, null, Stone.BLACK, 0.0)
+        )
+    }
+
+    @Test
+    fun vulgarRefusedWhenNotComfortablyWinning() {
+        val cands = listOf(cand(0, 0.70, 12.0), cand(1, 0.66, 9.0))
+        // Root win rate 70% < 78%.
+        assertNull(
+            AnalysisMath.pickVulgar(0.70, 12.0, cands, null, Stone.BLACK, 0.0)
+        )
+        // Unsettled position: never.
+        val cands2 = listOf(cand(0, 0.85, 12.0), cand(1, 0.82, 10.0))
+        assertNull(
+            AnalysisMath.pickVulgar(0.85, 12.0, cands2, null, Stone.BLACK, 0.4)
+        )
+    }
+
+    @Test
     fun scoreRangeBlackWin() {
         assertEquals(
             "比分范围：大概率黑胜 8～16 目",
