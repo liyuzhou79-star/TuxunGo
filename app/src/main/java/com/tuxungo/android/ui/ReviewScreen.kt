@@ -814,8 +814,8 @@ fun ReviewScreen(
                                     "稳赢时故意下错的，棋子上标红色的「恶」。"
                             st?.vulgar == true ->
                                 "第 $moveNo 手 · 故意俗手：这一手是 AI " +
-                                    "稳赢时故意下的俗手，看着自然、其实吃" +
-                                    "小亏，棋子上标白色的「俗」。"
+                                    "中盘故意下的俗手，看着自然、其实明显" +
+                                    "吃亏，棋子上标蓝色的「俗」。"
                             else -> ""
                         }
                     }
@@ -995,8 +995,8 @@ fun ReviewScreen(
                 }
                 if (turns?.getOrNull(ply + 1)?.vulgar == true) {
                     Text(
-                        "这一手是 AI 故意俗手：稳赢时故意下的，看着自然、其实吃小亏，已专门标记",
-                        fontSize = 13.sp, color = Color(0xFF37474F)
+                        "这一手是 AI 故意俗手：中盘故意下的，看着自然、其实明显吃亏（胜率亏 15%～24%），已专门标记",
+                        fontSize = 13.sp, color = Color(0xFF1565C0)
                     )
                 }
                 decisiveMarks.firstOrNull {
@@ -1194,9 +1194,9 @@ fun ReviewScreen(
                                 Text(
                                     text = "AI 故意俗手：第 $vm 手" +
                                         "（${if (current.moves[vm - 1].stone == Stone.BLACK) "黑" else "白"}" +
-                                        "）——看着自然、其实吃小亏的一手（点此跳转）",
+                                        "）——看着自然、其实明显吃亏的一手（点此跳转）",
                                     fontSize = 13.sp,
-                                    color = Color(0xFF37474F),
+                                    color = Color(0xFF1565C0),
                                     modifier = Modifier
                                         .clickable {
                                             autoPlaying = false
@@ -1337,7 +1337,7 @@ fun ReviewScreen(
                     MarkKind.BRILLIANT -> "妙手" to Color(0xFF2E7D32)
                     MarkKind.KEY -> "关键手" to Color(0xFF6A1B9A)
                     MarkKind.DELIBERATE -> "故意失误" to Color(0xFFC62828)
-                    MarkKind.VULGAR -> "故意俗手" to Color(0xFF37474F)
+                    MarkKind.VULGAR -> "故意俗手" to Color(0xFF1565C0)
                 }
                 Row(
                     modifier = Modifier
@@ -1616,7 +1616,7 @@ fun WinrateChart(
                 MarkKind.BRILLIANT -> Color(0xFF2E7D32) to 6f
                 MarkKind.KEY -> Color(0xFF6A1B9A) to 8f
                 MarkKind.DELIBERATE -> Color(0xFFC62828) to 6f
-                MarkKind.VULGAR -> Color(0xFF37474F) to 6f
+                MarkKind.VULGAR -> Color(0xFF1565C0) to 6f
             }
             drawCircle(color = Color.White, radius = radius + 2f, center = center)
             drawCircle(color = color, radius = radius, center = center)
@@ -1683,7 +1683,7 @@ private fun ChartLegend(
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .size(10.dp)
-                    .background(Color(0xFF37474F), shape = androidx.compose.foundation.shape.CircleShape)
+                    .background(Color(0xFF1565C0), shape = androidx.compose.foundation.shape.CircleShape)
             )
             Text(" AI 故意俗手", fontSize = 11.sp, color = Color.Gray)
         }

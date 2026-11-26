@@ -749,25 +749,28 @@ fun BoardView(
                 }
             }
         }
-        // The analysis vulgar pick （俗）: a small white disc
-        // with a calligraphy 「俗」 at the candidate point's
-        // top-right corner — same badge language as the stone
-        // badges, but riding on an (empty) candidate point.
-        if (vulgarPoint != null &&
-            candidates.any {
-                it.x == vulgarPoint.x && it.y == vulgarPoint.y
-            }
-        ) {
+        // The analysis vulgar pick （俗）: a small blue disc
+        // with a white calligraphy 「俗」 at the candidate
+        // point's top-right corner — same badge language as the
+        // stone badges, but riding on an (empty) candidate
+        // point. Blue is the vulgar colour (user's ruling).
+        // No membership check against the displayed candidates:
+        // when a vulgar pick exists the display intentionally
+        // simplifies to the top move plus this badge, so the
+        // vulgar point is usually NOT among the shown marks.
+        // GameScreen only passes a point while analysis marks
+        // are on display at all.
+        if (vulgarPoint != null) {
             val c = Offset(px(vulgarPoint.x), py(vulgarPoint.y))
             val br = r * 0.34f
             val bc = c + Offset(r * 0.52f, -r * 0.52f)
-            drawCircle(Color.White, radius = br, center = bc)
+            drawCircle(Color(0xFF1565C0), radius = br, center = bc)
             drawCircle(
-                Color(0xFF90A4AE), radius = br, center = bc,
+                Color(0xFF0D47A1), radius = br, center = bc,
                 style = Stroke(width = maxOf(1.2f, r * 0.045f))
             )
             val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.rgb(55, 71, 79)
+                color = android.graphics.Color.WHITE
                 textSize = br * 1.3f
                 textAlign = android.graphics.Paint.Align.CENTER
                 isAntiAlias = true
@@ -803,7 +806,7 @@ fun BoardView(
         // Stone corner badges (「绝 / 定 / 恶 / 俗 / 销」): a
         // small flat disc at the stone's top-right corner with one
         // calligraphy character, staying for the rest of the game.
-        // Colours: 绝 red, 定 blue, 恶 red, 俗 white with a dark
+        // Colours: 绝 red, 定 blue, 恶 red, 俗 blue with a white
         // character, 销 green. Only 「绝」 breathes very gently
         // with markPulse — present, but never shouting over play.
         for (badge in badges) {
@@ -825,8 +828,8 @@ fun BoardView(
                     android.graphics.Color.WHITE, false
                 )
                 StoneBadgeKind.VULGAR -> BadgePalette(
-                    Color(0xFFFFFFFF), Color(0xFF90A4AE),
-                    android.graphics.Color.rgb(55, 71, 79), false
+                    Color(0xFF1565C0), Color(0xFF0D47A1),
+                    android.graphics.Color.WHITE, false
                 )
                 StoneBadgeKind.KO -> BadgePalette(
                     Color(0xFF2E7D32), Color(0xFF1B5E20),

@@ -55,7 +55,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tuxungo.android.GameStore
@@ -616,11 +619,16 @@ fun GameScreen(
      * (「恶」) or this side's own deliberate vulgar moves
      * (「俗」) — a quick analysis runs first so a picker can
      * choose the flawed move. Blunders keep their safety rails
-     * (safely won, settled position, see AnalysisMath.pickBlunder);
-     * vulgar moves have NO conditions by the user's ruling — any
-     * side configuration, any score, from the first moves on (see
-     * AnalysisMath.pickVulgar). Every case where no picker fires
-     * falls through to the normal engine move.
+     * (safely won, settled position, see AnalysisMath.pickBlunder).
+     * Vulgar moves: the per-side toggle itself has no conditions
+     * (any side configuration may enable it), but WHEN one fires
+     * follows the user's 2026-11-26 timing rules — middle game
+     * only (move 60+, board at least 45% settled), at least 30
+     * moves between one side's vulgar moves, and the move must
+     * genuinely cost 15–24% win rate (see
+     * AnalysisMath.vulgarTimingOk and pickVulgar). Every case
+     * where no picker fires falls through to the normal engine
+     * move.
      */
     fun aiMoveNow() {
         // A deliberate-flaw check is already running.
@@ -633,7 +641,22 @@ fun GameScreen(
         val vulgarEligible = cfgNow.vulgar &&
             vulgarUsed(moveStone) < vulgarQuota(moveStone)
         val blunderReady = blunderEligible && game.moves.size >= 12
-        val vulgarReady = vulgarEligible
+        // Deliberate vulgar timing: the move-number and spacing
+        // parts gate the probe itself; the settled-board part
+        // needs the probe's ownership and is checked on its
+        // result via AnalysisMath.vulgarTimingOk.
+        val nextMoveNumber = game.moves.size + 1
+        val lastVulgarMove = vulgarMoves
+            .filter { n ->
+                n in 1..game.moves.size &&
+                    game.moves[n - 1].stone == moveStone
+            }
+            .maxOrNull()
+        val vulgarReady = vulgarEligible &&
+            nextMoveNumber >= AnalysisMath.VULGAR_MIN_MOVE &&
+            (lastVulgarMove == null ||
+                nextMoveNumber - lastVulgarMove >=
+                AnalysisMath.VULGAR_MIN_GAP)
         val eligible = (blunderReady || vulgarReady) &&
             !game.finished && !aiThinking &&
             !blunderChecking && resignProposal == null &&
@@ -694,6 +717,11 @@ fun GameScreen(
                     }
                 }
                 if (applied == null && vulgarReady &&
+                    AnalysisMath.vulgarTimingOk(
+                        nextMoveNumber,
+                        AnalysisMath.settledShare(res.ownershipBlack),
+                        lastVulgarMove
+                    ) &&
                     kotlin.random.Random.nextFloat() < 0.55f
                 ) {
                     AnalysisMath.pickVulgar(
@@ -2177,9 +2205,10 @@ fun GameScreen(
             }
             val fsA = analysis
             // The analysis display's vulgar pick （俗）for the
-            // fullscreen board: the natural-looking candidate
-            // that quietly costs a few points. No conditions —
-            // any analysis, any position (user's ruling).
+            // fullscreen board: same picker and same timing
+            // rules as the deliberate vulgar move (the user's
+            // ruling) — middle game only, board half settled,
+            // spaced from this side's last vulgar move.
             val fsVulgar = remember(fsA, analysisKey) {
                 val a = fsA
                 if (a == null) {
@@ -2190,10 +2219,25 @@ fun GameScreen(
                     } else {
                         basePlayer.other()
                     }
-                    AnalysisMath.pickVulgar(
-                        a.rootWinrateBlack, a.candidates,
-                        a.humanTopMove, side
-                    )?.move
+                    val lastVulgar = vulgarMoves
+                        .filter { n ->
+                            n in 1..analysisKey &&
+                                game.moves.getOrNull(n - 1)?.stone == side
+                        }
+                        .maxOrNull()
+                    if (!AnalysisMath.vulgarTimingOk(
+                            analysisKey + 1,
+                            AnalysisMath.settledShare(a.ownershipBlack),
+                            lastVulgar
+                        )
+                    ) {
+                        null
+                    } else {
+                        AnalysisMath.pickVulgar(
+                            a.rootWinrateBlack, a.candidates,
+                            a.humanTopMove, side
+                        )?.move
+                    }
                 }
             }
             val fsSel = fsA?.candidates?.getOrNull(selectedCandidate)
@@ -2207,10 +2251,16 @@ fun GameScreen(
             // Fullscreen gets the same floating rank pill as the
             // normal board (it used to have none): computed from
             // the fullscreen analysis snapshot.
+            val fsBoardCands = displayCandidates(
+                fsA, topThreeOnly, fsVulgar
+            )
+            val fsBoardHuman = displayHumanMarks(
+                fsA, fsVulgar, fsBoardCands.firstOrNull { it.rank == 1 }
+            )
             val fsPendingAi = if (pendingPoint != null && !focusMode &&
                 !judgmentActive && !scoringMode
             ) {
-                shownCandidates(fsA, topThreeOnly).firstOrNull {
+                fsBoardCands.firstOrNull {
                     it.x == pendingPoint!!.first &&
                         it.y == pendingPoint!!.second
                 }
@@ -2220,7 +2270,7 @@ fun GameScreen(
             val fsPendingHu = if (pendingPoint != null && !focusMode &&
                 !judgmentActive && !scoringMode && humanMarks
             ) {
-                humanMarksOf(fsA).firstOrNull {
+                fsBoardHuman.firstOrNull {
                     it.x == pendingPoint!!.first &&
                         it.y == pendingPoint!!.second
                 }
@@ -2241,6 +2291,10 @@ fun GameScreen(
             val fsPendingDecided = fsPendingAi?.rank == 1 &&
                 fsA != null && analysisKey == game.moves.size &&
                 (pendingGlobal || pendingRegional)
+            val fsPendingVulgar = pendingPoint != null &&
+                fsVulgar != null &&
+                pendingPoint!!.first == fsVulgar!!.x &&
+                pendingPoint!!.second == fsVulgar!!.y
             Box {
             BoardView(
                 game = game,
@@ -2252,10 +2306,10 @@ fun GameScreen(
                 parentPadding = 2.dp,
                 territoryThreshold = 0.5,
                 candidates = if (!focusMode && !judgmentActive && !scoringMode) {
-                    shownCandidates(fsA, topThreeOnly)
+                    fsBoardCands
                 } else emptyList(),
                 humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
-                    humanMarksOf(fsA)
+                    fsBoardHuman
                 } else emptyList(),
                 badges = if (!focusMode) boardBadges() else emptyList(),
                 vulgarPoint = if (!focusMode && !judgmentActive && !scoringMode) {
@@ -2291,7 +2345,7 @@ fun GameScreen(
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
-                visible = fsPendingRank <= 3,
+                visible = fsPendingRank <= 3 || fsPendingVulgar,
                 enter = androidx.compose.animation.fadeIn(tween(160)) +
                     androidx.compose.animation.slideInVertically(tween(200)) { -it / 2 },
                 exit = androidx.compose.animation.fadeOut(tween(120)) +
@@ -2306,6 +2360,7 @@ fun GameScreen(
                     fsPendingKind == 1 -> Color(0xFFF57C00)
                     fsPendingKind == 2 -> Color(0xFF7B1FA2)
                     fsPendingKind == 3 -> Color(0xFFFFE082)
+                    fsPendingVulgar -> Color(0xFF1565C0)
                     else -> Color.White
                 }
                 Box(
@@ -2323,6 +2378,7 @@ fun GameScreen(
                             fsPendingKind == 1 -> "双一选"
                             fsPendingKind == 2 -> "人类一选"
                             fsPendingKind == 3 -> "一选"
+                            fsPendingVulgar -> "俗手"
                             fsPendingRank == 2 -> "二选"
                             else -> "三选"
                         },
@@ -2330,7 +2386,7 @@ fun GameScreen(
                         fontWeight = FontWeight.Bold,
                         color = when {
                             fsPendingDecided || fsPendingKind == 1 ||
-                                fsPendingKind == 2 -> Color.White
+                                fsPendingKind == 2 || fsPendingVulgar -> Color.White
                             fsPendingKind == 3 -> Color(0xFF4E342E)
                             else -> Color(0xFF37474F)
                         }
@@ -2384,7 +2440,7 @@ fun GameScreen(
             // can be read here too (not only while it floats).
             Box(modifier = Modifier.fillMaxWidth().height(26.dp)) {
                 if (!focusMode && pendingPoint != null &&
-                    (fsPendingKind != 0 || fsPendingRank in 2..3 || fsPendingDecided)
+                    (fsPendingKind != 0 || fsPendingRank in 2..3 || fsPendingDecided || fsPendingVulgar)
                 ) {
                     Row(
                         modifier = Modifier.padding(top = 3.dp),
@@ -2401,6 +2457,7 @@ fun GameScreen(
                                         fsPendingKind == 1 -> Color(0xFFF57C00)
                                         fsPendingKind == 2 -> Color(0xFF7B1FA2)
                                         fsPendingKind == 3 -> Color(0xFFFFE082)
+                                        fsPendingVulgar -> Color(0xFF1565C0)
                                         else -> Color.White
                                     },
                                     shape = RoundedCornerShape(50)
@@ -2414,6 +2471,7 @@ fun GameScreen(
                                     fsPendingKind == 1 -> "双一选"
                                     fsPendingKind == 2 -> "人类一选"
                                     fsPendingKind == 3 -> "一选"
+                                    fsPendingVulgar -> "俗手"
                                     fsPendingRank == 2 -> "二选"
                                     else -> "三选"
                                 },
@@ -2421,7 +2479,7 @@ fun GameScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = when {
                                     fsPendingDecided || fsPendingKind == 1 ||
-                                        fsPendingKind == 2 -> Color.White
+                                        fsPendingKind == 2 || fsPendingVulgar -> Color.White
                                     fsPendingKind == 3 -> Color(0xFF4E342E)
                                     else -> Color(0xFF37474F)
                                 }
@@ -3007,11 +3065,14 @@ fun GameScreen(
 
         val currentAnalysis = analysis
         // The analysis display's vulgar pick （俗）: among the
-        // shown candidates, the natural-looking one that quietly
-        // costs a few points (AnalysisMath.pickVulgar). Shown on
-        // the board and in the panel's candidate list. No
-        // conditions — any analysis (single, continuous, auto),
-        // any position (user's ruling).
+        // shown candidates, the natural-looking one that
+        // genuinely costs 15–24% win rate
+        // (AnalysisMath.pickVulgar). Same timing rules as the
+        // deliberate vulgar move (the user's ruling): middle
+        // game only, board half settled, spaced from this
+        // side's last vulgar move. Shown on the board (blue
+        // badge), in the panel's candidate list, and in the
+        // floating pill when the point is tapped.
         val analysisVulgar = remember(currentAnalysis, analysisKey) {
             val a = currentAnalysis
             if (a == null) {
@@ -3022,10 +3083,25 @@ fun GameScreen(
                 } else {
                     basePlayer.other()
                 }
-                AnalysisMath.pickVulgar(
-                    a.rootWinrateBlack, a.candidates,
-                    a.humanTopMove, side
-                )?.move
+                val lastVulgar = vulgarMoves
+                    .filter { n ->
+                        n in 1..analysisKey &&
+                            game.moves.getOrNull(n - 1)?.stone == side
+                    }
+                    .maxOrNull()
+                if (!AnalysisMath.vulgarTimingOk(
+                        analysisKey + 1,
+                        AnalysisMath.settledShare(a.ownershipBlack),
+                        lastVulgar
+                    )
+                ) {
+                    null
+                } else {
+                    AnalysisMath.pickVulgar(
+                        a.rootWinrateBlack, a.candidates,
+                        a.humanTopMove, side
+                    )?.move
+                }
             }
         }
         val analysisTerr = remember(currentAnalysis, game.moves.size) {
@@ -3056,10 +3132,21 @@ fun GameScreen(
         // not a dialog, it never blocks the board and tapping is
         // untouched. The decided move gets a solid red pill. White
         // ranks beyond three stay silent.
+        // The marks actually drawn this round (simplified to
+        // top move + vulgar badge when a vulgar pick exists);
+        // the pending-point pill reads the same lists, so what
+        // is hidden on the board stays silent in the pill too.
+        val boardCands = displayCandidates(
+            currentAnalysis, topThreeOnly, analysisVulgar
+        )
+        val boardHuman = displayHumanMarks(
+            currentAnalysis, analysisVulgar,
+            boardCands.firstOrNull { it.rank == 1 }
+        )
         val pendingAi = if (pendingPoint != null && !focusMode &&
             !judgmentActive && !scoringMode
         ) {
-            shownCandidates(currentAnalysis, topThreeOnly).firstOrNull {
+            boardCands.firstOrNull {
                 it.x == pendingPoint!!.first && it.y == pendingPoint!!.second
             }
         } else {
@@ -3068,7 +3155,7 @@ fun GameScreen(
         val pendingHu = if (pendingPoint != null && !focusMode &&
             !judgmentActive && !scoringMode && humanMarks
         ) {
-            humanMarksOf(currentAnalysis).firstOrNull {
+            boardHuman.firstOrNull {
                 it.x == pendingPoint!!.first && it.y == pendingPoint!!.second
             }
         } else {
@@ -3091,6 +3178,10 @@ fun GameScreen(
         val pendingDecided = pendingAi?.rank == 1 &&
             currentAnalysis != null && analysisKey == game.moves.size &&
             (pendingGlobal || pendingRegional)
+        val pendingVulgar = pendingPoint != null &&
+            analysisVulgar != null &&
+            pendingPoint!!.first == analysisVulgar!!.x &&
+            pendingPoint!!.second == analysisVulgar!!.y
         Box {
         BoardFrame(framed = !settings.boardFill) {
         BoardView(
@@ -3103,12 +3194,12 @@ fun GameScreen(
             parentPadding = 2.dp,
             territoryThreshold = 0.5,
             candidates = if (!focusMode && !judgmentActive && !scoringMode) {
-                shownCandidates(currentAnalysis, topThreeOnly)
+                boardCands
             } else emptyList(),
             ownership = if (focusMode) null else displayOwnership,
             pvGhost = if (!focusMode && !judgmentActive && !scoringMode && !topThreeOnly) selected?.pvMoves?.take(7) ?: emptyList() else emptyList(),
             humanMarks = if (!focusMode && !judgmentActive && !scoringMode && humanMarks) {
-                humanMarksOf(currentAnalysis)
+                boardHuman
             } else emptyList(),
             badges = if (!focusMode) boardBadges() else emptyList(),
             vulgarPoint = if (!focusMode && !judgmentActive && !scoringMode) {
@@ -3141,7 +3232,7 @@ fun GameScreen(
         }
         }
             androidx.compose.animation.AnimatedVisibility(
-                visible = pendingRank <= 3,
+                visible = pendingRank <= 3 || pendingVulgar,
                 enter = androidx.compose.animation.fadeIn(tween(160)) +
                     androidx.compose.animation.slideInVertically(tween(200)) { -it / 2 },
                 exit = androidx.compose.animation.fadeOut(tween(120)) +
@@ -3156,6 +3247,7 @@ fun GameScreen(
                     pendingKind == 1 -> Color(0xFFF57C00)
                     pendingKind == 2 -> Color(0xFF7B1FA2)
                     pendingKind == 3 -> Color(0xFFFFE082)
+                    pendingVulgar -> Color(0xFF1565C0)
                     else -> Color.White
                 }
                 Box(
@@ -3173,6 +3265,7 @@ fun GameScreen(
                             pendingKind == 1 -> "双一选"
                             pendingKind == 2 -> "人类一选"
                             pendingKind == 3 -> "一选"
+                            pendingVulgar -> "俗手"
                             pendingRank == 2 -> "二选"
                             else -> "三选"
                         },
@@ -3180,7 +3273,7 @@ fun GameScreen(
                         fontWeight = FontWeight.Bold,
                         color = when {
                             pendingDecided || pendingKind == 1 ||
-                                pendingKind == 2 -> Color.White
+                                pendingKind == 2 || pendingVulgar -> Color.White
                             pendingKind == 3 -> Color(0xFF4E342E)
                             else -> Color(0xFF37474F)
                         }
@@ -3442,8 +3535,32 @@ fun GameScreen(
                         analysisVulgar != null &&
                         cand.move!!.x == analysisVulgar!!.x &&
                         cand.move!!.y == analysisVulgar!!.y
+                    // With a vulgar pick on the board the list
+                    // simplifies with it: only the top move and
+                    // the vulgar row stay this round.
+                    if (analysisVulgar != null && idx != 0 && !isVulgar) {
+                        return@forEachIndexed
+                    }
+                    val rowHead = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex}"
+                    val rowTail = " · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}"
                     Text(
-                        text = "${idx + 1}${if (idx == 0 && decidedNow) "（一选 · 绝）" else if (idx == 0) "（一选）" else ""} · ${cand.vertex}${if (isVulgar) "（俗）" else ""} · 胜率 ${formatPercent(cand.winrateBlack)} · ${if (cand.scoreLeadBlack >= 0) "黑+" else "白+"}${formatNum(kotlin.math.abs(cand.scoreLeadBlack))}目 · 访问 ${cand.visits}",
+                        text = if (isVulgar) {
+                            buildAnnotatedString {
+                                append(rowHead)
+                                withStyle(
+                                    SpanStyle(
+                                        color = Color(0xFF1565C0),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                ) { append("（俗）") }
+                                append(rowTail)
+                            }
+                        } else {
+                            buildAnnotatedString {
+                                append(rowHead)
+                                append(rowTail)
+                            }
+                        },
                         fontSize = 14.sp,
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSel) Rose else Color.Unspecified,
@@ -3606,7 +3723,9 @@ fun GameScreen(
                         )
                     }
                 }
-                if (currentAnalysis.humanTopVertex.isNotEmpty()) {
+                if (currentAnalysis.humanTopVertex.isNotEmpty() &&
+                    analysisVulgar == null
+                ) {
                     val hv = currentAnalysis.humanTopVertex
                     Text(
                         text = when {
@@ -3621,7 +3740,9 @@ fun GameScreen(
                         fontSize = 13.sp, color = Color(0xFF2F7CF6)
                     )
                 }
-                if (currentAnalysis.humanSecondVertex.isNotEmpty()) {
+                if (currentAnalysis.humanSecondVertex.isNotEmpty() &&
+                    analysisVulgar == null
+                ) {
                     Text(
                         text = "人类二选：${currentAnalysis.humanSecondVertex} · 真人概率约 ${formatPercent(currentAnalysis.humanSecondProb)}" +
                             if (humanMarks) "（棋盘上白色 2 号）" else "",
@@ -4648,6 +4769,42 @@ private fun humanMarksOf(a: AnalysisResult?): List<CandidateMark> {
     return marks
 }
 
+/**
+ * Candidate marks actually drawn for an analysis. When the
+ * analysis carries a vulgar pick （俗）, the display
+ * simplifies for this round (the user's rule): only the AI's
+ * top move stays — ranks 2+ go away. The next analysis
+ * without a vulgar pick restores the full display.
+ */
+private fun displayCandidates(
+    a: AnalysisResult?,
+    topThree: Boolean,
+    vulgar: Move?
+): List<CandidateMark> {
+    val all = shownCandidates(a, topThree)
+    if (vulgar == null) return all
+    return all.filter { it.rank == 1 }
+}
+
+/**
+ * Human marks actually drawn for an analysis. Under the same
+ * vulgar simplification only a human top move that IS the
+ * AI's top move stays (it renders as the orange double-top
+ * mark); every other human mark goes away for this round.
+ */
+private fun displayHumanMarks(
+    a: AnalysisResult?,
+    vulgar: Move?,
+    aiTop: CandidateMark?
+): List<CandidateMark> {
+    val all = humanMarksOf(a)
+    if (vulgar == null) return all
+    return all.filter {
+        it.rank == 1 && aiTop != null &&
+            it.x == aiTop.x && it.y == aiTop.y
+    }
+}
+
 /** Board snapshots (index == turn) for the decisive detectors,
  *  replayed from the game's base position in one pass. */
 private fun replayBoards(
@@ -5138,7 +5295,7 @@ private fun AiSideSection(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "AI 故意俗手", fontSize = 14.sp)
                         Text(
-                            text = "每局随机 1～2 手故意下俗手：看着自然、其实吃小亏，落的子标白色「俗」；只对这一方生效",
+                            text = "中盘（第 60 手起、地盘过半定型）偶尔故意下一手俗手：看着自然、其实胜率亏 15%～24%，每局 1～2 手、间隔至少 30 手，落的子标蓝色「俗」；只对这一方生效",
                             fontSize = 12.sp, color = Color.Gray
                         )
                     }

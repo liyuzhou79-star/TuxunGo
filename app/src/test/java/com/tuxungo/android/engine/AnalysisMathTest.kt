@@ -232,13 +232,13 @@ class AnalysisMathTest {
 
     @Test
     fun vulgarPrefersTheHumanFavourite() {
-        // Black to move at 85%. Candidate 1 costs 3% (subtle),
-        // candidate 2 costs 6% but is the human model's favourite —
-        // the natural-looking one wins.
+        // Black to move at 85%. Candidate 1 costs 17%,
+        // candidate 2 costs 22% but is the human model's
+        // favourite — the natural-looking one wins.
         val cands = listOf(
             cand(0, 0.85, 12.0),
-            cand(1, 0.82, 10.0),
-            cand(2, 0.79, 9.0)
+            cand(1, 0.68, 10.0),
+            cand(2, 0.63, 9.0)
         )
         val pick = AnalysisMath.pickVulgar(
             0.85, cands, Move(Stone.BLACK, 2, 0), Stone.BLACK
@@ -248,10 +248,12 @@ class AnalysisMathTest {
 
     @Test
     fun vulgarFallsBackToSubtlest() {
+        // No human favourite: the smallest genuine loss in the
+        // 15–24% band wins (16% beats 21%).
         val cands = listOf(
             cand(0, 0.85, 12.0),
-            cand(1, 0.80, 9.0),
-            cand(2, 0.82, 10.0)
+            cand(1, 0.64, 9.0),
+            cand(2, 0.69, 10.0)
         )
         val pick = AnalysisMath.pickVulgar(
             0.85, cands, null, Stone.BLACK
@@ -260,15 +262,16 @@ class AnalysisMathTest {
     }
 
     @Test
-    fun vulgarRejectsBlunderSizedLosses() {
-        // The only alternative costs 15%: that is a blunder, not a
-        // vulgar move.
-        val cands = listOf(cand(0, 0.85, 12.0), cand(1, 0.70, 6.0))
+    fun vulgarRejectsOutOfBandLosses() {
+        // The only alternative costs 30%: that is a blunder, not
+        // a vulgar move.
+        val cands = listOf(cand(0, 0.85, 12.0), cand(1, 0.55, 6.0))
         assertNull(
             AnalysisMath.pickVulgar(0.85, cands, null, Stone.BLACK)
         )
-        // And a 1% cost is just a normal alternative, not vulgar.
-        val cands2 = listOf(cand(0, 0.85, 12.0), cand(1, 0.84, 11.0))
+        // And a 9% cost is token loss — going through the
+        // motions, not a real vulgar move either.
+        val cands2 = listOf(cand(0, 0.85, 12.0), cand(1, 0.76, 11.0))
         assertNull(
             AnalysisMath.pickVulgar(0.85, cands2, null, Stone.BLACK)
         )
@@ -276,17 +279,47 @@ class AnalysisMathTest {
 
     @Test
     fun vulgarWorksFromAnyPosition() {
-        // No winning requirement (the user's rule): even the side
-        // that is behind has vulgar moves — a natural-looking move
-        // that quietly costs a few points.
-        val cands = listOf(cand(0, 0.30, -12.0), cand(1, 0.26, -14.0))
+        // No winning requirement: even the side that is behind
+        // has vulgar moves — a natural-looking move that
+        // genuinely costs 18%.
+        val cands = listOf(cand(0, 0.30, -12.0), cand(1, 0.12, -14.0))
         val pick = AnalysisMath.pickVulgar(0.30, cands, null, Stone.BLACK)
         assertEquals(1, pick?.move?.x)
         // White to move reads the same table from its own
-        // perspective: root 70% for White, the alternative 66%.
-        val candsW = listOf(cand(0, 0.30, -12.0), cand(1, 0.34, -10.0))
+        // perspective: root 70% for White, the alternative 52%.
+        val candsW = listOf(cand(0, 0.30, -12.0), cand(1, 0.48, -10.0))
         val pickW = AnalysisMath.pickVulgar(0.30, candsW, null, Stone.WHITE)
         assertEquals(1, pickW?.move?.x)
+    }
+
+    @Test
+    fun settledShareCountsDecidedPoints() {
+        // |ownership| >= 0.5 counts as settled, stones included.
+        val own = doubleArrayOf(1.0, -0.9, 0.5, 0.2)
+        assertEquals(0.75, AnalysisMath.settledShare(own), 1e-9)
+        assertEquals(
+            0.0, AnalysisMath.settledShare(DoubleArray(0)), 1e-9
+        )
+    }
+
+    @Test
+    fun vulgarTimingNeedsMiddleGame() {
+        // Move 60 is the first allowed move number.
+        assertFalse(AnalysisMath.vulgarTimingOk(59, 0.9, null))
+        assertTrue(AnalysisMath.vulgarTimingOk(60, 0.9, null))
+        // The board must be half settled — or just about to be
+        // (45% passes, 44% does not).
+        assertFalse(AnalysisMath.vulgarTimingOk(120, 0.44, null))
+        assertTrue(AnalysisMath.vulgarTimingOk(120, 0.45, null))
+    }
+
+    @Test
+    fun vulgarTimingSpacesMovesThirtyApart() {
+        // Last vulgar at move 71: move 100 is only 29 later.
+        assertFalse(AnalysisMath.vulgarTimingOk(100, 0.9, 71))
+        assertTrue(AnalysisMath.vulgarTimingOk(100, 0.9, 70))
+        // No previous vulgar move: no spacing constraint.
+        assertTrue(AnalysisMath.vulgarTimingOk(100, 0.9, null))
     }
 
     @Test

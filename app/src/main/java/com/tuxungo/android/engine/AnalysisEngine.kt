@@ -247,25 +247,78 @@ object AnalysisMath {
 
     // ---- Vulgar moves （俗手） --------------------------------
     // A vulgar move looks completely natural — ideally it is the
-    // move a human would pick — but the engine can see it quietly
-    // gives something back: a few points of win rate, the kind
-    // of move that loses games slowly. Used two ways: the AI can
-    // play one on purpose (per-side toggle in the AI panel), and
-    // the analysis display marks one among the candidates. The
-    // user ruled there are NO position conditions on either use:
-    // any side, any score, settled or not. The only gate left is
-    // the definition itself — the cost must sit between
-    // [VULGAR_MIN_DROP] and [VULGAR_MAX_DROP]: cheaper is just a
-    // normal alternative, dearer is a blunder （恶）, not a
-    // vulgar move （俗）.
+    // move a human would pick — but it genuinely damages the
+    // position: the user redefined the cost band on 2026-11-26 to
+    // [VULGAR_MIN_DROP]..[VULGAR_MAX_DROP] of win rate. Cheaper
+    // than the band is token loss, just going through the
+    // motions; dearer is a blunder （恶）, not a vulgar move
+    // （俗）. Used two ways, both sharing this one definition:
+    // the AI can play one on purpose (per-side toggle in the AI
+    // panel; the deliberate use also has timing rules, see
+    // [vulgarTimingOk]), and the analysis display marks one
+    // among the candidates whenever one qualifies.
 
-    /** The move must cost at least this much win rate to count as
-     *  vulgar at all — cheaper than that is just a normal choice. */
-    const val VULGAR_MIN_DROP = 0.02
+    /** The move must cost at least this much win rate to count
+     *  as vulgar at all — cheaper is not a real vulgar move. */
+    const val VULGAR_MIN_DROP = 0.15
 
     /** …but never more than this: a bigger loss is a blunder,
      *  not a vulgar move. */
-    const val VULGAR_MAX_DROP = 0.09
+    const val VULGAR_MAX_DROP = 0.24
+
+    /** Deliberate vulgar moves only happen from this move
+     *  number on (the move about to be played counts). */
+    const val VULGAR_MIN_MOVE = 60
+
+    /** Two deliberate vulgar moves by the SAME side must be at
+     *  least this many move numbers apart. */
+    const val VULGAR_MIN_GAP = 30
+
+    /** Deliberate vulgar moves only happen once at least this
+     *  share of the board is settled (owned, see [settledShare])
+     *  — half the board claimed, or just about to be. */
+    const val VULGAR_MIN_SETTLED = 0.45
+
+    /**
+     * Share of the board whose ownership is already decided:
+     * points with |ownership| >= 0.5 count as settled (stones
+     * themselves plus empty points the engine assigns clearly
+     * to one side). 0.0 on an empty array.
+     */
+    fun settledShare(ownershipBlack: DoubleArray): Double {
+        if (ownershipBlack.isEmpty()) return 0.0
+        var settled = 0
+        for (v in ownershipBlack) {
+            if (kotlin.math.abs(v) >= 0.5) settled++
+        }
+        return settled.toDouble() / ownershipBlack.size
+    }
+
+    /**
+     * Timing gate for DELIBERATE vulgar moves (the user's
+     * 2026-11-26 rules, after two of them landed in the first
+     * 20 moves of a game): the game must have reached the
+     * middle game — [nextMoveNumber] at least [VULGAR_MIN_MOVE]
+     * and the board at least [VULGAR_MIN_SETTLED] settled — and
+     * this side's previous vulgar move (1-based move number,
+     * null when none yet) must be at least [VULGAR_MIN_GAP]
+     * moves back. The analysis-display marking does NOT use
+     * this gate; it only labels what the analysis finds.
+     */
+    fun vulgarTimingOk(
+        nextMoveNumber: Int,
+        settledShare: Double,
+        lastVulgarMove: Int?
+    ): Boolean {
+        if (nextMoveNumber < VULGAR_MIN_MOVE) return false
+        if (settledShare < VULGAR_MIN_SETTLED) return false
+        if (lastVulgarMove != null &&
+            nextMoveNumber - lastVulgarMove < VULGAR_MIN_GAP
+        ) {
+            return false
+        }
+        return true
+    }
 
     /**
      * Picks the vulgar move among the candidates for the side to
